@@ -36,10 +36,21 @@ import {
   IconUsers,
   IconUserShield,
   IconBallpen,
+  IconListCheck,
+  IconCalendarStar,
+  IconSpeakerphone,
+  IconBuildingStore,
+  IconCoin,
+  IconChartBar,
+  IconHeartHandshake,
+  IconArrowsExchange,
+  IconServer,
+  IconLifebuoy,
 } from '@tabler/icons-react';
 import { Suspense, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { unitsWithPermission } from '../lib/access';
 import { useInbox } from '../lib/inbox';
 import { SectionLoader } from './ui';
 import type { PermissionId } from '../lib/permissions';
@@ -55,31 +66,65 @@ interface NavItem {
 
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
-  const { member, publicSettings, can, signOut, isSuperAdmin } = useAuth();
+  const { member, publicSettings, can, signOut, isSuperAdmin, access } = useAuth();
   const { waiting } = useInbox();
   const location = useLocation();
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
 
-  const main: NavItem[] = [
-    { to: '/', label: 'Ana sayfa', icon: <IconHome size={18} />, exact: true },
-    { to: '/onaylar', label: 'Onayımı bekleyenler', icon: <IconChecklist size={18} />, badge: waiting.length },
-    { to: '/dilekceler/yeni', label: 'Yeni dilekçe', icon: <IconFilePlus size={18} />, exact: true },
-    { to: '/dilekceler', label: 'Dilekçeler', icon: <IconFileText size={18} /> },
-    { to: '/organizasyon', label: 'Organizasyon', icon: <IconSitemap size={18} /> },
+  const unitManager = unitsWithPermission(access, 'unit.manage').length > 0;
+  const sections: { label: string | null; items: NavItem[] }[] = [
+    {
+      label: null,
+      items: [
+        { to: '/', label: 'Ana sayfa', icon: <IconHome size={18} />, exact: true },
+        { to: '/onaylar', label: 'Onayımı bekleyenler', icon: <IconChecklist size={18} />, badge: waiting.length },
+        { to: '/gorevler', label: 'Görevler ve projeler', icon: <IconListCheck size={18} /> },
+      ],
+    },
+    {
+      label: 'Dilekçe',
+      items: [
+        { to: '/dilekceler/yeni', label: 'Yeni dilekçe', icon: <IconFilePlus size={18} />, exact: true },
+        { to: '/dilekceler', label: 'Dilekçeler', icon: <IconFileText size={18} /> },
+      ],
+    },
+    {
+      label: 'Operasyon',
+      items: [
+        { to: '/etkinlikler', label: 'Etkinlikler', icon: <IconCalendarStar size={18} /> },
+        { to: '/iletisim', label: 'İletişim', icon: <IconSpeakerphone size={18} /> },
+        { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
+        ...(can('finance.read') || can('finance.manage') || unitManager ? [{ to: '/butceler', label: 'Bütçeler', icon: <IconCoin size={18} /> }] : []),
+        ...(can('reports.read') || can('reports.approve') ? [{ to: '/raporlar', label: 'Raporlar', icon: <IconChartBar size={18} /> }] : []),
+      ],
+    },
+    {
+      label: 'Organizasyon',
+      items: [
+        { to: '/organizasyon', label: 'Organizasyon şeması', icon: <IconSitemap size={18} /> },
+        { to: '/gonulluluk', label: 'Gönüllülük', icon: <IconHeartHandshake size={18} /> },
+        { to: '/devir', label: 'Devir paketleri', icon: <IconArrowsExchange size={18} /> },
+      ],
+    },
+    {
+      label: 'Yönetim',
+      items: (
+        [
+          { to: '/yonetim/uyeler', label: 'Üyeler', icon: <IconUsers size={18} />, perm: 'members.manage' },
+          { to: '/yonetim/atamalar', label: 'Görev atamaları', icon: <IconUserShield size={18} />, perm: 'assignments.manage' },
+          { to: '/yonetim/secimler', label: 'Seçimler', icon: <IconBallpen size={18} />, perm: 'elections.manage' },
+          { to: '/yonetim/birimler', label: 'Komiteler ve birimler', icon: <IconBuildingCommunity size={18} />, perm: 'org.manage' },
+          { to: '/yonetim/roller', label: 'Roller ve yetkiler', icon: <IconShieldLock size={18} />, perm: 'org.manage' },
+          { to: '/yonetim/donemler', label: 'Dönemler', icon: <IconCalendarEvent size={18} />, perm: 'org.manage' },
+          { to: '/yonetim/sablonlar', label: 'Dilekçe şablonları', icon: <IconTemplate size={18} />, perm: 'templates.manage' },
+          { to: '/yonetim/envanter', label: 'Envanter', icon: <IconServer size={18} />, perm: 'inventory.manage' },
+          { to: '/yonetim/ayarlar', label: 'Kurum ayarları', icon: <IconSettings size={18} />, perm: 'org.manage' },
+          { to: '/yonetim/denetim', label: 'Denetim kaydı', icon: <IconHistory size={18} />, perm: 'audit.read' },
+        ] as NavItem[]
+      ).filter((i) => !i.perm || can(i.perm)),
+    },
   ];
-
-  const admin: NavItem[] = [
-    { to: '/yonetim/uyeler', label: 'Üyeler', icon: <IconUsers size={18} />, perm: 'members.manage' },
-    { to: '/yonetim/atamalar', label: 'Görev atamaları', icon: <IconUserShield size={18} />, perm: 'assignments.manage' },
-    { to: '/yonetim/secimler', label: 'Seçimler', icon: <IconBallpen size={18} />, perm: 'elections.manage' },
-    { to: '/yonetim/birimler', label: 'Komiteler ve birimler', icon: <IconBuildingCommunity size={18} />, perm: 'org.manage' },
-    { to: '/yonetim/roller', label: 'Roller ve yetkiler', icon: <IconShieldLock size={18} />, perm: 'org.manage' },
-    { to: '/yonetim/donemler', label: 'Dönemler', icon: <IconCalendarEvent size={18} />, perm: 'org.manage' },
-    { to: '/yonetim/sablonlar', label: 'Dilekçe şablonları', icon: <IconTemplate size={18} />, perm: 'templates.manage' },
-    { to: '/yonetim/ayarlar', label: 'Kurum ayarları', icon: <IconSettings size={18} />, perm: 'org.manage' },
-    { to: '/yonetim/denetim', label: 'Denetim kaydı', icon: <IconHistory size={18} />, perm: 'audit.read' },
-  ].filter((i) => !i.perm || can(i.perm as PermissionId)) as NavItem[];
 
   const isActive = (item: NavItem) =>
     item.exact ? location.pathname === item.to : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`) && !(item.to === '/dilekceler' && location.pathname === '/dilekceler/yeni');
@@ -178,18 +223,22 @@ export function AppLayout() {
       <AppShell.Navbar p="sm">
         <AppShell.Section grow component={ScrollArea}>
           <Stack gap={2}>
-            {main.map(renderItem)}
-            {admin.length > 0 && (
-              <>
-                <Text size="xs" c="dimmed" fw={600} mt="lg" mb={4} px="sm" className="nav-section-label">
-                  Yönetim
-                </Text>
-                {admin.map(renderItem)}
-              </>
-            )}
+            {sections
+              .filter((sec) => sec.items.length)
+              .map((sec) => (
+                <div key={sec.label ?? 'genel'}>
+                  {sec.label && (
+                    <Text size="xs" c="dimmed" fw={600} mt="md" mb={4} px="sm" className="nav-section-label">
+                      {sec.label}
+                    </Text>
+                  )}
+                  {sec.items.map(renderItem)}
+                </div>
+              ))}
           </Stack>
         </AppShell.Section>
         <AppShell.Section>
+          <NavLink component={Link} to="/yardim" label="Yardım ve destek" leftSection={<IconLifebuoy size={18} />} active={location.pathname === '/yardim'} onClick={close} style={{ borderRadius: 'var(--mantine-radius-md)' }} />
           <Text size="xs" c="dimmed" px="sm" py="xs">
             {publicSettings.orgName}
           </Text>

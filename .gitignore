@@ -13,3 +13,4 @@ ui-debug.log*
 .vscode/
 *.local
 .tools/
+apps/hub/smoke-shots/

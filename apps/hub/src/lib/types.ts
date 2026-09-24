@@ -5,7 +5,7 @@ export const BRANCH = 'branch';
 
 export type WithId<T> = T & { id: string };
 
-export type MemberStatus = 'pending' | 'active' | 'suspended';
+export type MemberStatus = 'pending' | 'active' | 'suspended' | 'left';
 
 export interface Member {
   uid: string;
@@ -28,6 +28,10 @@ export interface Access {
   roleKeys: Record<string, Timestamp>;
   /** Dilekçe görünürlük anahtarları (uid:…, role:…, unit:…) */
   tokens: string[];
+  /** Birim kapsamlı izinler: "birimId__izin" → bitiş zamanı (alt birimlere genişletilmiş) */
+  unitPerms?: Record<string, Timestamp>;
+  /** Kişinin görevli olduğu birimler: birimId → bitiş zamanı (alt birimlere genişletilmiş) */
+  memberOf?: Record<string, Timestamp>;
   updatedAt?: Timestamp;
   updatedBy?: string;
 }
@@ -266,6 +270,10 @@ export interface OrgSettings {
   numberingPattern: string;
   verifyBaseUrl: string;
   allowedEmailDomains: string[];
+  /** Gönüllü başvurusu kabul edilince atanacak birim rolü. */
+  volunteerRoleId: string;
+  /** Kabul edilen gönüllüye otomatik açılan oryantasyon görevleri. */
+  orientationItems: string[];
 }
 
 export interface AuditEntry {

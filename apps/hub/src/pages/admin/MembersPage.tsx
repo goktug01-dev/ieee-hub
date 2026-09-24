@@ -1,12 +1,15 @@
 import { ActionIcon, Avatar, Badge, Button, Group, Menu, SegmentedControl, Stack, Table, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { IconCheck, IconDots, IconPlayerPause, IconPlayerPlay, IconSearch, IconUserShield, IconX } from '@tabler/icons-react';
+import { IconCheck, IconDoorExit, IconDots, IconPlayerPause, IconPlayerPlay, IconSearch, IconUserShield, IconX } from '@tabler/icons-react';
 import { deleteDoc, doc, orderBy, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
 import { AssignmentModal } from '../../components/AssignmentModal';
 import { EmptyState, ErrorAlert, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { db } from '../../firebase';
+import { endAssignments } from '../../lib/assignments';
 import { logAudit } from '../../lib/audit';
+import { createTask } from '../../lib/ops';
+import { useOrg } from '../../lib/org';
 import { fmtDate } from '../../lib/format';
 import { useCollection } from '../../lib/hooks';
 import type { Assignment, Member, MemberStatus } from '../../lib/types';
@@ -16,10 +19,12 @@ const STATUS: Record<MemberStatus, { label: string; color: string }> = {
   pending: { label: 'Onay bekliyor', color: 'yellow' },
   active: { label: 'Aktif', color: 'green' },
   suspended: { label: 'Askıda', color: 'red' },
+  left: { label: 'Ayrıldı', color: 'gray' },
 };
 
 export function MembersPage() {
   const { user, orgSettings } = useAuth();
+  const { units } = useOrg();
   const [filter, setFilter] = useState<string>('pending');
   const [q, setQ] = useState('');
   const [assignFor, setAssignFor] = useState<string | null>(null);
@@ -33,7 +38,7 @@ export function MembersPage() {
   }, [asg.data]);
 
   const counts = useMemo(() => {
-    const c = { pending: 0, active: 0, suspended: 0 };
+    const c = { pending: 0, active: 0, suspended: 0, left: 0 };
     members.data.forEach((m) => c[m.status]++);
     return c;
   }, [members.data]);
@@ -72,6 +77,58 @@ export function MembersPage() {
       },
     });
 
+  // Ayrılış (WP04-T07): görevler sonlanır, üyelik kapanır, harici erişimlerin kapatılması için kontrol listesi görevleri açılır.
+  const offboard = (m: Member) =>
+    modals.openConfirmModal({
+      title: `${m.displayName} için ayrılış işlemi`,
+      children: (
+        <Text size="sm">
+          Kişinin tüm aktif görevleri bugün itibarıyla sona erer, Hub üyeliği "Ayrıldı" olur ve Hub'a erişimi kapanır. Discord,
+          Google Grupları, Drive ve diğer harici erişimlerin kapatılması için size kontrol listesi görevleri açılır (7 gün içinde).
+        </Text>
+      ),
+      labels: { confirm: 'Ayrılışı başlat', cancel: 'Vazgeç' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          const list = asg.data.filter((a) => a.uid === m.uid);
+          if (list.length) await endAssignments(list, 'Ayrılış işlemi');
+          await updateDoc(doc(db, 'members', m.uid), { status: 'left', updatedAt: serverTimestamp() });
+          const home = list.find((a) => a.unitId !== 'branch');
+          if (home) {
+            const short = units.find((u) => u.id === home.unitId)?.shortCode ?? 'GRV';
+            for (const sys of ['Discord sunucusu ve kanalları', 'Google Grupları', 'Drive paylaşımları', 'Diğer sistem hesapları (HeptaCert, WordPress, sosyal medya)']) {
+              await createTask(
+                {
+                  title: `Erişim kapat: ${m.displayName} — ${sys}`,
+                  description: 'Ayrılış işlemiyle otomatik oluşturuldu.',
+                  unitId: home.unitId,
+                  unitName: home.unitName,
+                  projectId: null,
+                  eventId: null,
+                  assigneeUid: user!.uid,
+                  assigneeName: user!.displayName ?? '',
+                  supporterUids: [],
+                  supporterNames: [],
+                  startDate: new Date().toISOString().slice(0, 10),
+                  dueDate: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10),
+                  priority: 'high',
+                  status: 'todo',
+                  doneCriteria: 'Erişim kaldırıldı ve envanterde işaretlendi',
+                  fileLink: '',
+                },
+                short,
+              ).catch(() => undefined);
+            }
+          }
+          await logAudit('member.offboard', `members/${m.uid}`, { name: m.displayName, endedAssignments: list.length });
+          notifySuccess(`${m.displayName}: ${list.length} görev sonlandırıldı, üyelik kapatıldı.`, 'Ayrılış tamamlandı');
+        } catch (e) {
+          notifyError(e);
+        }
+      },
+    });
+
   return (
     <Stack>
       <PageHeader title="Üyeler" description="Hub’a giriş yapan kişiler önce onay bekler. Onaylanan üyeler dilekçe oluşturabilir ve görev alabilir." />
@@ -83,6 +140,7 @@ export function MembersPage() {
             { value: 'pending', label: `Onay bekleyen (${counts.pending})` },
             { value: 'active', label: `Aktif (${counts.active})` },
             { value: 'suspended', label: `Askıda (${counts.suspended})` },
+            { value: 'left', label: `Ayrılan (${counts.left})` },
             { value: 'all', label: 'Tümü' },
           ]}
         />
@@ -161,6 +219,11 @@ export function MembersPage() {
                             {m.status === 'active' && (
                               <Menu.Item leftSection={<IconUserShield size={16} />} onClick={() => setAssignFor(m.uid)}>
                                 Görev ata
+                              </Menu.Item>
+                            )}
+                            {m.status === 'active' && (
+                              <Menu.Item color="red" leftSection={<IconDoorExit size={16} />} onClick={() => offboard(m)}>
+                                Ayrılış işlemi
                               </Menu.Item>
                             )}
                             {m.status === 'active' ? (

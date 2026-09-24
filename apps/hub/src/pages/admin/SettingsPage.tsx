@@ -17,7 +17,7 @@ const MAX_LOGO = 150 * 1024;
 
 export function SettingsPage() {
   const { publicSettings, orgSettings, isSuperAdmin, user } = useAuth();
-  const { terms } = useOrg();
+  const { terms, roles } = useOrg();
   const [pub, setPub] = useState<PublicSettings>(publicSettings);
   const [org, setOrg] = useState<OrgSettings>(orgSettings);
   const [busy, setBusy] = useState(false);
@@ -136,6 +136,22 @@ export function SettingsPage() {
               placeholder="ogr.ikc.edu.tr"
               value={org.allowedEmailDomains}
               onChange={(v) => setOrg({ ...org, allowedEmailDomains: v })}
+            />
+            <Title order={5} mt="md">
+              Gönüllülük
+            </Title>
+            <Select
+              label="Kabul edilen gönüllüye atanacak rol"
+              description="Birim yöneticileri yalnızca bu rolü verebilir"
+              data={roles.filter((r) => r.scope === 'unit').map((r) => ({ value: r.id, label: r.name }))}
+              value={org.volunteerRoleId}
+              onChange={(v) => setOrg({ ...org, volunteerRoleId: v ?? org.volunteerRoleId })}
+            />
+            <TagsInput
+              label="Oryantasyon görevleri"
+              description="Kabul edilen her gönüllüye otomatik açılır (yazıp Enter)"
+              value={org.orientationItems}
+              onChange={(v) => setOrg({ ...org, orientationItems: v })}
             />
           </Stack>
         </Card>

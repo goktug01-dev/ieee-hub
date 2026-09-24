@@ -9,6 +9,7 @@ import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc, up
 import { expect, it } from 'vitest';
 import { auth, db } from '../src/firebase';
 import { createAssignments } from '../src/lib/assignments';
+import { approveEventWithPetition, createTask, importParticipants, previewParticipantsCsv, proposeEvent, updateEvent } from '../src/lib/ops';
 import { createDraft, decidePetition, submitPetition } from '../src/lib/petitions';
 import { claimFounder, markSetupDone, seedOrganization } from '../src/lib/setup';
 import type { PetitionTemplate } from '../src/lib/types';
@@ -137,6 +138,173 @@ it('demo verisi', async () => {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     appliedAt: null,
+  });
+
+  // ---------- Operasyon modülleri ----------
+  const day = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const name = (k: string) => DEMO_ACCOUNTS.find((a) => a.key === k)!.name;
+
+  // Etkinlikler: koordinasyon üyesi önerir; biri onaylı dilekçeyle onaylanır, biri YK onayı bekler.
+  await as('uye');
+  const ai = await proposeEvent({
+    name: 'Yapay Zekâ Günü',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    type: 'Seminer / konferans',
+    description: 'Sektörden iki konuşmacıyla yarım günlük etkinlik.',
+    startsAt: '2026-10-15 14:00:00',
+    endsAt: '2026-10-15 18:00:00',
+    location: 'Mühendislik Fakültesi A Blok Konferans Salonu',
+    expectedParticipants: 120,
+    ownerUids: [uid.uye],
+    ownerNames: [name('uye')],
+  });
+  const p1Doc = (await getDoc(doc(db, 'petitions', p1))).data()!;
+  await approveEventWithPetition(ai, p1, p1Doc.documentNo as string);
+  await updateEvent(ai, { status: 'planning', budgetPlanned: 4500 });
+
+  await proposeEvent({
+    name: 'Arduino Atölyesi',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    type: 'Atölye',
+    description: '20 kişilik uygulamalı atölye.',
+    startsAt: '2026-11-05 13:00:00',
+    endsAt: '2026-11-05 17:00:00',
+    location: 'Elektronik Laboratuvarı',
+    expectedParticipants: 20,
+    ownerUids: [uid.uye],
+    ownerNames: [name('uye')],
+  });
+
+  const spring = await proposeEvent({
+    name: 'Bahar Kariyer Günü',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    type: 'Kariyer',
+    description: 'Mezun ve sektör buluşması.',
+    startsAt: '2026-05-10 13:00:00',
+    endsAt: '2026-05-10 17:00:00',
+    location: 'Kültür Merkezi',
+    expectedParticipants: 80,
+    ownerUids: [uid.uye],
+    ownerNames: [name('uye')],
+  });
+  await as('gs');
+  const { decideEvent } = await import('../src/lib/ops');
+  await decideEvent(spring, true, 'YK 2026/03 kararı');
+  await as('uye');
+  for (const st of ['planning', 'registration_open', 'held', 'closing'] as const) await updateEvent(spring, { status: st });
+  const csv = 'Ad Soyad;E-posta;Katıldı;Sertifika\nAhmet Yıldız;ahmet@example.com;Evet;HC-001\nSelin Aksoy;selin@example.com;Evet;HC-002\nBurak Tan;burak@example.com;Hayır;\n';
+  await importParticipants(spring, 'heptacert_bahar.csv', previewParticipantsCsv(csv));
+  await updateEvent(spring, {
+    checklist: { dataTransferred: true, tasksClosed: true, filesArchived: false, budgetEntered: false },
+    report: { participantCount: 74, summary: '6 firma ve 11 mezun katıldı.', outcomes: '3 staj görüşmesi', lessons: 'Kayıt formu daha erken açılmalı.' },
+  });
+
+  // Görevler ve proje (CS başkanı)
+  await as('cs');
+  await addDoc(collection(db, 'projects'), {
+    name: 'Yapay Zekâ Günü organizasyonu',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    ownerUid: uid.uye,
+    ownerName: name('uye'),
+    goal: '120 katılımcılı, iki konuşmacılı etkinliği sorunsuz gerçekleştirmek.',
+    status: 'active',
+    startDate: day(-10),
+    endDate: '2026-10-20',
+    fileLink: '',
+    closingNote: '',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const base2 = {
+    description: '',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    projectId: null,
+    eventId: ai,
+    supporterUids: [] as string[],
+    supporterNames: [] as string[],
+    startDate: day(-7),
+    fileLink: '',
+  };
+  await createTask({ ...base2, title: 'Konuşmacılarla iletişim', assigneeUid: uid.uye, assigneeName: name('uye'), dueDate: day(-2), priority: 'high', status: 'in_progress', doneCriteria: 'İki konuşmacı yazılı onay verdi' }, 'CS');
+  await createTask({ ...base2, title: 'Salon rezervasyonu', assigneeUid: uid.uye, assigneeName: name('uye'), dueDate: day(2), priority: 'urgent', status: 'todo', doneCriteria: 'Rezervasyon onay e-postası alındı' }, 'CS');
+  await createTask({ ...base2, title: 'Afiş tasarımı', assigneeUid: uid.cs, assigneeName: name('cs'), supporterUids: [uid.uye], supporterNames: [name('uye')], dueDate: day(6), priority: 'normal', status: 'todo', doneCriteria: 'Afiş İletişim birimine teslim edildi' }, 'CS');
+  await createTask({ ...base2, eventId: null, title: 'Dönem planını hazırla', assigneeUid: uid.cs, assigneeName: name('cs'), dueDate: day(-12), priority: 'normal', status: 'done', doneCriteria: 'Plan YK ile paylaşıldı' }, 'CS');
+
+  // İletişim talebi
+  await as('uye');
+  const cr = await addDoc(collection(db, 'contentRequests'), {
+    requestingUnitId: 'cs',
+    requestingUnitName: 'Computer Society',
+    requestedBy: uid.uye,
+    requestedByName: name('uye'),
+    type: 'event_promo',
+    channels: ['Instagram', 'LinkedIn'],
+    desiredPublishDate: day(5),
+    brief: 'Yapay Zekâ Günü duyurusu: konuşmacılar, tarih, kayıt bağlantısı.',
+    assets: '',
+    eventId: ai,
+    eventName: 'Yapay Zekâ Günü',
+    draftText: '',
+    assigneeUid: null,
+    assigneeName: null,
+    status: 'requested',
+    scheduledDate: null,
+    publishedLink: '',
+    performance: { reach: null, engagement: null },
+    rejectReason: '',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await as('baskan');
+  await updateDoc(cr, { status: 'in_production', draftText: 'Yapay zekâ dünyasının iki ismi İKÇÜ’de! 15 Ekim, A Blok.', scheduledDate: day(5), updatedAt: serverTimestamp() });
+  await updateDoc(cr, { status: 'awaiting_approval', updatedAt: serverTimestamp() });
+
+  // Sponsorluk ve bütçe
+  const sp = doc(collection(db, 'sponsors'));
+  await setDoc(sp, {
+    companyName: 'Ege Yazılım A.Ş.', lockKey: 'ege-yazilim-a-s', sector: 'Yazılım', website: 'egeyazilim.example', stage: 'negotiating',
+    ownerUid: uid.uye, ownerName: name('uye'), nextActionDate: day(3), nextAction: 'Teklif revizyonunu gönder', proposalLinks: '', eventIds: [ai], amount: 3000, notes: '',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  await setDoc(doc(db, 'sponsorLocks', 'ege-yazilim-a-s'), { companyName: 'Ege Yazılım A.Ş.', ownerUid: uid.uye, ownerName: name('uye'), sponsorId: sp.id });
+  await addDoc(collection(db, 'sponsors', sp.id, 'interactions'), { date: day(-4), channel: 'Çevrim içi toplantı', summary: 'Etkinlik sponsorluğu paketleri konuşuldu.', nextAction: 'Teklif revizyonu', byUid: uid.baskan, byName: name('baskan'), at: serverTimestamp() });
+  const sp2 = doc(collection(db, 'sponsors'));
+  await setDoc(sp2, {
+    companyName: 'İzmir Robotik', lockKey: 'izmir-robotik', sector: 'Robotik', website: '', stage: 'contacted',
+    ownerUid: uid.sayman, ownerName: name('sayman'), nextActionDate: null, nextAction: '', proposalLinks: '', eventIds: [], amount: null, notes: '',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  await setDoc(doc(db, 'sponsorLocks', 'izmir-robotik'), { companyName: 'İzmir Robotik', ownerUid: uid.sayman, ownerName: name('sayman'), sponsorId: sp2.id });
+  await addDoc(collection(db, 'budgets'), {
+    title: 'Yapay Zekâ Günü bütçesi', scope: 'event', unitId: 'cs', unitName: 'Computer Society', eventId: ai, termId: term,
+    lines: [{ label: 'İkram', planned: 2500, actual: 0 }, { label: 'Baskı ve afiş', planned: 800, actual: 650 }, { label: 'Konuşmacı ulaşım', planned: 1200, actual: 0 }],
+    plannedTotal: 4500, actualTotal: 650, sheetLink: '', docsLink: '', status: 'approved', updatedAt: serverTimestamp(),
+  });
+
+  // Envanter
+  const inv = (kind: string, title: string, fields: Record<string, string>) =>
+    addDoc(collection(db, 'inventory'), { kind, title, fields, updatedAt: serverTimestamp(), updatedByName: name('baskan') });
+  await inv('system', 'Firebase (Hub)', { purpose: 'Hub kimlik ve veritabanı', ownerAccount: 'ieeetechops@…', admins: 'Ayşe Yılmaz, Mehmet Demir', criticality: 'Kritik', recovery: 'İki yönetici; kurallar ve şablonlar depoda' });
+  await inv('system', 'WordPress sitesi', { purpose: 'Kurumsal web sitesi ve üyelik', ownerAccount: 'IEEE Global Webmaster', admins: 'Zeynep Kaya', criticality: 'Kritik', recovery: 'Yedekleme eklentisi' });
+  await inv('risk', 'Tek yöneticili kritik sistemler', { likelihood: 'Orta', impact: 'Yüksek', owner: 'TechOps Başkanı', status: 'Önlem alınıyor', mitigation: 'Her sisteme ikinci yönetici' });
+
+  // Gönüllü başvurusu (RAS gönüllüsü CS'ye de başvuruyor) ve devir paketi taslağı
+  await as('gonullu');
+  await addDoc(collection(db, 'volunteerApplications'), {
+    uid: uid.gonullu, name: name('gonullu'), email: 'gonullu@demo.ieee', unitId: 'cs', unitName: 'Computer Society',
+    motivation: 'Web geliştirme ve etkinlik organizasyonunda deneyim kazanmak istiyorum; RAS’taki atölye tecrübemi paylaşabilirim.',
+    availability: 'Haftada 4 saat', status: 'pending', createdAt: serverTimestamp(),
+  });
+  await as('cs');
+  await addDoc(collection(db, 'handovers'), {
+    authorUid: uid.cs, authorName: name('cs'), roleId: 'birim-baskani', roleName: 'Başkan', unitId: 'cs', unitName: 'Computer Society', termId: term,
+    sections: { ongoing: 'Yapay Zekâ Günü (EVT) planlamada; Arduino atölyesi YK onayında.', lessons: 'Salon rezervasyonunu en az 3 hafta önce yapın.' },
+    status: 'draft', visibleTo: [`uid:${uid.cs}`, 'role:cs__birim-baskani'], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
 
   await signOut(auth);

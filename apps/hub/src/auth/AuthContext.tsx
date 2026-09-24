@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!bootstrapped) return 'needsFounder';
     const m = memberState.data;
     if (!m || m.status === 'pending') return 'pending';
-    if (m.status === 'suspended') return 'suspended';
+    if (m.status === 'suspended' || m.status === 'left') return 'suspended';
     if (setupState.loading || accessState.loading) return 'loading';
     if (!setupState.data?.done && access?.superAdmin) return 'needsSeed';
     return 'active';

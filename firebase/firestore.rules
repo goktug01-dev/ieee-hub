@@ -60,6 +60,25 @@ service cloud.firestore {
       return hasAccessDoc() ? acc().tokens : ['uid:' + me()];
     }
 
+    // Birim kapsamlı izin: erişim özetindeki "birim__izin" anahtarı (alt birimlere genişletilmiş).
+    function hasUnitPerm(u, p) {
+      return isActive() && hasAccessDoc()
+        && (acc().superAdmin == true
+            || ((u + '__' + p) in acc().get('unitPerms', {}) && acc().unitPerms[u + '__' + p] > request.time));
+    }
+
+    function unitManager(u) {
+      return hasUnitPerm(u, 'unit.manage');
+    }
+
+    function isMember(u) {
+      return hasAccessDoc() && u in acc().get('memberOf', {}) && acc().memberOf[u] > request.time;
+    }
+
+    function volunteerRole() {
+      return get(docPath('settings', 'org')).data.get('volunteerRoleId', 'gonullu');
+    }
+
     // İmza gibi kritik işlemlerde son 15 dakika içinde giriş yapılmış olmalı.
     function recentAuth() {
       return request.time.toMillis() - request.auth.token.auth_time * 1000 < 15 * 60 * 1000;
@@ -132,12 +151,47 @@ service cloud.firestore {
       allow create: if (bootstrapping() && me() == uid && request.resource.data.superAdmin == true)
                     || (hasPerm('assignments.manage')
                         && request.resource.data.superAdmin == false)
-                    || isSuper();
+                    || isSuper()
+                    || volunteerDelegationCreate();
 
       // superAdmin bayrağını yalnızca kurucu yönetici değiştirebilir.
       allow update: if isSuper()
                     || (hasPerm('assignments.manage')
-                        && request.resource.data.superAdmin == resource.data.superAdmin);
+                        && request.resource.data.superAdmin == resource.data.superAdmin)
+                    || volunteerDelegationUpdate();
+
+      // Birim yöneticisi (unit.manage), kendi biriminde yalnızca gönüllü rolünü ekleyip çıkarabilir.
+      // Değişiklik tek bir rol anahtarı, tek bir birim üyeliği ve tek bir görünürlük anahtarıyla sınırlıdır.
+      function delegationBasics() {
+        let ld = request.resource.data.lastDelegation;
+        return ld.by == me()
+          && ld.roleId == volunteerRole()
+          && unitManager(ld.unitId);
+      }
+
+      function volunteerDelegationUpdate() {
+        let ld = request.resource.data.lastDelegation;
+        let key = ld.unitId + '__' + ld.roleId;
+        let d = request.resource.data;
+        return delegationBasics()
+          && d.diff(resource.data).affectedKeys().hasOnly(['roleKeys', 'tokens', 'memberOf', 'lastDelegation', 'updatedAt'])
+          && d.get('roleKeys', {}).diff(resource.data.get('roleKeys', {})).affectedKeys().hasOnly([key])
+          && d.get('memberOf', {}).diff(resource.data.get('memberOf', {})).affectedKeys().hasOnly([ld.unitId])
+          && d.get('tokens', []).toSet().difference(resource.data.get('tokens', []).toSet()).hasOnly(['role:' + key])
+          && resource.data.get('tokens', []).toSet().difference(d.get('tokens', []).toSet()).hasOnly(['role:' + key]);
+      }
+
+      function volunteerDelegationCreate() {
+        let ld = request.resource.data.lastDelegation;
+        let key = ld.unitId + '__' + ld.roleId;
+        let d = request.resource.data;
+        return delegationBasics()
+          && d.keys().hasOnly(['superAdmin', 'perms', 'unitPerms', 'roleKeys', 'tokens', 'memberOf', 'lastDelegation', 'updatedAt'])
+          && d.superAdmin == false && d.perms == {} && d.unitPerms == {}
+          && d.roleKeys.keys().hasOnly([key])
+          && d.memberOf.keys().hasOnly([ld.unitId])
+          && d.tokens.toSet().hasOnly(['uid:' + uid, 'role:' + key]);
+      }
 
       allow delete: if isSuper();
     }
@@ -161,8 +215,18 @@ service cloud.firestore {
 
     match /assignments/{id} {
       allow read: if isActive();
-      allow create, update: if hasPerm('assignments.manage')
-                            || (hasPerm('elections.manage') && request.resource.data.source == 'election');
+      allow create: if hasPerm('assignments.manage')
+                    || (hasPerm('elections.manage') && request.resource.data.source == 'election')
+                    || (request.resource.data.source == 'volunteer'
+                        && request.resource.data.status == 'active'
+                        && request.resource.data.roleId == volunteerRole()
+                        && unitManager(request.resource.data.unitId));
+      allow update: if hasPerm('assignments.manage')
+                    || (hasPerm('elections.manage') && request.resource.data.source == 'election')
+                    || (resource.data.roleId == volunteerRole()
+                        && unitManager(resource.data.unitId)
+                        && request.resource.data.status == 'ended'
+                        && onlyKeys(['status', 'endedAt', 'endedBy']));
       allow delete: if hasPerm('assignments.manage');
     }
 
@@ -451,6 +515,322 @@ service cloud.firestore {
         && request.resource.data.submittedAt == resource.data.submittedAt
         && mirrors();
       allow delete: if false;
+    }
+  
+    // ================= Operasyon modülleri =================
+
+    // ---------- Gönüllü başvuruları (WP-04) ----------
+
+    match /volunteerApplications/{id} {
+      allow read: if isActive()
+        && (resource.data.uid == me() || unitManager(resource.data.unitId) || hasPerm('members.manage'));
+      allow create: if isActive()
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow update: if isActive()
+        && (unitManager(resource.data.unitId) || hasPerm('assignments.manage'))
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'rejected']
+        && request.resource.data.decidedBy == me()
+        && onlyKeys(['status', 'decidedBy', 'decidedByName', 'decidedAt', 'decisionNote']);
+      allow delete: if isActive() && resource.data.uid == me() && resource.data.status == 'pending';
+    }
+
+    // ---------- Görevler ve projeler (WP-05) ----------
+
+    function canManageWork(u) {
+      return hasPerm('work.manageAll') || unitManager(u) || hasUnitPerm(u, 'unit.tasks.manage');
+    }
+
+    function canReadTask(d) {
+      return isActive()
+        && (d.assigneeUid == me()
+            || me() in d.supporterUids
+            || isMember(d.unitId)
+            || hasPerm('work.manageAll')
+            || hasPerm('reports.read'));
+    }
+
+    function validTask(d) {
+      return d.title is string && d.title.size() > 0
+        && d.assigneeUid is string && d.assigneeUid.size() > 0
+        && d.supporterUids is list
+        && d.status in ['todo', 'in_progress', 'blocked', 'done', 'cancelled']
+        && d.priority in ['low', 'normal', 'high', 'urgent']
+        && d.doneCriteria is string;
+    }
+
+    match /tasks/{id} {
+      allow read: if canReadTask(resource.data);
+      allow create: if isActive()
+        && canManageWork(request.resource.data.unitId)
+        && request.resource.data.createdBy == me()
+        && validTask(request.resource.data);
+      allow update: if isActive() && (
+           (canManageWork(resource.data.unitId) && canManageWork(request.resource.data.unitId)
+             && validTask(request.resource.data))
+        || ((resource.data.assigneeUid == me() || me() in resource.data.supporterUids)
+             && request.resource.data.status in ['todo', 'in_progress', 'blocked', 'done']
+             && onlyKeys(['status', 'statusNote', 'fileLink', 'updatedAt', 'completedAt']))
+      );
+      allow delete: if isActive() && canManageWork(resource.data.unitId);
+
+      match /comments/{cid} {
+        allow read: if canReadTask(get(/databases/$(database)/documents/tasks/$(id)).data);
+        allow create: if canReadTask(get(/databases/$(database)/documents/tasks/$(id)).data)
+          && request.resource.data.byUid == me()
+          && request.resource.data.at == request.time;
+        allow delete: if isActive() && resource.data.byUid == me();
+      }
+    }
+
+    match /taskCounters/{unitId} {
+      allow read: if isActive();
+      allow create: if canManageWork(unitId) && request.resource.data.value == 1;
+      allow update: if canManageWork(unitId) && request.resource.data.value == resource.data.value + 1;
+    }
+
+    match /projects/{id} {
+      allow read: if isActive()
+        && (isMember(resource.data.unitId) || resource.data.ownerUid == me()
+            || hasPerm('work.manageAll') || hasPerm('reports.read'));
+      allow create: if isActive()
+        && (unitManager(request.resource.data.unitId) || hasPerm('work.manageAll'));
+      allow update: if isActive()
+        && ((unitManager(resource.data.unitId) && unitManager(request.resource.data.unitId))
+            || hasPerm('work.manageAll')
+            || (resource.data.ownerUid == me() && request.resource.data.ownerUid == me()
+                && request.resource.data.unitId == resource.data.unitId));
+      allow delete: if isActive() && (unitManager(resource.data.unitId) || hasPerm('work.manageAll'));
+    }
+
+    // ---------- Etkinlikler (WP-06) ----------
+
+    function eventManager(u) {
+      return hasPerm('events.manageAll') || unitManager(u);
+    }
+
+    function isEventOwner(d) {
+      return me() in d.ownerUids;
+    }
+
+    function approvedPetitionFor(pid, unitId) {
+      let p = get(docPath('petitions', pid)).data;
+      return p.status == 'approved' && p.unitId == unitId;
+    }
+
+    match /events/{id} {
+      function e() { return resource.data; }
+      function ne() { return request.resource.data; }
+
+      allow read: if isActive();
+
+      allow create: if isActive()
+        && (hasUnitPerm(ne().unitId, 'unit.events.propose') || eventManager(ne().unitId))
+        && ne().status == 'proposed'
+        && ne().createdBy == me()
+        && ne().get('reportApproved', false) == false;
+
+      allow update: if isActive() && (
+           // YK kararı
+           (e().status == 'proposed' && ne().status in ['approved', 'rejected']
+             && hasPerm('events.approve')
+             && onlyKeys(['status', 'decisionNote', 'decidedBy', 'decidedByName', 'decidedAt', 'updatedAt']))
+           // Onaylanmış etkinlik izin dilekçesiyle onay
+        || (e().status == 'proposed' && ne().status == 'approved'
+             && (isEventOwner(e()) || eventManager(e().unitId))
+             && approvedPetitionFor(ne().petitionId, e().unitId)
+             && onlyKeys(['status', 'petitionId', 'petitionNo', 'decisionNote', 'decidedBy', 'decidedByName', 'decidedAt', 'updatedAt']))
+           // Etkinlik raporunun onayı
+        || (hasPerm('events.manageAll') && ne().status == e().status
+             && onlyKeys(['reportApproved', 'reportApprovedBy', 'reportApprovedAt', 'updatedAt']))
+           // Yürütme: sorumlular ve birim yöneticileri
+        || ((isEventOwner(e()) || eventManager(e().unitId))
+             && ne().unitId == e().unitId
+             && ne().code == e().code
+             && ne().get('reportApproved', false) == e().get('reportApproved', false)
+             && (ne().status == e().status
+                 || (e().status in ['approved', 'planning', 'registration_open', 'held', 'closing', 'reported']
+                     && ne().status in ['planning', 'registration_open', 'held', 'closing', 'reported', 'archived', 'cancelled'])))
+      );
+
+      allow delete: if isActive() && eventManager(resource.data.unitId) && resource.data.status in ['proposed', 'rejected'];
+
+      function parentEvent() {
+        return get(/databases/$(database)/documents/events/$(id)).data;
+      }
+
+      function canHandleParticipants() {
+        return isActive() && (isEventOwner(parentEvent()) || eventManager(parentEvent().unitId));
+      }
+
+      // Katılımcı listesi kişisel veridir: yalnızca etkinlik sorumluları ve birim yöneticileri.
+      match /participants/{pid} {
+        allow read, write: if canHandleParticipants();
+      }
+
+      match /syncRuns/{rid} {
+        allow read: if canHandleParticipants() || hasPerm('reports.read');
+        allow create: if canHandleParticipants() && request.resource.data.by == me();
+      }
+    }
+
+    match /eventCounters/{year} {
+      allow read: if isActive();
+      allow create: if isActive() && request.resource.data.value == 1;
+      allow update: if isActive() && request.resource.data.value == resource.data.value + 1;
+    }
+
+    // ---------- İletişim talepleri (WP-07) ----------
+
+    match /contentRequests/{id} {
+      function c() { return resource.data; }
+      function nc() { return request.resource.data; }
+
+      // Etkinlik tanıtımı, etkinlik onaylanmadan yayın takvimine alınamaz.
+      function promoOk() {
+        return nc().get('eventId', null) == null
+          || !(nc().status in ['scheduled', 'published'])
+          || get(docPath('events', nc().eventId)).data.status in ['approved', 'planning', 'registration_open', 'held', 'closing', 'reported', 'archived'];
+      }
+
+      function requesterUnitApprover() {
+        return c().requestingUnitId == 'branch' ? hasPerm('content.manage') : unitManager(c().requestingUnitId);
+      }
+
+      allow read: if isActive();
+
+      allow create: if isActive()
+        && nc().requestedBy == me()
+        && nc().status == 'requested'
+        && (hasUnitPerm(nc().requestingUnitId, 'unit.events.propose')
+            || unitManager(nc().requestingUnitId)
+            || hasPerm('content.manage'));
+
+      allow update: if isActive() && promoOk() && (
+           // İletişim birimi: kabul, üretim, onaya sunma, yayın; talep eden birimin onayını atlayamaz
+           (hasPerm('content.manage') && nc().requestingUnitId == c().requestingUnitId
+             && !(c().status == 'awaiting_approval' && nc().status == 'scheduled' && c().requestingUnitId != 'branch'))
+           // Talep eden birimin onayı
+        || (c().status == 'awaiting_approval' && nc().status in ['scheduled', 'in_production']
+             && requesterUnitApprover()
+             && onlyKeys(['status', 'approvedBy', 'approvedByName', 'approvedAt', 'approvalNote', 'updatedAt']))
+           // Talep sahibi: kabul edilmeden önce düzenleme veya iptal
+        || (c().requestedBy == me() && c().status == 'requested' && nc().status in ['requested', 'cancelled']
+             && onlyKeys(['type', 'channels', 'desiredPublishDate', 'brief', 'assets', 'eventId', 'eventName', 'status', 'updatedAt']))
+      );
+
+      allow delete: if isActive() && c().requestedBy == me() && c().status == 'requested';
+    }
+
+    // ---------- Sponsorluk ve finans (WP-08) ----------
+
+    function sponsorReader(d) {
+      return hasPerm('sponsors.read') || hasPerm('sponsors.manage') || (isActive() && d.ownerUid == me());
+    }
+
+    match /sponsors/{id} {
+      allow read: if sponsorReader(resource.data);
+      allow create, delete: if hasPerm('sponsors.manage');
+      allow update: if hasPerm('sponsors.manage')
+        || (isActive() && resource.data.ownerUid == me() && request.resource.data.ownerUid == me());
+
+      function parentSponsor() {
+        return get(/databases/$(database)/documents/sponsors/$(id)).data;
+      }
+
+      match /interactions/{iid} {
+        allow read: if sponsorReader(parentSponsor());
+        allow create: if (hasPerm('sponsors.manage') || (isActive() && parentSponsor().ownerUid == me()))
+          && request.resource.data.byUid == me();
+        allow update, delete: if hasPerm('sponsors.manage');
+      }
+
+      // İletişim kişileri: yalnızca sponsor sorumlusu ve sponsorluk yöneticileri (sponsor kilidi).
+      match /private/{docId} {
+        allow read, write: if hasPerm('sponsors.manage') || (isActive() && parentSponsor().ownerUid == me());
+      }
+    }
+
+    // Firma adı → sorumlu. Üyeler yalnızca tek kayıt sorgulayabilir ("bu firmayla görüşen var mı?").
+    match /sponsorLocks/{key} {
+      allow get: if isActive();
+      allow list: if hasPerm('sponsors.read') || hasPerm('sponsors.manage');
+      allow write: if hasPerm('sponsors.manage');
+    }
+
+    match /sponsorContactRequests/{id} {
+      allow read: if isActive()
+        && (resource.data.byUid == me() || resource.data.ownerUid == me() || hasPerm('sponsors.manage'));
+      allow create: if isActive()
+        && request.resource.data.byUid == me()
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      allow update: if isActive()
+        && (resource.data.ownerUid == me() || hasPerm('sponsors.manage'))
+        && onlyKeys(['status', 'response', 'respondedAt', 'respondedBy']);
+    }
+
+    match /budgets/{id} {
+      allow read: if hasPerm('finance.read') || hasPerm('finance.manage')
+        || (isActive() && unitManager(resource.data.unitId));
+      allow write: if hasPerm('finance.manage');
+    }
+
+    // ---------- Raporlar (WP-09) ----------
+
+    match /reports/{id} {
+      allow read: if hasPerm('reports.read') || hasPerm('reports.approve');
+      allow create: if (hasPerm('reports.read') || hasPerm('reports.approve'))
+        && request.resource.data.generatedBy == me()
+        && request.resource.data.status == 'draft'
+        && request.resource.data.generatedAt == request.time;
+      allow update: if hasPerm('reports.approve')
+        && resource.data.status == 'draft'
+        && request.resource.data.status == 'approved'
+        && request.resource.data.approvedBy == me()
+        && onlyKeys(['status', 'approvedBy', 'approvedByName', 'approvedAt']);
+      allow delete: if hasPerm('reports.approve') && resource.data.status == 'draft';
+    }
+
+    // ---------- Envanter (WP-01) ----------
+
+    match /inventory/{id} {
+      allow read, write: if hasPerm('inventory.manage');
+    }
+
+    // ---------- Devir paketleri (WP-10) ----------
+
+    match /handovers/{id} {
+      allow read: if isActive()
+        && (resource.data.authorUid == me()
+            || hasPerm('handover.manage')
+            || resource.data.visibleTo.hasAny(myTokens()));
+      allow create: if isActive()
+        && request.resource.data.authorUid == me()
+        && request.resource.data.status == 'draft'
+        && (hasRoleKey(request.resource.data.unitId + '__' + request.resource.data.roleId) || hasPerm('handover.manage'));
+      allow update: if isActive() && (
+           (resource.data.authorUid == me() && resource.data.status != 'accepted'
+             && request.resource.data.authorUid == me()
+             && request.resource.data.status in ['draft', 'submitted'])
+        || (hasPerm('handover.manage') && resource.data.status == 'submitted'
+             && request.resource.data.status in ['accepted', 'draft']
+             && onlyKeys(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'reviewNote', 'updatedAt']))
+      );
+      allow delete: if isActive() && resource.data.authorUid == me() && resource.data.status == 'draft';
+    }
+
+    // ---------- Destek (WP-10) ----------
+
+    match /feedback/{id} {
+      allow read: if isActive() && (resource.data.byUid == me() || hasPerm('inventory.manage'));
+      allow create: if isActive()
+        && request.resource.data.byUid == me()
+        && request.resource.data.status == 'open'
+        && request.resource.data.at == request.time;
+      allow update: if hasPerm('inventory.manage') && onlyKeys(['status', 'response', 'respondedBy', 'respondedAt']);
     }
   }
 }

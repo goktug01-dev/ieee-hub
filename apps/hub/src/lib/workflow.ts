@@ -44,6 +44,13 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   numberingPattern: '{prefix}-{year}-{series}-{seq:4}',
   verifyBaseUrl: '',
   allowedEmailDomains: [],
+  volunteerRoleId: 'gonullu',
+  orientationItems: [
+    'Birimin Discord kanalına katıl',
+    'Birimin Google Grubuna katıl',
+    'Hub kullanım kılavuzunu oku',
+    'KVKK ve gizlilik taahhüdünü onayla',
+  ],
 };
 
 export function verifyUrl(settings: OrgSettings | null, code: string) {

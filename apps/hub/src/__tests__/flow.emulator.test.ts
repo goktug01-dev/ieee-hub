@@ -8,6 +8,8 @@ import PizZip from 'pizzip';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { auth, db } from '../firebase';
 import { createAssignments } from '../lib/assignments';
+import { applyAsVolunteer, decideVolunteer } from '../lib/ops';
+import type { VolunteerApplication } from '../lib/opsTypes';
 import {
   createDraft,
   decidePetition,
@@ -190,6 +192,30 @@ run('uçtan uca dilekçe akışı', () => {
     await withdrawPetition(id);
     p = (await getDoc(doc(db, 'petitions', id))).data() as Petition;
     expect(p.status).toBe('withdrawn');
+  });
+
+  it('gönüllü başvurusu: birim başkanı kabul eder; rol, birim panosu ve oryantasyon görevleri oluşur', async () => {
+    await applyForMembership('vol', 'Vera Gönüllü');
+    await as('baskan');
+    await updateDoc(doc(db, 'members', uids.vol), { status: 'active' });
+    await as('vol');
+    await applyAsVolunteer({ unitId: 'cs', unitName: 'Computer Society', motivation: 'Etkinlik organizasyonunda görev almak istiyorum.', availability: '' });
+    await expect(getDocs(query(collection(db, 'tasks'), where('unitId', '==', 'cs')))).rejects.toThrow();
+
+    await as('cs');
+    const apps = await getDocs(query(collection(db, 'volunteerApplications'), where('unitId', '==', 'cs')));
+    const app = { id: apps.docs[0].id, ...(apps.docs[0].data() as VolunteerApplication) };
+    const r = await decideVolunteer(app, true, 'Hoş geldin', 'CS');
+    expect(r.orientationTasks).toBe(4);
+
+    await as('vol');
+    const acc = (await getDoc(doc(db, 'access', uids.vol))).data() as Access;
+    expect(acc.tokens).toContain('role:cs__gonullu');
+    expect(acc.perms).toEqual({});
+    const board = await getDocs(query(collection(db, 'tasks'), where('unitId', '==', 'cs')));
+    expect(board.size).toBeGreaterThanOrEqual(4);
+    const mine = await getDocs(query(collection(db, 'tasks'), where('assigneeUid', '==', uids.vol)));
+    expect(mine.size).toBe(4);
   });
 
   it('görev sonlandırılınca onay yetkisi hemen kalkar', async () => {

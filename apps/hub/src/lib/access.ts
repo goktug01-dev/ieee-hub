@@ -45,9 +45,11 @@ export function computeAccess(
   roles: Record<string, Role>,
   units: WithId<Unit>[],
   now = Date.now(),
-): Pick<Access, 'perms' | 'roleKeys' | 'tokens'> {
+): Pick<Access, 'perms' | 'roleKeys' | 'tokens' | 'unitPerms' | 'memberOf'> {
   const perms: Record<string, Timestamp> = {};
   const roleKeys: Record<string, Timestamp> = {};
+  const unitPerms: Record<string, Timestamp> = {};
+  const memberOf: Record<string, Timestamp> = {};
   const tokens = new Set<string>([`uid:${uid}`]);
 
   for (const a of assignments) {
@@ -61,17 +63,20 @@ export function computeAccess(
     roleKeys[key] = later(roleKeys[key], exp);
     tokens.add(`role:${key}`);
 
+    const scope = a.unitId === 'branch' ? ['branch'] : descendantsOf(a.unitId, units);
+    scope.forEach((u) => (memberOf[u] = later(memberOf[u], exp)));
+
     for (const p of role.permissions) {
-      if (p === 'unit.petitions.read') {
-        const scope = a.unitId === 'branch' ? ['branch'] : descendantsOf(a.unitId, units);
-        scope.forEach((u) => tokens.add(`unit:${u}`));
-      } else if (!p.startsWith('unit.')) {
+      if (p.startsWith('unit.')) {
+        scope.forEach((u) => (unitPerms[`${u}__${p}`] = later(unitPerms[`${u}__${p}`], exp)));
+        if (p === 'unit.petitions.read') scope.forEach((u) => tokens.add(`unit:${u}`));
+      } else {
         perms[p] = later(perms[p], exp);
       }
     }
   }
 
-  return { perms, roleKeys, tokens: [...tokens] };
+  return { perms, roleKeys, tokens: [...tokens], unitPerms, memberOf };
 }
 
 /** Kişinin erişim özetini Firestore'daki güncel atamalardan yeniden yazar. */
@@ -120,6 +125,30 @@ export function hasPermission(access: Access | null, perm: string): boolean {
   if (access.superAdmin) return true;
   const exp = access.perms?.[perm];
   return !!exp && exp.toMillis() > Date.now();
+}
+
+/** Birim kapsamlı izin (kol geneli karşılığı `branchPerm` verilmişse o da yeterlidir). */
+export function hasUnitPermission(access: Access | null, unitId: string, perm: string, branchPerm?: string): boolean {
+  if (!access) return false;
+  if (access.superAdmin) return true;
+  if (branchPerm && hasPermission(access, branchPerm)) return true;
+  const exp = access.unitPerms?.[`${unitId}__${perm}`];
+  return !!exp && exp.toMillis() > Date.now();
+}
+
+export function isUnitMember(access: Access | null, unitId: string): boolean {
+  const exp = access?.memberOf?.[unitId];
+  return !!exp && exp.toMillis() > Date.now();
+}
+
+/** Kişinin belirli bir izne sahip olduğu birimler. */
+export function unitsWithPermission(access: Access | null, perm: string): string[] {
+  const out: string[] = [];
+  for (const [k, exp] of Object.entries(access?.unitPerms ?? {})) {
+    const [unit, p] = k.split('__');
+    if (p === perm && exp.toMillis() > Date.now()) out.push(unit);
+  }
+  return out;
 }
 
 export function hasRoleKey(access: Access | null, key: string): boolean {

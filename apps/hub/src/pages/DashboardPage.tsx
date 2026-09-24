@@ -5,6 +5,7 @@ import {
   IconFilePlus,
   IconFileText,
   IconUserPlus,
+  IconListCheck,
 } from '@tabler/icons-react';
 import { orderBy, where, limit } from 'firebase/firestore';
 import type { ReactNode } from 'react';
@@ -15,6 +16,9 @@ import { fmtRelative } from '../lib/format';
 import { useCollection } from '../lib/hooks';
 import { useInbox } from '../lib/inbox';
 import type { Assignment, Member, Petition } from '../lib/types';
+import type { HubEvent, Task } from '../lib/opsTypes';
+import { dueInfo } from '../components/MetaBadge';
+import dayjs from 'dayjs';
 import { useOrg } from '../lib/org';
 
 function StatCard({ label, value, icon, to, color }: { label: string; value: number | string; icon: ReactNode; to: string; color: string }) {
@@ -51,6 +55,16 @@ export function DashboardPage() {
     [where('uid', '==', user!.uid), where('status', '==', 'active')],
     user!.uid,
   );
+  const myTasks = useCollection<Task>('tasks', [where('assigneeUid', '==', user!.uid)], `dash-t-${user!.uid}`);
+  const events = useCollection<HubEvent>('events', [orderBy('createdAt', 'desc'), limit(60)], 'dash-ev');
+  const openTasks = myTasks.data
+    .filter((t) => !['done', 'cancelled'].includes(t.status))
+    .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
+  const overdueCount = openTasks.filter((t) => dueInfo(t.dueDate, false)?.color === 'red').length;
+  const upcoming = events.data
+    .filter((e) => e.startsAt && new Date(e.startsAt).getTime() > Date.now() - 864e5 && !['cancelled', 'rejected', 'proposed'].includes(e.status))
+    .sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? ''))
+    .slice(0, 5);
   const pendingMembers = useCollection<Member>(
     can('members.manage') ? 'members' : null,
     [where('status', '==', 'pending')],
@@ -86,8 +100,9 @@ export function DashboardPage() {
         </Button>
       </Group>
 
-      <SimpleGrid cols={{ base: 1, xs: 2, md: can('members.manage') ? 4 : 3 }}>
+      <SimpleGrid cols={{ base: 1, xs: 2, md: can('members.manage') ? 5 : 4 }}>
         <StatCard label="Onayımı bekleyen" value={inbox.waiting.length} icon={<IconChecklist />} to="/onaylar" color="red" />
+        <StatCard label="Açık görevlerim" value={overdueCount ? `${openTasks.length} (${overdueCount} gecikmiş)` : openTasks.length} icon={<IconListCheck />} to="/gorevler" color={overdueCount ? 'red' : 'teal'} />
         <StatCard label="Süreçteki dilekçelerim" value={inProgress} icon={<IconFileText />} to="/dilekceler" color="blue" />
         <StatCard label="Taslak / iade edilen" value={drafts} icon={<IconFilePlus />} to="/dilekceler" color="orange" />
         {can('members.manage') && (
@@ -96,6 +111,66 @@ export function DashboardPage() {
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        <Card>
+          <Group justify="space-between" mb="sm">
+            <Text fw={600}>Görevlerim</Text>
+            <Anchor component={Link} to="/gorevler" size="sm">
+              Tümü
+            </Anchor>
+          </Group>
+          {openTasks.length === 0 ? (
+            <EmptyState title="Açık göreviniz yok" />
+          ) : (
+            <Stack gap={6}>
+              {openTasks.slice(0, 6).map((t) => {
+                const due = dueInfo(t.dueDate, false);
+                return (
+                  <Group key={t.id} justify="space-between" wrap="nowrap">
+                    <Text size="sm" component={Link} to="/gorevler" truncate>
+                      <Text span c="dimmed" ff="monospace" size="xs">
+                        {t.code}
+                      </Text>{' '}
+                      {t.title}
+                    </Text>
+                    {due ? (
+                      <Badge size="sm" color={due.color}>
+                        {due.label}
+                      </Badge>
+                    ) : (
+                      <Text size="xs" c="dimmed">
+                        {t.dueDate ? dayjs(t.dueDate).format('DD.MM') : ''}
+                      </Text>
+                    )}
+                  </Group>
+                );
+              })}
+            </Stack>
+          )}
+        </Card>
+        <Card>
+          <Group justify="space-between" mb="sm">
+            <Text fw={600}>Yaklaşan etkinlikler</Text>
+            <Anchor component={Link} to="/etkinlikler" size="sm">
+              Tümü
+            </Anchor>
+          </Group>
+          {upcoming.length === 0 ? (
+            <EmptyState title="Yaklaşan etkinlik yok" />
+          ) : (
+            <Stack gap={6}>
+              {upcoming.map((e) => (
+                <Group key={e.id} justify="space-between" wrap="nowrap">
+                  <Text size="sm" component={Link} to={`/etkinlikler/${e.id}`} truncate>
+                    {e.name}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {dayjs(e.startsAt).format('DD MMM HH:mm')} · {e.unitName}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
+          )}
+        </Card>
         <Card>
           <Group justify="space-between" mb="sm">
             <Text fw={600}>Onayımı bekleyenler</Text>

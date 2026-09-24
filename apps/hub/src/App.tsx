@@ -29,10 +29,26 @@ const PetitionsPage = lazy(() => import('./pages/petitions/PetitionsPage').then(
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const SetupPage = lazy(() => import('./pages/public/SetupPage').then((m) => ({ default: m.SetupPage })));
 const VerifyPage = lazy(() => import('./pages/public/VerifyPage').then((m) => ({ default: m.VerifyPage })));
+const TasksPage = lazy(() => import('./pages/work/TasksPage').then((m) => ({ default: m.TasksPage })));
+const VolunteerPage = lazy(() => import('./pages/work/VolunteerPage').then((m) => ({ default: m.VolunteerPage })));
+const EventsPage = lazy(() => import('./pages/events/EventsPage').then((m) => ({ default: m.EventsPage })));
+const EventDetailPage = lazy(() => import('./pages/events/EventDetailPage').then((m) => ({ default: m.EventDetailPage })));
+const ContentPage = lazy(() => import('./pages/content/ContentPage').then((m) => ({ default: m.ContentPage })));
+const SponsorsPage = lazy(() => import('./pages/finance/SponsorsPage').then((m) => ({ default: m.SponsorsPage })));
+const BudgetsPage = lazy(() => import('./pages/finance/BudgetsPage').then((m) => ({ default: m.BudgetsPage })));
+const ReportsPage = lazy(() => import('./pages/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const InventoryPage = lazy(() => import('./pages/admin/InventoryPage').then((m) => ({ default: m.InventoryPage })));
+const HandoverPage = lazy(() => import('./pages/HandoverPage').then((m) => ({ default: m.HandoverPage })));
+const HelpPage = lazy(() => import('./pages/HelpPage').then((m) => ({ default: m.HelpPage })));
 
 function RequirePerm({ perm, children }: { perm: PermissionId; children: React.ReactElement }) {
   const { can } = useAuth();
   return can(perm) ? children : <Navigate to="/" replace />;
+}
+
+function RequireAny({ perms, children }: { perms: PermissionId[]; children: React.ReactElement }) {
+  const { can } = useAuth();
+  return perms.some(can) ? children : <Navigate to="/" replace />;
 }
 
 export function App() {
@@ -76,6 +92,17 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="dilekceler/:id" element={<PetitionDetailPage />} />
               <Route path="organizasyon" element={<OrgChartPage />} />
               <Route path="profil" element={<ProfilePage />} />
+              <Route path="gorevler" element={<TasksPage />} />
+              <Route path="gonulluluk" element={<VolunteerPage />} />
+              <Route path="etkinlikler" element={<EventsPage />} />
+              <Route path="etkinlikler/:id" element={<EventDetailPage />} />
+              <Route path="iletisim" element={<ContentPage />} />
+              <Route path="sponsorluk" element={<SponsorsPage />} />
+              <Route path="butceler" element={<BudgetsPage />} />
+              <Route path="devir" element={<HandoverPage />} />
+              <Route path="yardim" element={<HelpPage />} />
+              <Route path="raporlar" element={<RequireAny perms={['reports.read', 'reports.approve']}><ReportsPage /></RequireAny>} />
+              <Route path="yonetim/envanter" element={<RequirePerm perm="inventory.manage"><InventoryPage /></RequirePerm>} />
               <Route path="yonetim/uyeler" element={<RequirePerm perm="members.manage"><MembersPage /></RequirePerm>} />
               <Route path="yonetim/atamalar" element={<RequirePerm perm="assignments.manage"><AssignmentsPage /></RequirePerm>} />
               <Route path="yonetim/secimler" element={<RequirePerm perm="elections.manage"><ElectionsPage /></RequirePerm>} />
