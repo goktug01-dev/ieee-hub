@@ -1,0 +1,65 @@
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* docx-preview çıktısı: sayfaları kart gibi göster */
+.docx-preview-host {
+  background: var(--mantine-color-gray-1);
+  border-radius: var(--mantine-radius-md);
+  overflow: auto;
+  max-height: 80vh;
+}
+
+[data-mantine-color-scheme='dark'] .docx-preview-host {
+  background: var(--mantine-color-dark-8);
+}
+
+.docx-preview-host .docx-wrapper {
+  background: transparent !important;
+  padding: 16px !important;
+}
+
+.docx-preview-host .docx-wrapper > section.docx {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
+  margin-bottom: 16px !important;
+}
+
+/* Mobilde A4 sayfayı ekrana sığdır */
+@media (max-width: 48em) {
+  .docx-preview-host .docx-wrapper > section.docx {
+    zoom: 0.5;
+  }
+}
+
+/* Yazdır / PDF olarak kaydet: yalnızca belge önizlemesi basılır */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  .print-area .docx-wrapper {
+    padding: 0 !important;
+  }
+  .print-area .docx-wrapper > section.docx {
+    box-shadow: none !important;
+    margin: 0 !important;
+    zoom: 1 !important;
+  }
+}
+
+.nav-section-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

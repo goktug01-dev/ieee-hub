@@ -1,0 +1,101 @@
+# IEEE İKÇÜ Hub
+
+IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portalı. İlk sürümün kapsamı:
+
+- **E-dilekçe:** Kurumun kendi **Word** dilekçe formatları Hub'a yüklenir ya da Hub içinde oluşturulur. Word içindeki `{alan_adi}` etiketleri kendiliğinden forma dönüşür. Dilekçe doldurulurken belge anında önizlenir. Hem **kol geneli** hem **komite içi** dilekçe gönderilebilir.
+- **Rol bazlı onay:** Her şablonun kendi onay zinciri vardır (örneğin Komite Başkanı → Genel Sekreter → Başkan). Onaylayan kişinin rolü, birimi, görev süresi ve adım sırası güvenlik kurallarıyla denetlenir. İade, ret ve düzeltip yeniden gönderme desteklenir.
+- **Evrak numarası ve doğrulama:** Numaralar boşluksuz ve seri bazlıdır (`IEEEIKCU-2026-ETK-0007`). Belge Word olarak indirilebilir ya da tarayıcıdan PDF'e yazdırılabilir. Herkese açık `/dogrula/{kod}` sayfası belgenin gerçek olup olmadığını gösterir.
+- **Arayüzden düzenlenen organizasyon:** Komiteler ve birimler, roller ve yetkileri, dönemler, görev atamaları, **seçimler** (sonuçlar tek tıkla göreve işlenir), üye onayı, kurum ayarları ve denetim kaydı.
+
+> **Maliyet: 0 TL.** Hub, Firebase'in ücretsiz **Spark** planında sunucu kodu olmadan çalışır. Faturalandırma hesabı gerekmez, bu yüzden beklenmedik fatura riski de yoktur ([ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md)). Firestore bölgesi **europe-west1**'dir ([ADR-0018](docs/adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md)).
+
+Programın dayanağı: **TechOps Dijital Dönüşüm, Veri Yönetişimi ve Raporlama Otomasyonu Bildirgesi** (IEEE/240826/SÜ/22, Rev 00). Tasarım dokümanları [docs/](docs/README.md) klasöründedir. Önce [uygulanan mimariyi](docs/mimari/uygulanan-mimari.md) okuyun.
+
+## Hızlı başlangıç (yerel geliştirme)
+
+Gerekenler: **Node.js 22+** ve **Java 21+** (Firebase emülatörleri için).
+
+```bash
+npm install
+npm run emulators      # 1. terminal: Auth + Firestore emülatörleri (arayüz: http://127.0.0.1:4000)
+npm run dev            # 2. terminal: http://localhost:5173
+```
+
+`.env.development` varsayılan olarak emülatöre bağlanır. İlk kayıt olan kişi **kurucu yönetici** olur ve kurulum sihirbazı açılır. Sihirbaz varsayılan rolleri, isteğe bağlı örnek komiteleri ve iki örnek dilekçe şablonunu oluşturur.
+
+## Testler
+
+```bash
+npm run typecheck
+npm test               # birim testleri
+npm run test:rules     # güvenlik kuralı testleri (emülatör)
+npm run test:e2e       # uçtan uca: gerçek istemci kodu + gerçek kurallar (emülatör)
+```
+
+Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı, görev atama, komite dilekçesi, sahte onay girişimlerinin reddi, üç adımlı onay, belge içeriğinin kontrolü, doğrulama kaydı, iade ve yeniden gönderim, görevi sona eren kişinin onay yetkisini kaybetmesi. GitHub Actions bu testleri her push'ta çalıştırır.
+
+## Canlıya alma (ücretsiz)
+
+1. [Firebase Console](https://console.firebase.google.com)'da yeni proje açın. Plan **Spark** kalsın; faturalandırma eklemeyin. Proje kurumsal bir Google hesabına ait olsun ve en az iki yönetici tanımlansın (Bildirge §5.3).
+2. **Firestore Database → Create database →** konum olarak **`europe-west1`** seçin (bu seçim sonradan değiştirilemez), *production mode* ile başlayın.
+3. **Authentication → Sign-in method:** *Google* ve *E-posta/Şifre* sağlayıcılarını etkinleştirin.
+4. **Proje ayarları → Uygulamalarınız → Web uygulaması ekle.** Çıkan değerleri `apps/hub/.env.local` dosyasına yazın (örnek: [`apps/hub/.env.example`](apps/hub/.env.example)). Bu değerler gizli değildir; güvenlik kurallardadır.
+5. `.firebaserc` içindeki `demo-ieee-hub` değerini kendi proje kimliğinizle değiştirin.
+6. Dağıtın:
+
+   ```bash
+   npx firebase login
+   npm run deploy         # derleme + Hosting + Firestore kuralları ve dizinleri
+   ```
+
+7. `https://<proje>.web.app` adresini açın. İlk giriş yapan kişi kurucu yönetici olur. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
+
+### GitHub Actions ile otomatik dağıtım (isteğe bağlı)
+
+`main` dalına her birleştirmede [`deploy.yml`](.github/workflows/deploy.yml) çalışır. Gerekli değişkenler tanımlı değilse iş atlanır.
+
+- **Variables:** `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_APP_ID`
+- **Secret:** `FIREBASE_SERVICE_ACCOUNT` (Google Cloud Console → IAM → servis hesabı JSON anahtarı). Hesaba şu roller verilir: *Firebase Hosting Admin*, *Firebase Rules Admin*, *Cloud Datastore Index Admin*, *Service Usage Consumer*.
+
+## Word şablonu hazırlama
+
+Mevcut dilekçenizi Word'de açın ve doldurulacak yerlere süslü parantezle alan adı yazın:
+
+```
+Adı Soyadı : {ad_soyad}
+Etkinlik   : {etkinlik_adi} — {etkinlik_tarihi}
+Sayı: {evrak_no}                                  Tarih: {tarih}
+```
+
+**Dilekçe şablonları → Yeni şablon → Word dosyası yükle** adımlarından sonra alanlar otomatik algılanır. Soru metinlerini ve alan türlerini düzenleyin, onay zincirini tanımlayın ve **Yayımla**'ya basın. Sistemin doldurduğu etiketlerin (`{evrak_no}`, `{dilekce_sahibi}`, `{onay_1_ad}`, `{#onaylar}…{/onaylar}` …) listesi şablon editöründeki yardım bölümündedir. Word kullanmak istemeyenler için **Sistemde oluştur** seçeneği aynı biçimde bir .docx üretir.
+
+## Depo yapısı
+
+```
+ieee-hub/
+├── apps/hub/                 # React + Vite + Mantine arayüzü
+│   └── src/
+│       ├── lib/              # iş mantığı: erişim, dilekçe akışı, Word hattı, şablonlar, kurulum
+│       ├── pages/            # ekranlar (petitions/, admin/, public/)
+│       └── __tests__/        # birim + uçtan uca testler
+├── firebase/
+│   ├── firestore.rules       # tek güvenilir katman (tüm yetki kontrolleri)
+│   ├── firestore.indexes.json
+│   └── tests/                # kural testleri
+├── docs/                     # ADR'ler, çalışma paketleri, mimari, RBAC, modüller
+├── .github/workflows/        # CI (test) ve Deploy
+└── firebase.json
+```
+
+## Bilinen sınırlar (Spark planı)
+
+- E-posta bildirimi yok. Bekleyen onaylar Hub'daki sayaçta görünür.
+- Çevrim içi gizli oylama yok. Seçim genel kurulda yapılır, sonuçlar Hub'a işlenir.
+- Dört göz onayı (ADR-0008), acil erişim (ADR-0010), koşullu onay adımı ve MFA sonraki sürümlere bırakıldı.
+- Word belgesine QR görseli basılmaz. Doğrulama bağlantısı ve kodu metin olarak basılır; QR, Hub'daki dilekçe sayfasında görünür.
+
+Ayrıntılar: [ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md).
+
+## Gizli bilgiler
+
+Şifre, API anahtarı ve servis hesabı dosyası bu depoya **eklenmez** (Bildirge §6.2, §12.5). Firebase web yapılandırması gizli değildir; `.env.local` yine de depoya girmez.

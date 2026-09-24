@@ -1,0 +1,456 @@
+rules_version = '2';
+
+// IEEE İKÇÜ Hub — Firestore güvenlik kuralları
+//
+// Spark (ücretsiz) planda sunucu kodu (Cloud Functions) yoktur. Bu dosya Hub'ın
+// TEK güvenilir katmanıdır: istemci ne gönderirse göndersin, yetki, onay sırası,
+// evrak numarası ve doğrulama kaydı burada denetlenir. Bkz. docs/adr/0017.
+//
+// Yetki modeli (docs/adr/0019):
+//   members/{uid}  : üyelik durumu (pending | active | suspended)
+//   access/{uid}   : aktif görev atamalarından türetilen erişim özeti
+//                    { superAdmin, perms{perm: bitiş}, roleKeys{"birim__rol": bitiş}, tokens[] }
+//   Özeti yalnızca 'assignments.manage' izni olanlar yazar.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Yardımcılar ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return request.auth.uid;
+    }
+
+    function docPath(coll, id) {
+      return /databases/$(database)/documents/$(coll)/$(id);
+    }
+
+    function isActive() {
+      return signedIn()
+        && exists(docPath('members', me()))
+        && get(docPath('members', me())).data.status == 'active';
+    }
+
+    function hasAccessDoc() {
+      return exists(docPath('access', me()));
+    }
+
+    function acc() {
+      return get(docPath('access', me())).data;
+    }
+
+    function isSuper() {
+      return isActive() && hasAccessDoc() && acc().superAdmin == true;
+    }
+
+    function hasPerm(p) {
+      return isActive() && hasAccessDoc()
+        && (acc().superAdmin == true || (p in acc().perms && acc().perms[p] > request.time));
+    }
+
+    function hasRoleKey(k) {
+      return hasAccessDoc() && k in acc().roleKeys && acc().roleKeys[k] > request.time;
+    }
+
+    function myTokens() {
+      return hasAccessDoc() ? acc().tokens : ['uid:' + me()];
+    }
+
+    // İmza gibi kritik işlemlerde son 15 dakika içinde giriş yapılmış olmalı.
+    function recentAuth() {
+      return request.time.toMillis() - request.auth.token.auth_time * 1000 < 15 * 60 * 1000;
+    }
+
+    function onlyKeys(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ---------- Kurulum (ilk yönetici) ----------
+    // Sistemde hiç kurulum kaydı yoksa, giriş yapan ilk kişi kendini kurucu yönetici yapabilir.
+    // Kurulum kaydı, üye kaydı ve erişim özeti aynı batch içinde yazılır.
+
+    function bootstrapping() {
+      return signedIn()
+        && !exists(docPath('system', 'bootstrap'))
+        && existsAfter(docPath('system', 'bootstrap'))
+        && getAfter(docPath('system', 'bootstrap')).data.uid == me();
+    }
+
+    match /system/bootstrap {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.at == request.time
+        && existsAfter(docPath('members', me()))
+        && existsAfter(docPath('access', me()));
+      allow update, delete: if false;
+    }
+
+    // ---------- Kurum ayarları ----------
+
+    match /settings/public {
+      // Giriş ekranındaki kurum adı ve logo herkese açıktır.
+      allow read: if true;
+      allow write: if hasPerm('org.manage');
+    }
+
+    match /settings/{docId} {
+      allow read: if isActive();
+      allow write: if hasPerm('org.manage');
+    }
+
+    // ---------- Üyeler ----------
+
+    match /members/{uid} {
+      allow read: if me() == uid || isActive();
+
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.status == 'pending'
+            || (request.resource.data.status == 'active' && bootstrapping()));
+
+      // Kişi kendi iletişim bilgilerini günceller; durum yalnızca üye yöneticisinde.
+      allow update: if (me() == uid && isActive()
+                         && onlyKeys(['displayName', 'phone', 'department', 'studentNo', 'photoURL', 'updatedAt']))
+                    || (me() == uid && resource.data.status == 'pending'
+                         && onlyKeys(['displayName', 'phone', 'department', 'studentNo', 'photoURL', 'updatedAt']))
+                    || hasPerm('members.manage');
+
+      allow delete: if hasPerm('members.manage');
+    }
+
+    // ---------- Erişim özeti ----------
+
+    match /access/{uid} {
+      allow read: if me() == uid || hasPerm('assignments.manage');
+
+      allow create: if (bootstrapping() && me() == uid && request.resource.data.superAdmin == true)
+                    || (hasPerm('assignments.manage')
+                        && request.resource.data.superAdmin == false)
+                    || isSuper();
+
+      // superAdmin bayrağını yalnızca kurucu yönetici değiştirebilir.
+      allow update: if isSuper()
+                    || (hasPerm('assignments.manage')
+                        && request.resource.data.superAdmin == resource.data.superAdmin);
+
+      allow delete: if isSuper();
+    }
+
+    // ---------- Organizasyon: birimler, roller, dönemler ----------
+
+    match /units/{id} {
+      allow read: if isActive();
+      allow write: if hasPerm('org.manage');
+    }
+
+    match /roles/{id} {
+      allow read: if isActive();
+      allow write: if hasPerm('org.manage');
+    }
+
+    match /terms/{id} {
+      allow read: if isActive();
+      allow write: if hasPerm('org.manage');
+    }
+
+    match /assignments/{id} {
+      allow read: if isActive();
+      allow create, update: if hasPerm('assignments.manage')
+                            || (hasPerm('elections.manage') && request.resource.data.source == 'election');
+      allow delete: if hasPerm('assignments.manage');
+    }
+
+    match /elections/{id} {
+      allow read: if isActive();
+      allow write: if hasPerm('elections.manage');
+    }
+
+    // ---------- Denetim kaydı (yalnızca ekleme) ----------
+
+    match /auditLog/{id} {
+      allow read: if hasPerm('audit.read');
+      allow create: if isActive()
+        && request.resource.data.actorUid == me()
+        && request.resource.data.at == request.time;
+      allow update, delete: if false;
+    }
+
+    // ---------- Dilekçe şablonları ----------
+
+    match /petitionTemplates/{tid} {
+      allow read: if isActive();
+      allow create, delete: if hasPerm('templates.manage');
+      // Yürürlükteki sürüm yalnızca yayımlanmış (var olan) bir sürüme ayarlanabilir.
+      allow update: if hasPerm('templates.manage')
+        && (request.resource.data.currentVersion == 0
+            || existsAfter(/databases/$(database)/documents/petitionTemplates/$(tid)/versions/$(string(request.resource.data.currentVersion))));
+
+      match /draftChunks/{c} {
+        allow read: if isActive();
+        allow write: if hasPerm('templates.manage');
+      }
+
+      // Yayımlanmış sürüm değiştirilemez ve silinemez. Süreçteki dilekçeler sürüme sabitlenir.
+      match /versions/{v} {
+        allow read: if isActive();
+        allow create: if hasPerm('templates.manage')
+          && request.resource.data.version == int(v)
+          && request.resource.data.publishedBy == me()
+          && request.resource.data.publishedAt == request.time;
+        allow update, delete: if false;
+
+        match /chunks/{c} {
+          allow read: if isActive();
+          allow create: if hasPerm('templates.manage');
+          allow update, delete: if false;
+        }
+      }
+    }
+
+    // ---------- Evrak sayaçları ----------
+    // Sayaç yalnızca bir dilekçenin ilk gönderimiyle aynı batch içinde, birer birer artar.
+    // Böylece evrak numaraları boşluksuz ve tekrarsız ilerler.
+
+    match /counters/{cid} {
+      function pairedSubmit() {
+        let pid = request.resource.data.lastPetitionId;
+        let before = get(docPath('petitions', pid)).data;
+        let after = getAfter(docPath('petitions', pid)).data;
+        return before.status == 'draft'
+          && after.status == 'pending'
+          && after.counterId == cid
+          && after.documentSeq == request.resource.data.value;
+      }
+
+      allow read: if isActive();
+      allow create: if isActive() && request.resource.data.value == 1 && pairedSubmit();
+      allow update: if isActive() && request.resource.data.value == resource.data.value + 1 && pairedSubmit();
+      allow delete: if false;
+    }
+
+    // ---------- Dilekçeler ----------
+
+    match /petitions/{pid} {
+      function p() {
+        return resource.data;
+      }
+
+      function np() {
+        return request.resource.data;
+      }
+
+      function tmpl() {
+        return get(docPath('petitionTemplates', np().templateId)).data;
+      }
+
+      function tmplVersion() {
+        return get(/databases/$(database)/documents/petitionTemplates/$(np().templateId)/versions/$(string(np().templateVersion))).data;
+      }
+
+      function canRead() {
+        return isActive()
+          && (p().ownerUid == me()
+              || hasPerm('petitions.readAll')
+              || p().visibleTo.hasAny(myTokens()));
+      }
+
+      function unitAllowed() {
+        let t = tmpl();
+        return (t.scope == 'branch' && np().unitId == 'branch')
+          || (t.scope == 'unit' && np().unitId != 'branch'
+              && (t.unitIds.size() == 0 || np().unitId in t.unitIds));
+      }
+
+      // Bir adımın onay biriminin çözümü: dilekçenin birimi, kol geneli veya sabit birim.
+      function stepUnit(step) {
+        return step.unitMode == 'petition' ? p().unitId
+          : (step.unitMode == 'branch' ? 'branch' : step.unitId);
+      }
+
+      // --- Taslak ---
+
+      function draftKeys() {
+        return ['templateId', 'templateVersion', 'templateName', 'unitId', 'unitName', 'ownerUid',
+                'ownerName', 'title', 'data', 'status', 'visibleTo', 'createdAt', 'updatedAt'];
+      }
+
+      function validDraftCreate() {
+        return np().keys().hasOnly(draftKeys())
+          && np().ownerUid == me()
+          && np().status == 'draft'
+          && np().data is map
+          && np().visibleTo == ['uid:' + me()]
+          && np().createdAt == request.time;
+      }
+
+      function editDraft() {
+        return p().status == 'draft' && p().ownerUid == me()
+          && np().status == 'draft'
+          && np().data is map
+          && onlyKeys(['title', 'data', 'unitId', 'unitName', 'templateVersion', 'templateName', 'updatedAt']);
+      }
+
+      // --- Gönderim (taslak → onayda) ---
+      // Onay zinciri, şablon sürümündeki zincirle birebir aynı olmalıdır.
+
+      function commonSubmit() {
+        return p().ownerUid == me()
+          && np().status == 'pending'
+          && np().currentStep == 0
+          && np().submittedAt == request.time
+          && np().updatedAt == request.time
+          && np().data is map
+          && np().steps == tmplVersion().steps
+          && np().steps.size() > 0
+          && unitAllowed()
+          && ('uid:' + me()) in np().visibleTo
+          && np().visibleTo.size() <= 40;
+      }
+
+      function firstSubmit() {
+        let counterPath = docPath('counters', np().counterId);
+        let t = tmpl();
+        return p().status == 'draft'
+          && t.active == true
+          && np().templateVersion == t.currentVersion
+          && np().counterId == t.series + '_' + string(request.time.year())
+          && np().documentSeq == (exists(counterPath) ? get(counterPath).data.value + 1 : 1)
+          && getAfter(counterPath).data.value == np().documentSeq
+          && getAfter(counterPath).data.lastPetitionId == pid
+          && np().documentNo is string && np().documentNo.size() > 0
+          && np().verificationCode is string && np().verificationCode.size() == 12
+          && existsAfter(docPath('petitionVerifications', np().verificationCode))
+          && np().revision == 1
+          && np().approvals == []
+          && np().notes == []
+          && commonSubmit()
+          && onlyKeys(['status', 'steps', 'currentStep', 'counterId', 'documentSeq', 'documentNo',
+                       'verificationCode', 'revision', 'approvals', 'notes', 'submittedAt', 'updatedAt',
+                       'visibleTo', 'data', 'title', 'unitId', 'unitName', 'templateVersion', 'templateName']);
+      }
+
+      // İade edilen dilekçe düzeltilip yeniden gönderilir: aynı evrak numarası, yeni revizyon,
+      // zincir baştan başlar. Eski onaylar geçmiş olarak kalır.
+      function resubmit() {
+        return p().status == 'returned'
+          && np().revision == p().revision + 1
+          && np().templateVersion == p().templateVersion
+          && np().unitId == p().unitId
+          && commonSubmit()
+          && onlyKeys(['status', 'currentStep', 'revision', 'submittedAt', 'updatedAt', 'data', 'title', 'visibleTo']);
+      }
+
+      // --- Onay / ret / iade ---
+
+      function decide() {
+        let n = p().approvals.size();
+        let a = np().approvals[n];
+        let step = p().steps[p().currentStep];
+        let unitKey = stepUnit(step);
+        let isLast = p().currentStep == p().steps.size() - 1;
+        return p().status == 'pending'
+          && p().ownerUid != me()
+          && recentAuth()
+          && np().approvals.size() == n + 1
+          && (n == 0 || np().approvals[0:n] == p().approvals)
+          && a.keys().hasOnly(['step', 'stepName', 'revision', 'uid', 'name', 'roleId', 'roleName',
+                               'unitId', 'unitName', 'decision', 'at'])
+          && a.uid == me()
+          && a.at is timestamp
+          && a.at > request.time - duration.value(10, 'm')
+          && a.at < request.time + duration.value(10, 'm')
+          && a.step == p().currentStep
+          && a.revision == p().revision
+          && a.unitId == unitKey
+          && a.roleId in step.roleIds
+          && hasRoleKey(unitKey + '__' + a.roleId)
+          && np().updatedAt == request.time
+          && (np().notes.size() == p().notes.size()
+              || (np().notes.size() == p().notes.size() + 1
+                  && (p().notes.size() == 0 || np().notes[0:p().notes.size()] == p().notes)
+                  && np().notes[p().notes.size()].approvalIndex == n))
+          && (
+               (a.decision == 'approve' && !isLast
+                  && np().status == 'pending' && np().currentStep == p().currentStep + 1
+                  && onlyKeys(['approvals', 'notes', 'status', 'currentStep', 'updatedAt']))
+            || (a.decision == 'approve' && isLast
+                  && np().status == 'approved' && np().completedAt == request.time
+                  && onlyKeys(['approvals', 'notes', 'status', 'completedAt', 'updatedAt']))
+            || (a.decision == 'reject'
+                  && np().status == 'rejected' && np().completedAt == request.time
+                  && np().notes.size() == p().notes.size() + 1
+                  && onlyKeys(['approvals', 'notes', 'status', 'completedAt', 'updatedAt']))
+            || (a.decision == 'return'
+                  && np().status == 'returned'
+                  && np().notes.size() == p().notes.size() + 1
+                  && onlyKeys(['approvals', 'notes', 'status', 'updatedAt']))
+          );
+      }
+
+      // --- Geri çekme ---
+
+      function withdraw() {
+        return p().ownerUid == me()
+          && p().status in ['pending', 'returned']
+          && np().status == 'withdrawn'
+          && np().completedAt == request.time
+          && np().updatedAt == request.time
+          && onlyKeys(['status', 'completedAt', 'updatedAt']);
+      }
+
+      allow get, list: if canRead();
+      allow create: if isActive() && validDraftCreate();
+      // Dallar mevcut/yeni duruma göre ayrılır; böylece her istekte yalnızca bir dal değerlendirilir
+      // (Firestore kurallarında istek başına 1000 ifade sınırı vardır).
+      allow update: if isActive() && (
+           (p().status == 'draft' && np().status == 'draft' && editDraft())
+        || (p().status == 'draft' && np().status == 'pending' && firstSubmit())
+        || (p().status == 'returned' && np().status == 'pending' && resubmit())
+        || (p().status == 'pending' && np().status != 'withdrawn' && decide())
+        || (np().status == 'withdrawn' && withdraw())
+      );
+      allow delete: if isActive() && p().ownerUid == me() && p().status == 'draft';
+    }
+
+    // ---------- Herkese açık doğrulama kaydı ----------
+    // İçerik yoktur; yalnızca evrak no, durum ve onay özeti. Kayıt, dilekçenin kendisiyle
+    // aynı batch içinde yazılmak zorundadır ve alanları dilekçeyle birebir aynı olmalıdır.
+
+    match /petitionVerifications/{code} {
+      function petitionAfter() {
+        return getAfter(docPath('petitions', request.resource.data.petitionId)).data;
+      }
+
+      function mirrors() {
+        let pa = petitionAfter();
+        return pa.verificationCode == code
+          && pa.updatedAt == request.time
+          && request.resource.data.status == pa.status
+          && request.resource.data.approvals == pa.approvals
+          && request.resource.data.documentNo == pa.documentNo
+          && request.resource.data.templateName == pa.templateName
+          && request.resource.data.revision == pa.revision
+          && request.resource.data.updatedAt == request.time;
+      }
+
+      allow get: if true;
+      allow list: if false;
+      allow create: if isActive()
+        && get(docPath('petitions', request.resource.data.petitionId)).data.status == 'draft'
+        && get(docPath('petitions', request.resource.data.petitionId)).data.ownerUid == me()
+        && mirrors();
+      allow update: if isActive()
+        && request.resource.data.petitionId == resource.data.petitionId
+        && request.resource.data.ownerMasked == resource.data.ownerMasked
+        && request.resource.data.submittedAt == resource.data.submittedAt
+        && mirrors();
+      allow delete: if false;
+    }
+  }
+}

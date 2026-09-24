@@ -1,0 +1,23 @@
+{
+  "name": "ieee-ikcu-hub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "IEEE İKÇÜ Öğrenci Kolu iç operasyon portalı",
+  "workspaces": [
+    "apps/hub",
+    "firebase"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w apps/hub",
+    "build": "npm run build -w apps/hub",
+    "typecheck": "npm run typecheck -w apps/hub",
+    "test": "npm run test -w apps/hub",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-ieee-hub \"npm run test -w firebase\"",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub \"npm run test -w apps/hub -- --mode development\"",
+    "emulators": "firebase emulators:start --only auth,firestore --project demo-ieee-hub",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore"
+  }
+}

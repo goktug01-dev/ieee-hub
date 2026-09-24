@@ -1,0 +1,46 @@
+name: Deploy
+
+# main dalına her birleştirmede Firebase Hosting + Firestore kuralları/dizinleri dağıtılır.
+# Gerekenler (Settings > Secrets and variables > Actions):
+#   Variables: FIREBASE_PROJECT_ID, VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_APP_ID
+#   Secret:    FIREBASE_SERVICE_ACCOUNT (servis hesabı JSON anahtarı; README'deki roller)
+# Değişkenler tanımlı değilse iş atlanır.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.FIREBASE_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_USE_EMULATORS: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vite build
+        working-directory: apps/hub
+        env:
+          NODE_ENV: production
+      - name: Servis hesabı
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+      - name: Firebase'e dağıt
+        run: npx firebase deploy --only hosting,firestore --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
