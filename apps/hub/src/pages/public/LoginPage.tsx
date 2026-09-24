@@ -1,6 +1,9 @@
 import {
   Anchor,
+  Badge,
   Box,
+  Card,
+  Group,
   Button,
   Center,
   Divider,
@@ -12,7 +15,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconBrandGoogle } from '@tabler/icons-react';
+import { IconBrandGoogle, IconFlask } from '@tabler/icons-react';
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
@@ -25,7 +28,8 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, friendlyError, notifySuccess } from '../../components/ui';
-import { auth } from '../../firebase';
+import { auth, useEmulators } from '../../firebase';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../lib/demo';
 
 export function LoginPage() {
   const { publicSettings } = useAuth();
@@ -71,8 +75,12 @@ export function LoginPage() {
       notifySuccess('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
     });
 
+  const demoLogin = (email: string) => run(() => signInWithEmailAndPassword(auth, email, DEMO_PASSWORD));
+
   return (
     <Center mih="100vh" p="md" bg="var(--mantine-color-body)">
+      <Stack w="100%" maw={useEmulators ? 880 : 420} gap="md">
+      <Group align="stretch" gap="md" wrap="wrap" justify="center">
       <Paper withBorder shadow="sm" p={{ base: 'lg', sm: 'xl' }} w="100%" maw={420}>
         <Stack gap="lg">
           <Stack gap={6} align="center">
@@ -140,6 +148,32 @@ export function LoginPage() {
           </Stack>
         </Stack>
       </Paper>
+      {useEmulators && (
+        <Paper withBorder shadow="sm" p={{ base: 'lg', sm: 'xl' }} w="100%" maw={420}>
+          <Stack gap="sm">
+            <Group gap="xs">
+              <IconFlask size={20} />
+              <Title order={4}>Demo hesapları</Title>
+              <Badge color="orange">yalnızca yerel</Badge>
+            </Group>
+            <Text size="sm" c="dimmed">
+              Tek tıkla giriş yapın. Şifre hepsi için <b>{DEMO_PASSWORD}</b>. Farklı rolleri denemek için çıkış yapıp başka hesapla girin.
+            </Text>
+            {DEMO_ACCOUNTS.map((a) => (
+              <Card key={a.key} padding="xs" radius="md" onClick={() => void demoLogin(a.email)} style={{ cursor: 'pointer' }}>
+                <Text size="sm" fw={600}>
+                  {a.name}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {a.description}
+                </Text>
+              </Card>
+            ))}
+          </Stack>
+        </Paper>
+      )}
+      </Group>
+      </Stack>
     </Center>
   );
 }

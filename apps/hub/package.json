@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "vitest run --config vitest.seed.config.ts --mode development"
   },
   "dependencies": {
     "@mantine/core": "^9.6.2",
