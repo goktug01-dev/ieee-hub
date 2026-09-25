@@ -67,6 +67,7 @@ import {
   saveDraftFile,
   setCurrentVersion,
   updateTemplateMeta,
+  validateTemplateContent,
   validateSteps,
 } from '../../lib/templates';
 import type {
@@ -193,6 +194,10 @@ export function TemplateEditorPage() {
   }, [draftFile, fields, steps, t, id, publicSettings.orgName, orgSettings, roleName, unitName]);
 
   const stepErrors = useMemo(() => validateSteps(steps), [steps]);
+  const publishErrors = useMemo(
+    () => (draft ? validateTemplateContent({ ...draft, fields, steps }) : ['Önce bir Word belgesi yükleyin.']),
+    [draft, fields, steps],
+  );
 
   if (loading) return <SectionLoader />;
   if (!t || !id) return <EmptyState title="Şablon bulunamadı" />;
@@ -705,9 +710,9 @@ export function TemplateEditorPage() {
 
       <Modal opened={publishOpen} onClose={() => setPublishOpen(false)} title="Yeni sürüm yayımla">
         <Stack>
-          {stepErrors.length > 0 ? (
-            <Alert color="red" title="Onay zinciri eksik">
-              {stepErrors.map((e) => (
+          {publishErrors.length > 0 ? (
+            <Alert color="red" title="Yayın hazırlığı eksik">
+              {publishErrors.map((e) => (
                 <div key={e}>{e}</div>
               ))}
             </Alert>
@@ -727,7 +732,7 @@ export function TemplateEditorPage() {
             <Button variant="default" onClick={() => setPublishOpen(false)}>
               Vazgeç
             </Button>
-            <Button leftSection={<IconCheck size={16} />} onClick={publish} loading={busy === 'publish'} disabled={stepErrors.length > 0}>
+            <Button leftSection={<IconCheck size={16} />} onClick={publish} loading={busy === 'publish'} disabled={publishErrors.length > 0}>
               Yayımla
             </Button>
           </Group>
@@ -738,6 +743,7 @@ export function TemplateEditorPage() {
 }
 
 function MetaForm({ t, id, unitOptions }: { t: PetitionTemplate; id: string; unitOptions: { value: string; label: string }[] }) {
+  const { orgSettings } = useAuth();
   const [m, setM] = useState({
     name: t.name,
     description: t.description ?? '',
@@ -763,7 +769,7 @@ function MetaForm({ t, id, unitOptions }: { t: PetitionTemplate; id: string; uni
         <TextInput label="Şablon adı" value={m.name} onChange={(e) => setM({ ...m, name: e.currentTarget.value })} />
         <Textarea label="Açıklama" value={m.description} onChange={(e) => setM({ ...m, description: e.currentTarget.value })} />
         <Group grow>
-          <TextInput label="Kategori" value={m.category} onChange={(e) => setM({ ...m, category: e.currentTarget.value })} />
+          <Select label="Kategori" data={[...new Set([...orgSettings.petitionCategories, m.category].filter(Boolean))]} value={m.category || null} onChange={(value) => setM({ ...m, category: value ?? '' })} searchable clearable />
           <TextInput
             label="Evrak serisi"
             description="Değişiklik yalnızca yeni gönderimleri etkiler"

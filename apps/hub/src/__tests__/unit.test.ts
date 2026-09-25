@@ -6,10 +6,12 @@ import { DEFAULT_BUILDER, buildDocxFromSpec, inspectDocx, renderDocx } from '../
 import { maskName, slugify } from '../lib/format';
 import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
 import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
+import { classifyPetitionFile } from '../lib/petitionCategories';
 import type { HubEvent } from '../lib/opsTypes';
 import { computeVisibleTo, formatDocumentNo, newVerificationCode } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
 import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
+import { validateTemplateContent } from '../lib/templates';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -34,6 +36,30 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('dilekçe kategorileri', () => {
+  it('kurumsal klasör dosyalarını adından sınıflandırır', () => {
+    expect(classifyPetitionFile('04_HARCAMA_BÜTÇE_TALEP_FORMU.docx')).toMatchObject({ category: 'Finans ve Harcama', series: 'HRC' });
+    expect(classifyPetitionFile('07_YÖNETİM_KURULU_TOPLANTI_TUTANAĞI_FORMU.docx')).toMatchObject({ category: 'Yönetim Kurulu', series: 'YKK' });
+    expect(classifyPetitionFile('12_YÖNETİM_KURULU_ATAMA_KARARNAMESİ.docx')).toMatchObject({ category: 'Atama ve Seçim', series: 'ATM' });
+    expect(classifyPetitionFile('20_TECHOPS_STAJYER_ATAMA_TUTANAĞI.docx')).toMatchObject({ category: 'TechOps', series: 'TOP' });
+  });
+});
+
+describe('şablon yayın doğrulaması', () => {
+  it('alan etiketi bulunmayan Word belgesinin yayımlanmasını engeller', () => {
+    const errors = validateTemplateContent({
+      source: 'upload',
+      fileName: 'etiketsiz.docx',
+      sizeBytes: 100,
+      chunkCount: 1,
+      fields: [],
+      steps: [{ name: 'Başkan onayı', roleIds: ['baskan'], unitMode: 'branch', unitId: null }],
+      builder: null,
+    });
+    expect(errors).toContain('Word belgesinde doldurulabilir alan etiketi yok. Belgeye {alan_adi} biçiminde en az bir etiket ekleyin.');
   });
 });
 

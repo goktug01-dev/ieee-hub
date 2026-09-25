@@ -41,7 +41,7 @@ Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı,
 1. [Firebase Console](https://console.firebase.google.com)'da yeni proje açın. Plan **Spark** kalsın; faturalandırma eklemeyin. Proje kurumsal bir Google hesabına ait olsun ve en az iki yönetici tanımlansın (Bildirge §5.3).
 2. **Firestore Database → Create database →** konum olarak **`europe-west1`** seçin (bu seçim sonradan değiştirilemez), *production mode* ile başlayın.
 3. **Authentication → Sign-in method:** *Google* ve *E-posta/Şifre* sağlayıcılarını etkinleştirin.
-4. **Proje ayarları → Uygulamalarınız → Web uygulaması ekle.** Çıkan değerleri `apps/hub/.env.local` dosyasına yazın (örnek: [`apps/hub/.env.example`](apps/hub/.env.example)). Bu değerler gizli değildir; güvenlik kurallardadır.
+4. **Proje ayarları → Uygulamalarınız → Web uygulaması ekle.** Çıkan değerleri canlı derleme için `apps/hub/.env.production.local` dosyasına yazın (örnek: [`apps/hub/.env.example`](apps/hub/.env.example)). Yerel geliştirmeyi gerçek projeye bağlamak gerekirse ayrı olarak `apps/hub/.env.development.local` kullanın. Firebase web yapılandırması gizli değildir; asıl güvenlik Firestore kuralları ve Authentication ayarlarındadır.
 5. `.firebaserc` içindeki proje kimliğini dağıtım hedefinizle değiştirin.
 6. Dağıtın:
 
@@ -52,12 +52,12 @@ Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı,
 
 7. `https://<proje>.web.app` adresini açın. İlk kurulum yalnızca Firestore kurallarındaki izinli kurucu e-postasıyla yapılabilir; mevcut canlı hedefte bu hesap `techopsieee@gmail.com` adresidir. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
 
-### GitHub Actions ile otomatik dağıtım (isteğe bağlı)
+### GitHub Actions ile otomatik dağıtım
 
-`main` dalına her birleştirmede [`deploy.yml`](.github/workflows/deploy.yml) çalışır. Gerekli değişkenler tanımlı değilse iş atlanır.
+`main` dalına her gönderimde [`ci.yml`](.github/workflows/ci.yml) önce tür denetimi, derleme, güvenlik kuralları ve uçtan uca testleri çalıştırır. Canlı dağıtım yalnızca bu kontrollerin tamamı başarılı olursa başlar. Günlük sağlık kontrolü canlı rotaları dışarıdan denetler; Dependabot bağımlılık ve GitHub Actions güncellemeleri için haftalık/aylık PR açar.
 
 - **Variables:** `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_APP_ID`
-- **Secret:** `FIREBASE_SERVICE_ACCOUNT` (Google Cloud Console → IAM → servis hesabı JSON anahtarı). Hesaba şu roller verilir: *Firebase Hosting Admin*, *Firebase Rules Admin*, *Cloud Datastore Index Admin*, *Service Usage Consumer*.
+- **Secret:** `FIREBASE_SERVICE_ACCOUNT` (Google Cloud Console → IAM → servis hesabı JSON anahtarı). Hesaba yalnızca şu roller verilir: *Firebase Hosting Admin*, *Firebase Rules Admin*, *Cloud Datastore Index Admin*, *Service Usage Consumer*. Mevcut canlı hedefte bu değişkenler ve en düşük yetkili `github-actions-deploy` hesabı kuruludur.
 
 ## Word şablonu hazırlama
 
@@ -100,4 +100,4 @@ Ayrıntılar: [ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenil
 
 ## Gizli bilgiler
 
-Şifre, API anahtarı ve servis hesabı dosyası bu depoya **eklenmez** (Bildirge §6.2, §12.5). Firebase web yapılandırması gizli değildir; `.env.local` yine de depoya girmez.
+Şifre, özel API anahtarı ve servis hesabı dosyası bu depoya **eklenmez** (Bildirge §6.2, §12.5). Firebase web yapılandırması gizli değildir; `.env*.local` dosyaları yine de depoya girmez. `VITE_` ile başlayan her değişken tarayıcı paketinde görünür; HeptaCert anahtarı gibi gizli değerler bu değişkenlere kesinlikle yazılmaz.

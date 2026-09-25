@@ -1,4 +1,4 @@
-import { Button, Group, Select, Stack, Table, Tabs, Text, TextInput, Anchor } from '@mantine/core';
+import { Anchor, Badge, Button, Group, Select, Stack, Table, Tabs, Text, TextInput } from '@mantine/core';
 import { IconFilePlus, IconSearch } from '@tabler/icons-react';
 import { limit, orderBy, where } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
@@ -8,13 +8,15 @@ import { EmptyState, ErrorAlert, PageHeader, SectionLoader, StatusBadge } from '
 import { STATUS_META, fmtDateTime } from '../../lib/format';
 import { useCollection } from '../../lib/hooks';
 import { useOrg } from '../../lib/org';
-import type { Petition, PetitionStatus, WithId } from '../../lib/types';
+import type { Petition, PetitionStatus, PetitionTemplate, WithId } from '../../lib/types';
 
-function PetitionTable({ rows, loading, error, initialUnit }: { rows: WithId<Petition>[]; loading: boolean; error: Error | null; initialUnit?: string | null }) {
+function PetitionTable({ rows, loading, error, initialUnit, categoryByTemplate }: { rows: WithId<Petition>[]; loading: boolean; error: Error | null; initialUnit?: string | null; categoryByTemplate: Map<string, string> }) {
   const { unitOptions } = useOrg();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [unit, setUnit] = useState<string | null>(initialUnit ?? null);
+  const [category, setCategory] = useState<string | null>(null);
+  const categoryOptions = [...new Set(categoryByTemplate.values())].sort((a, b) => a.localeCompare(b, 'tr'));
 
   const filtered = useMemo(() => {
     const s = q.toLocaleLowerCase('tr');
@@ -22,9 +24,10 @@ function PetitionTable({ rows, loading, error, initialUnit }: { rows: WithId<Pet
       (p) =>
         (!status || p.status === status) &&
         (!unit || p.unitId === unit) &&
+        (!category || categoryByTemplate.get(p.templateId) === category) &&
         (!s || `${p.title} ${p.documentNo ?? ''} ${p.templateName} ${p.ownerName}`.toLocaleLowerCase('tr').includes(s)),
     );
-  }, [rows, q, status, unit]);
+  }, [rows, q, status, unit, category, categoryByTemplate]);
 
   return (
     <Stack>
@@ -44,6 +47,15 @@ function PetitionTable({ rows, loading, error, initialUnit }: { rows: WithId<Pet
           value={status}
           onChange={setStatus}
           w={200}
+        />
+        <Select
+          placeholder="Kategori"
+          clearable
+          searchable
+          data={categoryOptions}
+          value={category}
+          onChange={setCategory}
+          w={220}
         />
         <Select
           placeholder="Birim"
@@ -89,6 +101,7 @@ function PetitionTable({ rows, loading, error, initialUnit }: { rows: WithId<Pet
                     <Text size="xs" c="dimmed">
                       {p.templateName}
                     </Text>
+                    {categoryByTemplate.get(p.templateId) && <Badge size="xs" variant="light" color="violet" mt={3}>{categoryByTemplate.get(p.templateId)}</Badge>}
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{p.unitId === 'branch' ? 'Kol Geneli' : p.unitName}</Text>
@@ -118,6 +131,8 @@ export function PetitionsPage() {
   const initialUnit = params.get('birim');
   const [tab, setTab] = useState<string | null>(params.get('sekme') ?? 'mine');
   const tokens = (access?.tokens ?? []).filter((t) => !t.startsWith('uid:')).slice(0, 30);
+  const templates = useCollection<PetitionTemplate>('petitionTemplates', [orderBy('name')], 'petition-category-map');
+  const categoryByTemplate = useMemo(() => new Map(templates.data.map((template) => [template.id, template.category || 'Genel'])), [templates.data]);
 
   const mine = useCollection<Petition>('petitions', [where('ownerUid', '==', user!.uid), orderBy('updatedAt', 'desc')], `mine-${user!.uid}`);
   const visible = useCollection<Petition>(
@@ -149,13 +164,13 @@ export function PetitionsPage() {
           {can('petitions.readAll') && <Tabs.Tab value="all">Tüm evrak (arşiv)</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="mine">
-          <PetitionTable rows={mine.data} loading={mine.loading} error={mine.error} initialUnit={initialUnit} />
+          <PetitionTable rows={mine.data} loading={mine.loading} error={mine.error} initialUnit={initialUnit} categoryByTemplate={categoryByTemplate} />
         </Tabs.Panel>
         <Tabs.Panel value="visible">
-          <PetitionTable rows={visible.data.filter((p) => p.status !== 'draft')} loading={visible.loading} error={visible.error} initialUnit={initialUnit} />
+          <PetitionTable rows={visible.data.filter((p) => p.status !== 'draft')} loading={visible.loading} error={visible.error} initialUnit={initialUnit} categoryByTemplate={categoryByTemplate} />
         </Tabs.Panel>
         <Tabs.Panel value="all">
-          <PetitionTable rows={all.data.filter((p) => p.status !== 'draft')} loading={all.loading} error={all.error} initialUnit={initialUnit} />
+          <PetitionTable rows={all.data.filter((p) => p.status !== 'draft')} loading={all.loading} error={all.error} initialUnit={initialUnit} categoryByTemplate={categoryByTemplate} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

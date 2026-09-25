@@ -4,6 +4,7 @@
  */
 import type { ApprovalStep, OrgSettings } from './types';
 import { BRANCH } from './types';
+import { DEFAULT_PETITION_CATEGORIES } from './petitionCategories';
 
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -51,6 +52,7 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
     'Hub kullanım kılavuzunu oku',
     'KVKK ve gizlilik taahhüdünü onayla',
   ],
+  petitionCategories: [...DEFAULT_PETITION_CATEGORIES],
   vtoolsOrganizationName: '',
   vtoolsSpoid: '',
   vtoolsContactEmail: '',

@@ -90,6 +90,14 @@ export function validateSteps(steps: ApprovalStep[]): string[] {
   return errors;
 }
 
+export function validateTemplateContent(content: TemplateContent): string[] {
+  const errors = validateSteps(content.steps);
+  if (!content.fields.length) {
+    errors.unshift('Word belgesinde doldurulabilir alan etiketi yok. Belgeye {alan_adi} biçiminde en az bir etiket ekleyin.');
+  }
+  return errors;
+}
+
 /**
  * Taslağı yeni, değiştirilemez bir sürüm olarak yayımlar ve yürürlüğe alır.
  * Süreçteki dilekçeler kendi sürümleriyle devam eder.
@@ -99,7 +107,7 @@ export async function publishTemplate(id: string, changeNote: string): Promise<n
   const t = (await getDoc(tRef)).data() as PetitionTemplate & { latestVersion?: number };
   const draft = t.draft;
   if (!draft) throw new Error('Yayımlanacak taslak yok. Önce Word dosyası yükleyin veya şablonu oluşturun.');
-  const errors = validateSteps(draft.steps);
+  const errors = validateTemplateContent(draft);
   if (errors.length) throw new Error(errors.join('\n'));
 
   const chunks = await getDocs(query(collection(db, `petitionTemplates/${id}/draftChunks`), orderBy('index')));

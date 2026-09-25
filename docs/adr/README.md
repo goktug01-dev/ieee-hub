@@ -28,5 +28,6 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0020](0020-dilekce-sablonlari-word-tabanli.md) | Dilekçe şablonları Word (.docx) tabanlıdır; yüklenir veya sistemde oluşturulur | Kabul Edildi | — | WP-12 |
 | [0021](0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) | Belge çıktısı tarayıcıda (.docx + yazdır/PDF); herkese açık doğrulama kaydı | Kabul Edildi | — | WP-12 |
 | [0022](0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) | Birim çalışma alanları ve Sekreterlik Defteri | Kabul Edildi | ✓ | WP-05, WP-09, WP-10 |
+| [0023](0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) | Dilekçe kategori kataloğu ve toplu Word aktarımı | Kabul Edildi | — | WP-12 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

@@ -25,6 +25,8 @@ docs/
 - [Sözlük](sozluk.md)
 - [Açık sorular](acik-sorular.md)
 - [Bildirge – Hub boşluk analizi (2026-09)](bildirge-bosluk-analizi-2026-09.md)
+- [Dilekçe kataloğu ve kategori eşlemesi (2026-09)](dilekce-katalogu-2026-09.md)
+- [Canlı işletim, dağıtım, izleme ve geri dönüş kılavuzu](canli-isletim.md)
 
 ### Mimari
 - **[Uygulanan mimari (Spark planı)](mimari/uygulanan-mimari.md)** — şu an çalışan sistem

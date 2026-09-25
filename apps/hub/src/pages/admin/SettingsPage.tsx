@@ -180,6 +180,15 @@ export function SettingsPage() {
               value={org.orientationItems}
               onChange={(v) => setOrg({ ...org, orientationItems: v })}
             />
+            <Title order={5} mt="md">
+              Dilekçe kategorileri
+            </Title>
+            <TagsInput
+              label="Kategori listesi"
+              description="Yeni şablonlarda, dilekçe seçiminde ve evrak arşivinde kullanılır (yazıp Enter)."
+              value={org.petitionCategories}
+              onChange={(v) => setOrg({ ...org, petitionCategories: v })}
+            />
           </Stack>
         </Card>
       </SimpleGrid>

@@ -274,6 +274,8 @@ export interface OrgSettings {
   volunteerRoleId: string;
   /** Kabul edilen gönüllüye otomatik açılan oryantasyon görevleri. */
   orientationItems: string[];
+  /** Şablon kataloğu ve evrak arşivinde kullanılan yönetilebilir kategoriler. */
+  petitionCategories: string[];
   /** IEEE vTools Events için kolun resmî organizasyon bilgileri. */
   vtoolsOrganizationName: string;
   vtoolsSpoid: string;

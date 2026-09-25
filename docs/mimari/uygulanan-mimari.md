@@ -1,6 +1,6 @@
 # Uygulanan Mimari (Spark planı)
 
-Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri).
+Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı).
 
 [Sistem mimarisi](sistem-mimarisi.md) ve [Firestore veri modeli](firestore-veri-modeli.md) dokümanları Blaze/Functions varsayımıyla yazılmıştır; hedef mimari olarak arşivde tutulur. Kod ile bu doküman çelişirse **kod esas alınır** ([dokümantasyon kuralları §2](../dokumantasyon-kurallari.md)).
 
@@ -32,7 +32,7 @@ flowchart LR
 |---|---|---|---|
 | `system/bootstrap` | İlk kurulum kaydı | Giriş yapan herkes | Yalnızca kurulum yokken ilk kişi |
 | `settings/public` | Kurum adı, logo, giriş notu | Herkes | `org.manage` |
-| `settings/org` | Aktif dönem, evrak no biçimi, doğrulama adresi, izinli alan adları, vTools organizasyon/SPOID ayarları | Aktif üye | `org.manage` |
+| `settings/org` | Aktif dönem, evrak no biçimi, dilekçe kategori kataloğu, doğrulama adresi, izinli alan adları, vTools organizasyon/SPOID ayarları | Aktif üye | `org.manage` |
 | `members/{uid}` | Ad, e-posta, telefon, bölüm, öğrenci no, durum | Kendisi, aktif üyeler | Kendisi (iletişim alanları), `members.manage` (durum) |
 | `access/{uid}` | Erişim özeti: `superAdmin`, `perms{izin: bitiş}`, `roleKeys{"birim__rol": bitiş}`, `tokens[]` | Kendisi, `assignments.manage` | `assignments.manage`; `superAdmin` bayrağı yalnızca kurucu yönetici |
 | `units/{id}` | Komite, başkanlık, departman… | Aktif üye | `org.manage` |

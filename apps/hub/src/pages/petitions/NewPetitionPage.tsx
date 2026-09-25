@@ -40,6 +40,7 @@ export function NewPetitionPage() {
   const [step, setStep] = useState(0);
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'branch' | 'unit'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [template, setTemplate] = useState<WithId<PetitionTemplate> | null>(null);
   const [unitId, setUnitId] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -60,9 +61,15 @@ export function NewPetitionPage() {
     return templates.data
       .filter((t) => t.currentVersion > 0)
       .filter((t) => scopeFilter === 'all' || t.scope === scopeFilter)
+      .filter((t) => !categoryFilter || (t.category ?? 'Genel') === categoryFilter)
       .filter((t) => !q || `${t.name} ${t.description ?? ''} ${t.category ?? ''}`.toLocaleLowerCase('tr').includes(q))
       .sort((a, b) => (a.category ?? '').localeCompare(b.category ?? '', 'tr') || a.name.localeCompare(b.name, 'tr'));
-  }, [templates.data, search, scopeFilter]);
+  }, [templates.data, search, scopeFilter, categoryFilter]);
+
+  const categories = useMemo(() => [...new Set([
+    ...orgSettings.petitionCategories,
+    ...templates.data.map((template) => template.category).filter((value): value is string => !!value),
+  ])].map((value) => ({ value, label: value })), [orgSettings.petitionCategories, templates.data]);
 
   const allowedUnits = useMemo(() => {
     if (!template || template.scope === 'branch') return [];
@@ -209,6 +216,15 @@ export function NewPetitionPage() {
                 { value: 'unit', label: 'Komite / birim' },
               ]}
             />
+            <Select
+              placeholder="Kategori"
+              data={categories}
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              clearable
+              searchable
+              w={240}
+            />
           </Group>
           {templates.loading ? (
             <SectionLoader />
@@ -228,11 +244,7 @@ export function NewPetitionPage() {
                     >
                       {t.scope === 'branch' ? 'Kol geneli' : 'Komite / birim'}
                     </Badge>
-                    {t.category && (
-                      <Text size="xs" c="dimmed">
-                        {t.category}
-                      </Text>
-                    )}
+                    {t.category && <Badge variant="light" color="violet">{t.category}</Badge>}
                   </Group>
                   <Text fw={600}>{t.name}</Text>
                   {t.description && (
