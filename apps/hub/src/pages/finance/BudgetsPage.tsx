@@ -2,6 +2,7 @@ import { ActionIcon, Anchor, Badge, Button, Card, Group, Modal, NumberInput, Pro
 import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react';
 import { addDoc, collection, doc, orderBy, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { db } from '../../firebase';
@@ -16,12 +17,16 @@ const STATUS = { draft: { label: 'Taslak', color: 'gray' }, approved: { label: '
 
 export function BudgetsPage() {
   const { access, orgSettings } = useAuth();
+  const { units } = useOrg();
+  const [params, setParams] = useSearchParams();
   const canAll = hasPermission(access, 'finance.read') || hasPermission(access, 'finance.manage');
   const canManage = hasPermission(access, 'finance.manage');
   const myUnits = unitsWithPermission(access, 'unit.manage');
+  const requestedUnit = params.get('birim');
+  const scopedUnit = requestedUnit && (canAll || myUnits.includes(requestedUnit)) ? requestedUnit : (myUnits[0] ?? null);
   const all = useCollection<Budget>(canAll ? 'budgets' : null, [orderBy('updatedAt', 'desc')], 'budgets');
-  const unitBudgets = useCollection<Budget>(!canAll && myUnits[0] ? 'budgets' : null, [where('unitId', '==', myUnits[0] ?? '-')], `bu-${myUnits[0]}`);
-  const list = canAll ? all.data : unitBudgets.data;
+  const unitBudgets = useCollection<Budget>(!canAll && scopedUnit ? 'budgets' : null, [where('unitId', '==', scopedUnit ?? '-')], `bu-${scopedUnit}`);
+  const list = canAll ? all.data.filter((budget) => !requestedUnit || budget.unitId === requestedUnit) : unitBudgets.data;
   const [edit, setEdit] = useState<{ id: string | null; data: Budget } | null>(null);
 
   const totals = useMemo(() => list.reduce((a, b) => ({ p: a.p + b.plannedTotal, r: a.r + b.actualTotal }), { p: 0, r: 0 }), [list]);
@@ -55,6 +60,22 @@ export function BudgetsPage() {
           )
         }
       />
+      {(canAll || myUnits.length > 1) && (
+        <Select
+          label="Birim filtresi"
+          placeholder="Tüm birimler"
+          data={units.filter((unit) => canAll || myUnits.includes(unit.id)).map((unit) => ({ value: unit.id, label: unit.name }))}
+          value={requestedUnit}
+          onChange={(value) => {
+            const next = new URLSearchParams(params);
+            value ? next.set('birim', value) : next.delete('birim');
+            setParams(next, { replace: true });
+          }}
+          clearable={canAll}
+          searchable
+          maw={420}
+        />
+      )}
       {list.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <Card>

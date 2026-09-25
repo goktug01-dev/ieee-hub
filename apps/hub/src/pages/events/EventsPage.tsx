@@ -5,7 +5,7 @@ import { IconCalendarPlus, IconCheck, IconMapPin, IconX } from '@tabler/icons-re
 import dayjs from 'dayjs';
 import { orderBy } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { MetaBadge } from '../../components/MetaBadge';
 import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
@@ -26,10 +26,11 @@ export function EventsPage() {
   const { access } = useAuth();
   const { units, unitOptions } = useOrg();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const events = useCollection<HubEvent>('events', [orderBy('createdAt', 'desc')], 'events');
   const [view, setView] = useState('upcoming');
-  const [unit, setUnit] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [unit, setUnit] = useState<string | null>(params.get('birim'));
+  const [open, setOpen] = useState(params.get('yeni') === '1');
 
   const canApprove = hasPermission(access, 'events.approve');
   const proposeUnits = units.filter(
@@ -116,7 +117,7 @@ export function EventsPage() {
             { value: 'all', label: 'Tümü' },
           ]}
         />
-        <Select placeholder="Birim" data={unitOptions({ onlyActive: false })} value={unit} onChange={setUnit} clearable allowDeselect searchable w={240} />
+        <Select placeholder="Birim" data={unitOptions({ onlyActive: false })} value={unit} onChange={(value) => { setUnit(value); const next = new URLSearchParams(params); value ? next.set('birim', value) : next.delete('birim'); setParams(next, { replace: true }); }} clearable allowDeselect searchable w={240} />
       </Group>
 
       {events.loading ? (
@@ -154,7 +155,7 @@ export function EventsPage() {
         </SimpleGrid>
       )}
 
-      <ProposeModal opened={open} onClose={() => setOpen(false)} unitChoices={proposeUnits.map((u) => ({ value: u.id, label: u.name }))} onCreated={(id) => navigate(`/etkinlikler/${id}`)} />
+      <ProposeModal opened={open} onClose={() => setOpen(false)} unitChoices={proposeUnits.map((u) => ({ value: u.id, label: u.name }))} presetUnitId={unit} onCreated={(id) => navigate(`/etkinlikler/${id}`)} />
     </Stack>
   );
 }
@@ -163,11 +164,13 @@ function ProposeModal({
   opened,
   onClose,
   unitChoices,
+  presetUnitId,
   onCreated,
 }: {
   opened: boolean;
   onClose: () => void;
   unitChoices: { value: string; label: string }[];
+  presetUnitId: string | null;
   onCreated: (id: string) => void;
 }) {
   const { user } = useAuth();
@@ -175,7 +178,7 @@ function ProposeModal({
   const { options, nameOf } = useActiveMembers(opened);
   const [f, setF] = useState({
     name: '',
-    unitId: '',
+    unitId: presetUnitId && unitChoices.some((choice) => choice.value === presetUnitId) ? presetUnitId : '',
     type: EVENT_TYPES[0],
     description: '',
     startsAt: null as string | null,

@@ -1,4 +1,4 @@
-import { Anchor, Badge, Button, Card, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { Anchor, Badge, Button, Card, Group, SegmentedControl, Select, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import {
   IconArrowRight,
   IconChecklist,
@@ -8,7 +8,7 @@ import {
   IconListCheck,
 } from '@tabler/icons-react';
 import { orderBy, where, limit } from 'firebase/firestore';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, StatusBadge } from '../components/ui';
@@ -20,6 +20,8 @@ import type { HubEvent, Task } from '../lib/opsTypes';
 import { dueInfo } from '../components/MetaBadge';
 import dayjs from 'dayjs';
 import { useOrg } from '../lib/org';
+import { useUnitScope } from '../lib/unitScope';
+import { UnitOverview } from '../components/UnitOverview';
 
 function StatCard({ label, value, icon, to, color }: { label: string; value: number | string; icon: ReactNode; to: string; color: string }) {
   return (
@@ -44,6 +46,8 @@ function StatCard({ label, value, icon, to, color }: { label: string; value: num
 export function DashboardPage() {
   const { member, user, can } = useAuth();
   const { unitName } = useOrg();
+  const { accessibleUnits, selectedUnitId, selectedUnit, setSelectedUnitId } = useUnitScope();
+  const [scope, setScope] = useState<'mine' | 'unit'>('mine');
   const inbox = useInbox();
   const mine = useCollection<Petition>(
     'petitions',
@@ -74,9 +78,42 @@ export function DashboardPage() {
   const drafts = mine.data.filter((p) => p.status === 'draft' || p.status === 'returned').length;
   const inProgress = mine.data.filter((p) => p.status === 'pending').length;
   const firstName = member?.displayName?.split(' ')[0] ?? '';
+  const scopeControl = accessibleUnits.length > 0 && (
+    <Group justify="space-between" wrap="wrap">
+      <SegmentedControl
+        value={scope}
+        onChange={(value) => setScope(value as 'mine' | 'unit')}
+        data={[{ value: 'mine', label: 'Benim alanım' }, { value: 'unit', label: 'Komitem' }]}
+      />
+      {scope === 'unit' && (
+        <Select
+          value={selectedUnitId}
+          onChange={setSelectedUnitId}
+          data={accessibleUnits.map((unit) => ({ value: unit.id, label: `${unit.name} (${unit.shortCode})` }))}
+          allowDeselect={false}
+          searchable
+          w={280}
+        />
+      )}
+    </Group>
+  );
+
+  if (scope === 'unit' && selectedUnit) {
+    return (
+      <Stack gap="xl">
+        {scopeControl}
+        <Group justify="space-between" wrap="wrap">
+          <div><Title order={2}>{selectedUnit.name}</Title><Text c="dimmed">Komite çalışma alanının güncel özeti</Text></div>
+          <Button component={Link} to={`/birimler/${selectedUnit.id}`} variant="light">Çalışma alanını aç</Button>
+        </Group>
+        <UnitOverview unitId={selectedUnit.id} />
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap="xl">
+      {scopeControl}
       <Group justify="space-between" wrap="wrap">
         <div>
           <Title order={2}>Merhaba {firstName} 👋</Title>

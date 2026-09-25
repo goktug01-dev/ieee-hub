@@ -37,7 +37,7 @@ if %tries% gtr 60 goto fail
 timeout /t 2 /nobreak >nul
 curl -s -o nul http://127.0.0.1:9099/ >nul 2>nul
 if errorlevel 1 goto wait
-curl -s -o nul http://127.0.0.1:8080/ >nul 2>nul
+curl -s -o nul http://127.0.0.1:8085/ >nul 2>nul
 if errorlevel 1 goto wait
 
 echo.

@@ -20,7 +20,7 @@ import { modals } from '@mantine/modals';
 import { IconBuildingCommunity, IconSearch, IconSend, IconDeviceFloppy, IconWorld } from '@tabler/icons-react';
 import { Timestamp, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { DocxPreview } from '../../components/DocxPreview';
 import { PetitionForm, missingRequired, prefillValues } from '../../components/PetitionForm';
@@ -36,6 +36,7 @@ export function NewPetitionPage() {
   const { user, member, publicSettings, orgSettings } = useAuth();
   const { unitName, unitOptions, roleName } = useOrg();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [step, setStep] = useState(0);
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'branch' | 'unit'>('all');
@@ -78,8 +79,10 @@ export function NewPetitionPage() {
     setTitle(t.name);
     if (t.scope === 'branch') setUnitId(BRANCH);
     else {
+      const preset = params.get('birim');
+      const presetAllowed = preset && unitOptions().some((option) => option.value === preset) && (!t.unitIds.length || t.unitIds.includes(preset));
       const mine = myRoles.data.map((a) => a.unitId).find((u) => u !== BRANCH && (!t.unitIds.length || t.unitIds.includes(u)));
-      setUnitId(mine ?? null);
+      setUnitId(presetAllowed ? preset : (mine ?? null));
     }
     setStep(1);
   };

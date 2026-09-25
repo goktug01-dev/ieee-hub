@@ -24,6 +24,7 @@ docs/
 - [Dokümantasyon kuralları](dokumantasyon-kurallari.md)
 - [Sözlük](sozluk.md)
 - [Açık sorular](acik-sorular.md)
+- [Bildirge – Hub boşluk analizi (2026-09)](bildirge-bosluk-analizi-2026-09.md)
 
 ### Mimari
 - **[Uygulanan mimari (Spark planı)](mimari/uygulanan-mimari.md)** — şu an çalışan sistem

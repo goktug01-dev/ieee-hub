@@ -34,6 +34,7 @@ import { TaskModal } from '../../components/TaskModal';
 import { EmptyState, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { hasPermission, hasUnitPermission } from '../../lib/access';
 import { fmtDateTime } from '../../lib/format';
+import { EMPTY_VTOOLS_DATA, vtoolsMissingFields, vtoolsPreparationRows } from '../../lib/eventExports';
 import { useCollection, useDoc } from '../../lib/hooks';
 import { useActiveMembers } from '../../lib/members';
 import {
@@ -46,7 +47,7 @@ import {
   type CsvPreview,
 } from '../../lib/ops';
 import { CONTENT_STATUS, CONTENT_TYPES, EVENT_FLOW, EVENT_STATUS, EVENT_TYPES, TASK_STATUS } from '../../lib/opsLabels';
-import type { ContentRequest, HubEvent, Participant, SyncRun, Task } from '../../lib/opsTypes';
+import type { ContentRequest, HubEvent, Participant, SyncRun, Task, VToolsEventData } from '../../lib/opsTypes';
 import type { Petition } from '../../lib/types';
 import { fmtEventDate } from './EventsPage';
 
@@ -144,6 +145,7 @@ export function EventDetailPage() {
           <Tabs.Tab value="gorevler">Görev planı</Tabs.Tab>
           {canParticipants && <Tabs.Tab value="katilimci">Katılımcılar (HeptaCert)</Tabs.Tab>}
           <Tabs.Tab value="kapanis">Kapanış ve rapor</Tabs.Tab>
+          <Tabs.Tab value="vtools">vTools hazırlık</Tabs.Tab>
           <Tabs.Tab value="iletisim">İletişim</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="genel">
@@ -155,6 +157,9 @@ export function EventDetailPage() {
         <Tabs.Panel value="katilimci">{canParticipants && <Participants e={e} id={id} />}</Tabs.Panel>
         <Tabs.Panel value="kapanis">
           <Closing e={e} id={id} canManage={canManage} />
+        </Tabs.Panel>
+        <Tabs.Panel value="vtools">
+          <VToolsPreparation e={e} id={id} canManage={canManage} />
         </Tabs.Panel>
         <Tabs.Panel value="iletisim">
           <EventContent id={id} />
@@ -235,7 +240,6 @@ function General({ e, id, canManage }: { e: HubEvent; id: string; canManage: boo
         driveLink: f.driveLink,
         registrationLink: f.registrationLink,
         budgetPlanned: f.budgetPlanned,
-        vtoolsStatus: f.vtoolsStatus,
       });
       notifySuccess('Etkinlik güncellendi.');
     } catch (err) {
@@ -266,18 +270,6 @@ function General({ e, id, canManage }: { e: HubEvent; id: string; canManage: boo
               <TextInput label="HeptaCert etkinliği" value={f.heptacertLink} onChange={(x) => setF({ ...f, heptacertLink: x.currentTarget.value })} readOnly={ro} />
               <TextInput label="Drive klasörü" description="03_Etkinlikler/{dönem}/{kod}_{ad}" value={f.driveLink} onChange={(x) => setF({ ...f, driveLink: x.currentTarget.value })} readOnly={ro} />
             </SimpleGrid>
-            <Select
-              label="vTools bildirimi"
-              data={[
-                { value: 'pending', label: 'Bildirilecek' },
-                { value: 'reported', label: 'Bildirildi' },
-                { value: 'not_required', label: 'Gerekmiyor' },
-              ]}
-              value={f.vtoolsStatus}
-              onChange={(v) => setF({ ...f, vtoolsStatus: (v ?? 'pending') as HubEvent['vtoolsStatus'] })}
-              readOnly={ro}
-              w={240}
-            />
             {canManage && (
               <Group justify="flex-end">
                 <Button onClick={save} loading={busy}>
@@ -305,6 +297,11 @@ function General({ e, id, canManage }: { e: HubEvent; id: string; canManage: boo
                 Kayıt sayfası
               </Anchor>
             )}
+            {e.heptacertLink && (
+              <Anchor href={e.heptacertLink} target="_blank" size="sm">
+                HeptaCert etkinliği
+              </Anchor>
+            )}
             {e.driveLink && (
               <Anchor href={e.driveLink} target="_blank" size="sm">
                 Drive klasörü
@@ -314,6 +311,110 @@ function General({ e, id, canManage }: { e: HubEvent; id: string; canManage: boo
         </Card>
       </Grid.Col>
     </Grid>
+  );
+}
+
+function VToolsPreparation({ e, id, canManage }: { e: HubEvent; id: string; canManage: boolean }) {
+  const { orgSettings, user } = useAuth();
+  const [data, setData] = useState<VToolsEventData>({ ...EMPTY_VTOOLS_DATA, ...(e.vtools ?? {}) });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setData({ ...EMPTY_VTOOLS_DATA, ...(e.vtools ?? {}) }), [e.vtools]);
+  const eventWithDraft = { ...e, vtools: data };
+  const missing = vtoolsMissingFields(eventWithDraft, orgSettings);
+  const set = <K extends keyof VToolsEventData>(key: K, value: VToolsEventData[K]) => setData((current) => ({ ...current, [key]: value }));
+
+  const save = async (reported = false) => {
+    setBusy(true);
+    try {
+      const next = reported
+        ? { ...data, reportedAt: new Date().toISOString(), reportedBy: user!.displayName ?? user!.email ?? '' }
+        : data;
+      await updateEvent(id, { vtools: next, vtoolsStatus: reported ? 'reported' : e.vtoolsStatus === 'not_required' ? 'pending' : e.vtoolsStatus });
+      setData(next);
+      notifySuccess(reported ? 'vTools bildirimi kaydedildi.' : 'vTools hazırlığı kaydedildi.');
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack>
+      <Alert color="blue" variant="light">
+        Bu ekran vTools Events / L31 formuna girilecek veriyi hazırlar. İndirilen CSV bir çalışma ve devir paketidir; vTools'un
+        belgelenmiş bir toplu yükleme formatı değildir. Resmî gönderim vTools'ta yetkili kişi tarafından yapılır.
+      </Alert>
+      {(!orgSettings.vtoolsOrganizationName || !orgSettings.vtoolsSpoid || !orgSettings.vtoolsContactEmail) && (
+        <Alert color="yellow" title="Kurum vTools bilgileri eksik">
+          Kurum ayarlarında organizasyon birimi, SPOID ve iletişim e-postasını bir kez tanımlayın.
+        </Alert>
+      )}
+      <Card>
+        <Stack>
+          <Group justify="space-between">
+            <Text fw={600}>L31 / vTools alanları</Text>
+            {e.vtoolsStatus === 'reported' ? <Badge color="green">Bildirildi</Badge> : e.vtoolsStatus === 'not_required' ? <Badge color="gray">Gerekmiyor</Badge> : <Badge color="yellow">Hazırlanıyor</Badge>}
+          </Group>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <TextInput label="Etkinlik kategorisi" placeholder="Örn. Technical" value={data.category} onChange={(x) => set('category', x.currentTarget.value)} readOnly={!canManage} />
+            <TextInput label="Alt kategori" value={data.subcategory} onChange={(x) => set('subcategory', x.currentTarget.value)} readOnly={!canManage} />
+            <Select
+              label="Konum türü"
+              data={[{ value: 'physical', label: 'Fiziksel' }, { value: 'virtual', label: 'Çevrim içi' }, { value: 'hybrid', label: 'Hibrit' }]}
+              value={data.locationType}
+              onChange={(value) => set('locationType', (value ?? 'physical') as VToolsEventData['locationType'])}
+              readOnly={!canManage}
+            />
+            <TextInput label="Etiketler" description="Virgülle ayırın" value={data.tags} onChange={(x) => set('tags', x.currentTarget.value)} readOnly={!canManage} />
+            <NumberInput label="IEEE üyesi katılımcı" min={0} value={data.ieeeAttendees ?? ''} onChange={(value) => set('ieeeAttendees', value === '' ? null : Number(value))} readOnly={!canManage} />
+            <NumberInput label="Üye olmayan katılımcı" min={0} value={data.guestAttendees ?? ''} onChange={(value) => set('guestAttendees', value === '' ? null : Number(value))} readOnly={!canManage} />
+            <TextInput label="vTools etkinlik kimliği" description="Gönderim sonrası vTools'taki sayısal kimlik" value={data.eventId} onChange={(x) => set('eventId', x.currentTarget.value)} readOnly={!canManage} />
+          </SimpleGrid>
+          <Textarea label="Gündem" autosize minRows={3} value={data.agenda} onChange={(x) => set('agenda', x.currentTarget.value)} readOnly={!canManage} />
+          <Text size="sm">
+            Toplam katılımcı: <b>{e.report?.participantCount ?? '—'}</b>
+          </Text>
+          {missing.length ? (
+            <Alert color="orange" title={`${missing.length} eksik / uyumsuz alan`}>
+              {missing.join(', ')}
+            </Alert>
+          ) : (
+            <Alert color="green" icon={<IconCheck size={16} />}>vTools veri paketi hazır.</Alert>
+          )}
+          <Group justify="space-between" wrap="wrap">
+            <Button
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+              onClick={() => downloadText(toCsv(vtoolsPreparationRows([eventWithDraft], orgSettings)), `${e.code}_vtools_hazirlik.csv`)}
+            >
+              Hazırlık CSV'si
+            </Button>
+            {canManage && (
+              <Group gap="xs">
+                <Button variant="default" loading={busy} onClick={() => void save(false)}>Taslağı kaydet</Button>
+                <Button
+                  color="green"
+                  loading={busy}
+                  disabled={missing.length > 0 || !data.eventId.trim()}
+                  onClick={() => void save(true)}
+                >
+                  vTools'ta bildirildi
+                </Button>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => updateEvent(id, { vtools: data, vtoolsStatus: 'not_required' }).then(() => notifySuccess('vTools bildirimi gerekmiyor olarak işaretlendi.')).catch(notifyError)}
+                >
+                  Gerekmiyor
+                </Button>
+              </Group>
+            )}
+          </Group>
+          {data.reportedAt && <Text size="xs" c="dimmed">Bildirim: {data.reportedBy} · {new Date(data.reportedAt).toLocaleString('tr-TR')}</Text>}
+        </Stack>
+      </Card>
+    </Stack>
   );
 }
 
@@ -406,8 +507,19 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
     <Stack>
       <Alert color="blue" variant="light">
         HeptaCert'ten indirdiğiniz katılımcı CSV'sini yükleyin. Aynı dosyayı tekrar yüklemek çift kayıt oluşturmaz; kayıtlar e-posta
-        adresine göre güncellenir. Katılımcı listesi kişisel veridir ve yalnızca etkinlik sorumluları ile birim yöneticileri görür.
+        adresine göre güncellenir. Temiz bir aktarım kapanış kontrolünü ve rapordaki katılımcı sayısını otomatik günceller.
+        Katılımcı listesi kişisel veridir ve yalnızca etkinlik sorumluları ile birim yöneticileri görür.
       </Alert>
+      <Group justify="flex-end">
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<IconDownload size={14} />}
+          onClick={() => downloadText(toCsv([['Ad Soyad', 'E-posta', 'Katıldı', 'Sertifika'], ['Örnek Katılımcı', 'ornek@example.org', 'Evet', '']]), 'heptacert_aktarim_sablonu.csv')}
+        >
+          Aktarım şablonunu indir
+        </Button>
+      </Group>
       <Dropzone onDrop={(f) => void onDrop(f)} accept={['text/csv', 'application/vnd.ms-excel', 'text/plain']} maxFiles={1}>
         <Group justify="center" mih={80} style={{ pointerEvents: 'none' }}>
           <IconFileTypeCsv size={36} stroke={1.5} />
@@ -434,6 +546,11 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
                   <div key={x}>{x}</div>
                 ))}
                 {preview.data.errors.length > 8 && <div>… ve {preview.data.errors.length - 8} satır daha</div>}
+              </Alert>
+            )}
+            {preview.data.warnings.length > 0 && (
+              <Alert color="yellow" variant="light">
+                {preview.data.warnings.map((x) => <div key={x}>{x}</div>)}
               </Alert>
             )}
             <Table fz="sm">
@@ -489,9 +606,15 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
             Aktarım geçmişi
           </Text>
           {runs.data.map((r) => (
-            <Text key={r.id} size="xs" c="dimmed">
-              {fmtDateTime(r.at)} · {r.byName} · {r.fileName}: {r.total} satır = {r.added} yeni + {r.updated} güncellenen + {r.duplicates} tekrar + {r.errors} hatalı
-            </Text>
+            <Group key={r.id} gap="xs" align="center">
+              <Badge size="xs" color={r.reconciled === false ? 'red' : r.errors ? 'orange' : 'green'}>
+                {r.reconciled === false ? 'sayım hatası' : r.errors ? 'kısmi' : 'doğrulandı'}
+              </Badge>
+              <Text size="xs" c="dimmed">
+                {fmtDateTime(r.at)} · {r.byName} · {r.fileName}: {r.total} satır = {r.added} yeni + {r.updated} güncellenen + {r.duplicates} tekrar + {r.errors} hatalı
+                {r.dataContractVersion ? ` · ${r.dataContractVersion}` : ''}
+              </Text>
+            </Group>
           ))}
         </Card>
       )}

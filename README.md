@@ -2,6 +2,8 @@
 
 IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portalı. İlk sürümün kapsamı:
 
+**Canlı sistem:** https://ieee-hub-techops.web.app
+
 - **E-dilekçe:** Kurumun kendi **Word** dilekçe formatları Hub'a yüklenir ya da Hub içinde oluşturulur. Word içindeki `{alan_adi}` etiketleri kendiliğinden forma dönüşür. Dilekçe doldurulurken belge anında önizlenir. Hem **kol geneli** hem **komite içi** dilekçe gönderilebilir.
 - **Rol bazlı onay:** Her şablonun kendi onay zinciri vardır (örneğin Komite Başkanı → Genel Sekreter → Başkan). Onaylayan kişinin rolü, birimi, görev süresi ve adım sırası güvenlik kurallarıyla denetlenir. İade, ret ve düzeltip yeniden gönderme desteklenir.
 - **Evrak numarası ve doğrulama:** Numaralar boşluksuz ve seri bazlıdır (`IEEEIKCU-2026-ETK-0007`). Belge Word olarak indirilebilir ya da tarayıcıdan PDF'e yazdırılabilir. Herkese açık `/dogrula/{kod}` sayfası belgenin gerçek olup olmadığını gösterir.
@@ -21,7 +23,7 @@ npm run emulators      # 1. terminal: Auth + Firestore emülatörleri (arayüz: 
 npm run dev            # 2. terminal: http://localhost:5173
 ```
 
-`.env.development` varsayılan olarak emülatöre bağlanır. İlk kayıt olan kişi **kurucu yönetici** olur ve kurulum sihirbazı açılır. Sihirbaz varsayılan rolleri, isteğe bağlı örnek komiteleri ve iki örnek dilekçe şablonunu oluşturur.
+`.env.development` varsayılan olarak emülatöre bağlanır. İzin verilen kurucu hesabı ilk kurulumu üstlenir ve kurulum sihirbazı açılır. Sihirbaz varsayılan rolleri, isteğe bağlı örnek komiteleri ve iki örnek dilekçe şablonunu oluşturur.
 
 ## Testler
 
@@ -40,7 +42,7 @@ Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı,
 2. **Firestore Database → Create database →** konum olarak **`europe-west1`** seçin (bu seçim sonradan değiştirilemez), *production mode* ile başlayın.
 3. **Authentication → Sign-in method:** *Google* ve *E-posta/Şifre* sağlayıcılarını etkinleştirin.
 4. **Proje ayarları → Uygulamalarınız → Web uygulaması ekle.** Çıkan değerleri `apps/hub/.env.local` dosyasına yazın (örnek: [`apps/hub/.env.example`](apps/hub/.env.example)). Bu değerler gizli değildir; güvenlik kurallardadır.
-5. `.firebaserc` içindeki `demo-ieee-hub` değerini kendi proje kimliğinizle değiştirin.
+5. `.firebaserc` içindeki proje kimliğini dağıtım hedefinizle değiştirin.
 6. Dağıtın:
 
    ```bash
@@ -48,7 +50,7 @@ Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı,
    npm run deploy         # derleme + Hosting + Firestore kuralları ve dizinleri
    ```
 
-7. `https://<proje>.web.app` adresini açın. İlk giriş yapan kişi kurucu yönetici olur. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
+7. `https://<proje>.web.app` adresini açın. İlk kurulum yalnızca Firestore kurallarındaki izinli kurucu e-postasıyla yapılabilir; mevcut canlı hedefte bu hesap `techopsieee@gmail.com` adresidir. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
 
 ### GitHub Actions ile otomatik dağıtım (isteğe bağlı)
 

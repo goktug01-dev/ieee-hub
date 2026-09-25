@@ -51,10 +51,13 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
     'Hub kullanım kılavuzunu oku',
     'KVKK ve gizlilik taahhüdünü onayla',
   ],
+  vtoolsOrganizationName: '',
+  vtoolsSpoid: '',
+  vtoolsContactEmail: '',
+  vtoolsTimeZone: 'Europe/Istanbul',
 };
 
 export function verifyUrl(settings: OrgSettings | null, code: string) {
   const base = settings?.verifyBaseUrl?.trim() || (typeof window !== 'undefined' ? window.location.origin : '');
   return `${base.replace(/\/$/, '')}/dogrula/${code}`;
 }
-

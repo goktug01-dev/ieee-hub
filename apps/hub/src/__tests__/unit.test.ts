@@ -4,8 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { computeAccess } from '../lib/access';
 import { DEFAULT_BUILDER, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
 import { maskName, slugify } from '../lib/format';
+import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
+import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
+import type { HubEvent } from '../lib/opsTypes';
 import { computeVisibleTo, formatDocumentNo, newVerificationCode } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
+import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -30,6 +34,66 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('HeptaCert CSV veri sözleşmesi', () => {
+  it('virgül, noktalı virgül ve sekme ayracını algılar', () => {
+    expect(parseCsv('A,B\n1,2')[1]).toEqual(['1', '2']);
+    expect(parseCsv('A;B\n1;2')[1]).toEqual(['1', '2']);
+    expect(parseCsv('A\tB\n1\t2')[1]).toEqual(['1', '2']);
+  });
+
+  it('HeptaCert başlık eş adlarını ve tekrarları doğrular', () => {
+    const result = previewParticipantsCsv(
+      'Participant Name;Email Address;Attendance;Certificate Code\nAyşe;ayse@example.org;checked in;C-1\nAyşe;AYSE@example.org;yes;C-1',
+    );
+    expect(result.sourceRows).toBe(2);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ name: 'Ayşe', email: 'ayse@example.org', attended: true, certificate: 'C-1' });
+    expect(result.duplicates).toBe(1);
+    expect(result.errors).toEqual([]);
+  });
+});
+
+describe('vTools L31 hazırlık paketi', () => {
+  const event = {
+    code: 'EVT-2026-001',
+    name: 'Yapay Zekâ Günü',
+    description: 'Teknik etkinlik',
+    unitId: 'cs',
+    unitName: 'Computer Society',
+    type: 'Teknik',
+    startsAt: '2026-10-20T09:00:00.000Z',
+    endsAt: '2026-10-20T11:00:00.000Z',
+    location: 'Kültür Merkezi',
+    report: { participantCount: 20, summary: 'Etkinlik özeti', outcomes: '', lessons: '' },
+    registrationLink: '',
+    heptacertLink: '',
+    driveLink: '',
+    vtools: {
+      category: 'Technical', subcategory: '', locationType: 'physical', tags: '#AI', agenda: '',
+      ieeeAttendees: 8, guestAttendees: 12, eventId: '', reportedAt: null, reportedBy: '',
+    },
+  } as HubEvent;
+  const settings = {
+    ...DEFAULT_ORG_SETTINGS,
+    vtoolsOrganizationName: 'IEEE IKCU Student Branch',
+    vtoolsSpoid: 'STB00000',
+    vtoolsContactEmail: 'ieee@example.org',
+  };
+
+  it('zorunlu alanlar ve katılımcı toplamı tamken hazır kabul eder', () => {
+    expect(vtoolsMissingFields(event, settings)).toEqual([]);
+    const row = vtoolsPreparationRow(event, settings);
+    expect(row).toContain('Europe/Istanbul');
+    expect(row).toContain('12:00');
+    expect(row).toContain('IEEE IKCU Student Branch');
+  });
+
+  it('IEEE ve misafir sayıları toplamını doğrular', () => {
+    const broken = { ...event, vtools: { ...event.vtools!, guestAttendees: 11 } };
+    expect(vtoolsMissingFields(broken, settings)).toContain('katılımcı toplamı uyuşmuyor');
   });
 });
 

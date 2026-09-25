@@ -4,6 +4,7 @@ import { useAuth } from './auth/AuthContext';
 import { AppLayout } from './components/AppLayout';
 import { FullPageLoader } from './components/ui';
 import { OrgProvider } from './lib/org';
+import { UnitScopeProvider } from './lib/unitScope';
 import type { PermissionId } from './lib/permissions';
 import { LoginPage } from './pages/public/LoginPage';
 import { PendingPage } from './pages/public/PendingPage';
@@ -40,6 +41,8 @@ const ReportsPage = lazy(() => import('./pages/reports/ReportsPage').then((m) =>
 const InventoryPage = lazy(() => import('./pages/admin/InventoryPage').then((m) => ({ default: m.InventoryPage })));
 const HandoverPage = lazy(() => import('./pages/HandoverPage').then((m) => ({ default: m.HandoverPage })));
 const HelpPage = lazy(() => import('./pages/HelpPage').then((m) => ({ default: m.HelpPage })));
+const UnitWorkspacePage = lazy(() => import('./pages/UnitWorkspacePage').then((m) => ({ default: m.UnitWorkspacePage })));
+const SecretaryLedgerPage = lazy(() => import('./pages/SecretaryLedgerPage').then((m) => ({ default: m.SecretaryLedgerPage })));
 
 function RequirePerm({ perm, children }: { perm: PermissionId; children: React.ReactElement }) {
   const { can } = useAuth();
@@ -83,8 +86,9 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
     default:
       return (
         <OrgProvider>
-          <Routes>
-            <Route element={<AppLayout />}>
+          <UnitScopeProvider>
+            <Routes>
+              <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="onaylar" element={<InboxPage />} />
               <Route path="dilekceler" element={<PetitionsPage />} />
@@ -102,6 +106,8 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="devir" element={<HandoverPage />} />
               <Route path="yardim" element={<HelpPage />} />
               <Route path="raporlar" element={<RequireAny perms={['reports.read', 'reports.approve']}><ReportsPage /></RequireAny>} />
+              <Route path="birimler/:unitId" element={<UnitWorkspacePage />} />
+              <Route path="sekreterlik-defteri" element={<RequirePerm perm="secretary.ledger.manage"><SecretaryLedgerPage /></RequirePerm>} />
               <Route path="yonetim/envanter" element={<RequirePerm perm="inventory.manage"><InventoryPage /></RequirePerm>} />
               <Route path="yonetim/uyeler" element={<RequirePerm perm="members.manage"><MembersPage /></RequirePerm>} />
               <Route path="yonetim/atamalar" element={<RequirePerm perm="assignments.manage"><AssignmentsPage /></RequirePerm>} />
@@ -115,8 +121,9 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="yonetim/ayarlar" element={<RequirePerm perm="org.manage"><SettingsPage /></RequirePerm>} />
               <Route path="yonetim/denetim" element={<RequirePerm perm="audit.read"><AuditPage /></RequirePerm>} />
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
+              </Route>
+            </Routes>
+          </UnitScopeProvider>
         </OrgProvider>
       );
   }

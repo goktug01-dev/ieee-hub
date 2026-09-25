@@ -17,6 +17,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, friendlyError } from '../../components/ui';
 import { DEFAULT_ROLES, claimFounder, markSetupDone, seedOrganization } from '../../lib/setup';
 
+const FOUNDER_EMAIL = 'techopsieee@gmail.com';
+
 export function SetupPage() {
   const { phase, user, signOut } = useAuth();
   const step = phase === 'needsFounder' ? 0 : 1;
@@ -29,6 +31,7 @@ export function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const canClaimFounder = user?.email?.toLowerCase() === FOUNDER_EMAIL;
 
   const claim = async () => {
     setBusy(true);
@@ -90,8 +93,13 @@ export function SetupPage() {
                 Sistemde henüz yönetici yok. Devam ederseniz <b>{user?.email}</b> hesabı <b>kurucu yönetici</b> olur ve tüm
                 yönetim yetkilerine sahip olur. Kurucu yönetici yetkisi daha sonra başka bir kişiye devredilebilir.
               </Alert>
+              {!canClaimFounder && (
+                <Alert color="red">
+                  İlk kurulum güvenlik nedeniyle yalnızca <b>{FOUNDER_EMAIL}</b> hesabına açıktır. Bu hesapla giriş yapın.
+                </Alert>
+              )}
               <TextInput label="Adınız soyadınız" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-              <Button onClick={claim} loading={busy} disabled={!name.trim()}>
+              <Button onClick={claim} loading={busy} disabled={!name.trim() || !canClaimFounder}>
                 Kurucu yönetici ol
               </Button>
               <Button variant="subtle" color="gray" onClick={() => void signOut()}>

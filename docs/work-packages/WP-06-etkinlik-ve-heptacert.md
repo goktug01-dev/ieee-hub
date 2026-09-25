@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Durum** | Planlandı |
+| **Durum** | Uygulandı; gerçek etkinlik pilotu bekliyor |
 | **Paket sorumlusu** | TechOps geliştirici (belirlenecek) |
 | **Süreç sahibi** | Etkinlik sorumluları; onay: Yönetim Kurulu |
 | **Takvim** | Hafta 9–10 |
@@ -52,4 +52,12 @@ Bildirge §9.6'daki 15 adımlık yaşam döngüsü aşağıdaki durumlara eşlen
 - [ ] K2: Yeni etkinliklerin %100'ünde benzersiz etkinlik kodu var (Bildirge §14.3).
 - [ ] K3: HeptaCert kullanılan etkinliklerde kurumsal kopya oluşturulmuş; `syncRuns` kaydında kaynak kayıt sayısı = eklenen + güncellenen + hatalı + tekrarlanan.
 - [ ] K4: Aynı CSV'nin iki kez içe aktarılması çift kayıt üretmiyor (otomatik test).
-- [ ] K5: Etkinlik sorumlusu olmayan bir gönüllü katılımcı listesini göremiyor (kural testi).
+- [x] K5: Etkinlik sorumlusu olmayan bir gönüllü katılımcı listesini göremiyor (kural testi).
+
+## Uygulama güncellemesi (2026-09-25)
+
+- Etkinlik durum makinesi, izin dilekçesi/YK onayı, görev bağı, kapanış listesi ve rapor arayüzde uygulanmıştır.
+- HeptaCert aktarımı CSV/TSV başlık eş adlarını tanır, önizleme yapar, e-posta bazında idempotent yazar ve her aktarımda veri sözleşmesi sürümüyle mutabakat kaydı oluşturur.
+- Hatasız aktarım, `dataTransferred` kontrolünü ve etkinlik raporundaki fiilî katılımcı sayısını otomatik günceller.
+- Spark planında API anahtarı güvenli saklanamadığından HeptaCert REST API kullanılmaz; CSV/TSV kurumsal senkron yöntemidir.
+- vTools Events/L31 için kategori, konum türü, IEEE/üye olmayan katılımcı ayrımı, SPOID ve resmî takip kimliği içeren form-hazırlık CSV'si üretilir. Resmî bildirim vTools'ta yetkili insan tarafından tamamlanır.

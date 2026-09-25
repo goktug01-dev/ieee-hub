@@ -49,7 +49,12 @@ service cloud.firestore {
 
     function hasPerm(p) {
       return isActive() && hasAccessDoc()
-        && (acc().superAdmin == true || (p in acc().perms && acc().perms[p] > request.time));
+        && (acc().superAdmin == true
+            || (p in acc().perms && acc().perms[p] > request.time)
+            // Yeni izin eklenmeden önce oluşturulmuş Genel Sekreter atamaları için geriye dönük uyum.
+            || (p == 'secretary.ledger.manage'
+                && 'branch__genel-sekreter' in acc().get('roleKeys', {})
+                && acc().roleKeys['branch__genel-sekreter'] > request.time));
     }
 
     function hasRoleKey(k) {
@@ -92,8 +97,13 @@ service cloud.firestore {
     // Sistemde hiç kurulum kaydı yoksa, giriş yapan ilk kişi kendini kurucu yönetici yapabilir.
     // Kurulum kaydı, üye kaydı ve erişim özeti aynı batch içinde yazılır.
 
-    function bootstrapping() {
+    function bootstrapOwner() {
       return signedIn()
+        && request.auth.token.email == 'techopsieee@gmail.com';
+    }
+
+    function bootstrapping() {
+      return bootstrapOwner()
         && !exists(docPath('system', 'bootstrap'))
         && existsAfter(docPath('system', 'bootstrap'))
         && getAfter(docPath('system', 'bootstrap')).data.uid == me();
@@ -101,7 +111,7 @@ service cloud.firestore {
 
     match /system/bootstrap {
       allow read: if signedIn();
-      allow create: if signedIn()
+      allow create: if bootstrapOwner()
         && request.resource.data.uid == me()
         && request.resource.data.at == request.time
         && existsAfter(docPath('members', me()))
@@ -776,6 +786,31 @@ service cloud.firestore {
       allow read: if hasPerm('finance.read') || hasPerm('finance.manage')
         || (isActive() && unitManager(resource.data.unitId));
       allow write: if hasPerm('finance.manage');
+    }
+
+    // ---------- Sekreterlik defteri ----------
+
+    match /secretaryLedger/{id} {
+      function validLedger(d) {
+        return d.kind in ['meeting', 'board_decision', 'unit_decision', 'incoming', 'outgoing', 'follow_up', 'note']
+          && d.date is string && d.date.size() > 0
+          && d.title is string && d.title.size() > 0
+          && d.unitId is string && d.unitId.size() > 0
+          && d.summary is string;
+      }
+
+      allow read: if hasPerm('secretary.ledger.manage');
+      allow create: if hasPerm('secretary.ledger.manage')
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validLedger(request.resource.data);
+      allow update: if hasPerm('secretary.ledger.manage')
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && validLedger(request.resource.data);
+      allow delete: if hasPerm('secretary.ledger.manage');
     }
 
     // ---------- Raporlar (WP-09) ----------

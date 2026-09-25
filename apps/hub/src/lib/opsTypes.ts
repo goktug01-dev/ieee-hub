@@ -81,6 +81,19 @@ export interface EventReport {
   lessons: string;
 }
 
+export interface VToolsEventData {
+  category: string;
+  subcategory: string;
+  locationType: 'physical' | 'virtual' | 'hybrid';
+  tags: string;
+  agenda: string;
+  ieeeAttendees: number | null;
+  guestAttendees: number | null;
+  eventId: string;
+  reportedAt: string | null;
+  reportedBy: string;
+}
+
 export interface HubEvent {
   code: string;
   name: string;
@@ -106,6 +119,8 @@ export interface HubEvent {
   reportApproved: boolean;
   reportApprovedBy?: string | null;
   vtoolsStatus: 'not_required' | 'pending' | 'reported';
+  /** Eski kayıtlarda bulunmayabilir; arayüz varsayılanlarla birleştirir. */
+  vtools?: VToolsEventData;
   decisionNote?: string;
   decidedByName?: string;
   createdBy: string;
@@ -121,6 +136,8 @@ export interface Participant {
   certificate: string;
   extra: Record<string, string>;
   importedAt: Timestamp;
+  source?: 'heptacert_csv';
+  dataContractVersion?: string;
 }
 
 export interface SyncRun {
@@ -134,6 +151,11 @@ export interface SyncRun {
   duplicates: number;
   errors: number;
   errorRows: string[];
+  source?: 'heptacert_csv';
+  dataContractVersion?: string;
+  sourceRows?: number;
+  validRows?: number;
+  reconciled?: boolean;
 }
 
 export type ContentStatus =
@@ -310,4 +332,23 @@ export interface ReportSnapshot {
   generatedAt: Timestamp;
   approvedByName?: string;
   approvedAt?: Timestamp;
+}
+
+export type SecretaryLedgerKind = 'meeting' | 'board_decision' | 'unit_decision' | 'incoming' | 'outgoing' | 'follow_up' | 'note';
+
+export interface SecretaryLedgerEntry {
+  kind: SecretaryLedgerKind;
+  date: string;
+  referenceNo: string;
+  title: string;
+  unitId: string;
+  unitName: string;
+  summary: string;
+  attendees: string;
+  followUpDate: string | null;
+  fileLink: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

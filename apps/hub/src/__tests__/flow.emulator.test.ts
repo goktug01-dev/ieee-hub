@@ -23,21 +23,26 @@ import type { Access, Assignment, Petition, PetitionTemplate, PetitionVerificati
 
 const PROJECT = 'demo-ieee-hub';
 const PW = 'secret123';
+const FOUNDER_EMAIL = 'techopsieee@gmail.com';
+const FIRESTORE_PORT = Number(process.env.VITE_FIRESTORE_EMULATOR_PORT || 8080);
+const AUTH_PORT = Number(process.env.VITE_AUTH_EMULATOR_PORT || 9099);
 const run = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 
 const uids: Record<string, string> = {};
+const emails: Record<string, string> = {};
 
-async function register(key: string, name: string) {
+async function register(key: string, name: string, email = `${key}@ogr.ikc.edu.tr`) {
   await signOut(auth);
-  const c = await createUserWithEmailAndPassword(auth, `${key}@ogr.ikc.edu.tr`, PW);
+  const c = await createUserWithEmailAndPassword(auth, email, PW);
   await updateProfile(c.user, { displayName: name });
   uids[key] = c.user.uid;
+  emails[key] = email;
   return c.user.uid;
 }
 
 async function as(key: string) {
   await signOut(auth);
-  await signInWithEmailAndPassword(auth, `${key}@ogr.ikc.edu.tr`, PW);
+  await signInWithEmailAndPassword(auth, emails[key] ?? `${key}@ogr.ikc.edu.tr`, PW);
 }
 
 async function applyForMembership(key: string, name: string) {
@@ -59,12 +64,12 @@ async function template(id: string) {
 
 run('uçtan uca dilekçe akışı', () => {
   beforeAll(async () => {
-    await fetch(`http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
-    await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${PROJECT}/accounts`, { method: 'DELETE' });
+    await fetch(`http://127.0.0.1:${FIRESTORE_PORT}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
+    await fetch(`http://127.0.0.1:${AUTH_PORT}/emulator/v1/projects/${PROJECT}/accounts`, { method: 'DELETE' });
   });
 
   it('kurulum: kurucu yönetici, roller, birimler, örnek şablonlar', async () => {
-    await register('baskan', 'Ayşe Başkan');
+    await register('baskan', 'Ayşe Başkan', FOUNDER_EMAIL);
     await claimFounder('Ayşe Başkan');
     await seedOrganization(
       {

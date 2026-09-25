@@ -21,6 +21,8 @@ export const db = initializeFirestore(firebaseApp, {
 });
 
 if (useEmulators) {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  const authPort = Number(env.VITE_AUTH_EMULATOR_PORT || 9099);
+  const firestorePort = Number(env.VITE_FIRESTORE_EMULATOR_PORT || 8080);
+  connectAuthEmulator(auth, `http://127.0.0.1:${authPort}`, { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', firestorePort);
 }

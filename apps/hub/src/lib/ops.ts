@@ -24,6 +24,8 @@ import { FAR_FUTURE } from './access';
 import { auditInBatch, logAudit } from './audit';
 import { sha256Hex } from './docx';
 import { slugify } from './format';
+import { HEPTACERT_CSV_CONTRACT_VERSION, type CsvPreview } from './heptacert';
+export { parseCsv, previewParticipantsCsv, type CsvPreview } from './heptacert';
 import type { HubEvent, Participant, Task, VolunteerApplication } from './opsTypes';
 import type { OrgSettings, Term } from './types';
 import { DEFAULT_ORG_SETTINGS } from './workflow';
@@ -83,6 +85,18 @@ export const EMPTY_EVENT_EXTRAS = {
   report: { participantCount: null, summary: '', outcomes: '', lessons: '' },
   reportApproved: false,
   vtoolsStatus: 'pending' as const,
+  vtools: {
+    category: '',
+    subcategory: '',
+    locationType: 'physical' as const,
+    tags: '',
+    agenda: '',
+    ieeeAttendees: null,
+    guestAttendees: null,
+    eventId: '',
+    reportedAt: null,
+    reportedBy: '',
+  },
 };
 
 /** Etkinlik önerisi: EVT-{YYYY}-{NNN} kodu sayaçla atanır. */
@@ -146,100 +160,14 @@ export async function approveEventWithPetition(id: string, petitionId: string, p
 
 // ---------- HeptaCert CSV aktarımı ----------
 
-/** Basit, tırnak destekli CSV ayrıştırıcı (virgül veya noktalı virgül). */
-export function parseCsv(text: string): string[][] {
-  const clean = text.replace(/^﻿/, '');
-  const firstLine = clean.split(/\r?\n/, 1)[0] ?? '';
-  const sep = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ';' : ',';
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-  for (let i = 0; i < clean.length; i++) {
-    const ch = clean[i];
-    if (quoted) {
-      if (ch === '"' && clean[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (ch === '"') quoted = false;
-      else cell += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === sep) {
-      row.push(cell);
-      cell = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && clean[i + 1] === '\n') i++;
-      row.push(cell);
-      cell = '';
-      if (row.some((c) => c.trim())) rows.push(row);
-      row = [];
-    } else cell += ch;
-  }
-  row.push(cell);
-  if (row.some((c) => c.trim())) rows.push(row);
-  return rows;
-}
-
-const HEADER_ALIASES: Record<string, string[]> = {
-  name: ['ad soyad', 'adsoyad', 'name', 'full name', 'isim', 'ad', 'katılımcı', 'katilimci'],
-  email: ['e-posta', 'eposta', 'email', 'e-mail', 'mail'],
-  attended: ['katıldı', 'katildi', 'attended', 'check-in', 'checkin', 'yoklama', 'durum'],
-  certificate: ['sertifika', 'certificate', 'sertifika no', 'certificate id', 'sertifika kodu'],
-};
-
-export interface CsvPreview {
-  columns: { name: number; email: number; attended: number; certificate: number };
-  rows: { name: string; email: string; attended: boolean; certificate: string; extra: Record<string, string> }[];
-  errors: string[];
-  duplicates: number;
-  headers: string[];
-}
-
-export function previewParticipantsCsv(text: string): CsvPreview {
-  const rows = parseCsv(text);
-  const headers = (rows[0] ?? []).map((h) => h.trim());
-  const lower = headers.map((h) => h.toLocaleLowerCase('tr'));
-  const find = (k: keyof typeof HEADER_ALIASES) => lower.findIndex((h) => HEADER_ALIASES[k].includes(h));
-  const columns = { name: find('name'), email: find('email'), attended: find('attended'), certificate: find('certificate') };
-  const errors: string[] = [];
-  if (columns.email < 0) errors.push('E-posta sütunu bulunamadı (başlık: "E-posta" veya "Email").');
-  const seen = new Set<string>();
-  let duplicates = 0;
-  const out: CsvPreview['rows'] = [];
-  rows.slice(1).forEach((r, i) => {
-    const email = (r[columns.email] ?? '').trim().toLowerCase();
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      errors.push(`Satır ${i + 2}: geçersiz e-posta "${email}"`);
-      return;
-    }
-    if (seen.has(email)) {
-      duplicates++;
-      return;
-    }
-    seen.add(email);
-    const att = columns.attended >= 0 ? (r[columns.attended] ?? '').trim().toLocaleLowerCase('tr') : '';
-    const extra: Record<string, string> = {};
-    headers.forEach((h, j) => {
-      if (![columns.name, columns.email, columns.attended, columns.certificate].includes(j) && r[j]?.trim()) extra[h] = r[j].trim();
-    });
-    out.push({
-      name: columns.name >= 0 ? (r[columns.name] ?? '').trim() : '',
-      email,
-      attended: columns.attended < 0 ? true : ['1', 'evet', 'yes', 'true', 'x', 'katıldı', 'katildi', 'var'].includes(att),
-      certificate: columns.certificate >= 0 ? (r[columns.certificate] ?? '').trim() : '',
-      extra,
-    });
-  });
-  return { columns, rows: out, errors, duplicates, headers };
-}
-
 /**
  * Katılımcıları idempotent olarak yazar: doküman kimliği e-postanın SHA-256 özetidir,
  * aynı dosya ikinci kez aktarıldığında çift kayıt oluşmaz (WP-06 K4).
  */
 export async function importParticipants(eventId: string, fileName: string, preview: CsvPreview) {
   const who = me();
-  const existing = new Set((await getDocs(collection(db, 'events', eventId, 'participants'))).docs.map((d) => d.id));
+  const existingSnapshot = await getDocs(collection(db, 'events', eventId, 'participants'));
+  const existing = new Map(existingSnapshot.docs.map((d) => [d.id, d.data() as Participant]));
   let added = 0;
   let updated = 0;
   const ids = await Promise.all(preview.rows.map((r) => sha256Hex(new TextEncoder().encode(r.email).buffer as ArrayBuffer)));
@@ -249,8 +177,14 @@ export async function importParticipants(eventId: string, fileName: string, prev
       const id = ids[i + j].slice(0, 32);
       if (existing.has(id)) updated++;
       else added++;
-      const p: Omit<Participant, 'importedAt'> & { importedAt: unknown } = { ...r, importedAt: serverTimestamp() };
+      const p: Omit<Participant, 'importedAt'> & { importedAt: unknown } = {
+        ...r,
+        source: 'heptacert_csv',
+        dataContractVersion: HEPTACERT_CSV_CONTRACT_VERSION,
+        importedAt: serverTimestamp(),
+      };
       batch.set(doc(db, 'events', eventId, 'participants', id), p);
+      existing.set(id, { ...r, source: 'heptacert_csv', dataContractVersion: HEPTACERT_CSV_CONTRACT_VERSION } as Participant);
     });
     await batch.commit();
   }
@@ -259,14 +193,30 @@ export async function importParticipants(eventId: string, fileName: string, prev
     by: who.uid,
     byName: who.name,
     fileName,
-    total: preview.rows.length + preview.duplicates + preview.errors.filter((e) => e.startsWith('Satır')).length,
+    total: preview.sourceRows,
     added,
     updated,
     duplicates: preview.duplicates,
     errors: preview.errors.filter((e) => e.startsWith('Satır')).length,
     errorRows: preview.errors.slice(0, 50),
+    source: 'heptacert_csv' as const,
+    dataContractVersion: HEPTACERT_CSV_CONTRACT_VERSION,
+    sourceRows: preview.sourceRows,
+    validRows: preview.rows.length,
+    reconciled: preview.sourceRows === preview.rows.length + preview.duplicates + preview.errors.filter((e) => e.startsWith('Satır')).length,
   };
   await addDoc(collection(db, 'events', eventId, 'syncRuns'), run);
+  const eventRef = doc(db, 'events', eventId);
+  const eventSnapshot = await getDoc(eventRef);
+  if (eventSnapshot.exists()) {
+    const event = eventSnapshot.data() as HubEvent;
+    const participantCount = [...existing.values()].filter((p) => p.attended).length;
+    await updateDoc(eventRef, {
+      checklist: { ...event.checklist, dataTransferred: run.errors === 0 && run.reconciled && run.total > 0 },
+      report: { ...event.report, participantCount },
+      updatedAt: serverTimestamp(),
+    });
+  }
   return run;
 }
 

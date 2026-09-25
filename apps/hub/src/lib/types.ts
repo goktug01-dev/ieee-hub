@@ -274,6 +274,11 @@ export interface OrgSettings {
   volunteerRoleId: string;
   /** Kabul edilen gönüllüye otomatik açılan oryantasyon görevleri. */
   orientationItems: string[];
+  /** IEEE vTools Events için kolun resmî organizasyon bilgileri. */
+  vtoolsOrganizationName: string;
+  vtoolsSpoid: string;
+  vtoolsContactEmail: string;
+  vtoolsTimeZone: string;
 }
 
 export interface AuditEntry {

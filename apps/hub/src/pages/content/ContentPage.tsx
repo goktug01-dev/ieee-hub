@@ -49,7 +49,7 @@ export function ContentPage() {
   const requests = useCollection<ContentRequest>('contentRequests', [orderBy('createdAt', 'desc')], 'content');
   const isComms = hasPermission(access, 'content.manage');
   const [tab, setTab] = useState<string | null>(isComms ? 'pano' : 'talepler');
-  const [newOpen, setNewOpen] = useState(!!params.get('etkinlik'));
+  const [newOpen, setNewOpen] = useState(!!params.get('etkinlik') || params.get('yeni') === '1');
   const [sel, setSel] = useState<string | null>(null);
 
   const requestUnits = [
@@ -123,7 +123,7 @@ export function ContentPage() {
           <CalendarView requests={requests.data} onOpen={setSel} />
         </Tabs.Panel>
       </Tabs>
-      <NewRequest opened={newOpen} onClose={() => setNewOpen(false)} unitChoices={requestUnits} presetEventId={params.get('etkinlik')} />
+      <NewRequest opened={newOpen} onClose={() => setNewOpen(false)} unitChoices={requestUnits} presetEventId={params.get('etkinlik')} presetUnitId={params.get('birim')} />
       <RequestDrawer r={selected} onClose={() => setSel(null)} />
     </Stack>
   );
@@ -161,17 +161,19 @@ function NewRequest({
   onClose,
   unitChoices,
   presetEventId,
+  presetUnitId,
 }: {
   opened: boolean;
   onClose: () => void;
   unitChoices: { value: string; label: string }[];
   presetEventId: string | null;
+  presetUnitId: string | null;
 }) {
   const { user } = useAuth();
   const { unitName } = useOrg();
   const events = useCollection<HubEvent>(opened ? 'events' : null, [orderBy('createdAt', 'desc')], 'ev-content');
   const [f, setF] = useState({
-    requestingUnitId: '',
+    requestingUnitId: presetUnitId && unitChoices.some((choice) => choice.value === presetUnitId) ? presetUnitId : '',
     type: 'announcement',
     channels: ['Instagram'] as string[],
     desiredPublishDate: null as string | null,

@@ -92,7 +92,7 @@ export function TasksPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('sekme') ?? 'benim';
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(params.get('yeni') === '1');
 
   const seeAll = hasPermission(access, 'work.manageAll') || hasPermission(access, 'reports.read');
   const unitChoices = useMemo(
@@ -112,6 +112,12 @@ export function TasksPage() {
   const selected = allLoaded.find((t) => t.id === selectedId) ?? null;
 
   const canCreate = units.some((u) => canManageTask(access, u.id));
+  const changeUnit = (value: string | null) => {
+    setUnitId(value);
+    const next = new URLSearchParams(params);
+    value ? next.set('birim', value) : next.delete('birim');
+    setParams(next, { replace: true });
+  };
 
   return (
     <Stack>
@@ -126,7 +132,7 @@ export function TasksPage() {
           )
         }
       />
-      <Tabs value={tab} onChange={(v) => setParams({ sekme: v ?? 'benim' })} keepMounted={false}>
+      <Tabs value={tab} onChange={(v) => { const next = new URLSearchParams(params); next.set('sekme', v ?? 'benim'); setParams(next); }} keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="benim">Görevlerim</Tabs.Tab>
           <Tabs.Tab value="pano">Birim panosu</Tabs.Tab>
@@ -141,7 +147,7 @@ export function TasksPage() {
           {unitChoices.length === 0 ? (
             <EmptyState title="Görevli olduğunuz bir birim yok" description="Birim panoları, birimde görevi olan kişilere açıktır." />
           ) : (
-            <Board unitId={unitId} setUnitId={setUnitId} unitChoices={unitChoices} tasks={board.data} loading={board.loading} onOpen={setSelectedId} />
+            <Board unitId={unitId} setUnitId={changeUnit} unitChoices={unitChoices} tasks={board.data} loading={board.loading} onOpen={setSelectedId} />
           )}
         </Tabs.Panel>
 
@@ -149,7 +155,7 @@ export function TasksPage() {
           {unitChoices.length === 0 ? (
             <EmptyState title="Görevli olduğunuz bir birim yok" />
           ) : (
-            <Projects unitId={unitId} setUnitId={setUnitId} unitChoices={unitChoices} tasks={board.data} />
+            <Projects unitId={unitId} setUnitId={changeUnit} unitChoices={unitChoices} tasks={board.data} />
           )}
         </Tabs.Panel>
       </Tabs>

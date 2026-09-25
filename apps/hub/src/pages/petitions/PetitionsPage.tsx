@@ -2,7 +2,7 @@ import { Button, Group, Select, Stack, Table, Tabs, Text, TextInput, Anchor } fr
 import { IconFilePlus, IconSearch } from '@tabler/icons-react';
 import { limit, orderBy, where } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, ErrorAlert, PageHeader, SectionLoader, StatusBadge } from '../../components/ui';
 import { STATUS_META, fmtDateTime } from '../../lib/format';
@@ -10,11 +10,11 @@ import { useCollection } from '../../lib/hooks';
 import { useOrg } from '../../lib/org';
 import type { Petition, PetitionStatus, WithId } from '../../lib/types';
 
-function PetitionTable({ rows, loading, error }: { rows: WithId<Petition>[]; loading: boolean; error: Error | null }) {
+function PetitionTable({ rows, loading, error, initialUnit }: { rows: WithId<Petition>[]; loading: boolean; error: Error | null; initialUnit?: string | null }) {
   const { unitOptions } = useOrg();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
-  const [unit, setUnit] = useState<string | null>(null);
+  const [unit, setUnit] = useState<string | null>(initialUnit ?? null);
 
   const filtered = useMemo(() => {
     const s = q.toLocaleLowerCase('tr');
@@ -114,7 +114,9 @@ function PetitionTable({ rows, loading, error }: { rows: WithId<Petition>[]; loa
 
 export function PetitionsPage() {
   const { user, access, can } = useAuth();
-  const [tab, setTab] = useState<string | null>('mine');
+  const [params] = useSearchParams();
+  const initialUnit = params.get('birim');
+  const [tab, setTab] = useState<string | null>(params.get('sekme') ?? 'mine');
   const tokens = (access?.tokens ?? []).filter((t) => !t.startsWith('uid:')).slice(0, 30);
 
   const mine = useCollection<Petition>('petitions', [where('ownerUid', '==', user!.uid), orderBy('updatedAt', 'desc')], `mine-${user!.uid}`);
@@ -147,13 +149,13 @@ export function PetitionsPage() {
           {can('petitions.readAll') && <Tabs.Tab value="all">Tüm evrak (arşiv)</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="mine">
-          <PetitionTable rows={mine.data} loading={mine.loading} error={mine.error} />
+          <PetitionTable rows={mine.data} loading={mine.loading} error={mine.error} initialUnit={initialUnit} />
         </Tabs.Panel>
         <Tabs.Panel value="visible">
-          <PetitionTable rows={visible.data.filter((p) => p.status !== 'draft')} loading={visible.loading} error={visible.error} />
+          <PetitionTable rows={visible.data.filter((p) => p.status !== 'draft')} loading={visible.loading} error={visible.error} initialUnit={initialUnit} />
         </Tabs.Panel>
         <Tabs.Panel value="all">
-          <PetitionTable rows={all.data.filter((p) => p.status !== 'draft')} loading={all.loading} error={all.error} />
+          <PetitionTable rows={all.data.filter((p) => p.status !== 'draft')} loading={all.loading} error={all.error} initialUnit={initialUnit} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

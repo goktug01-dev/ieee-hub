@@ -11,7 +11,7 @@ WP-01 … WP-10, Bildirge §9'daki paketlerdir ve numaraları korunmuştur. WP-1
 | [WP-03](WP-03-drive-ve-yonetim-devri.md) | Drive ve yönetim devri | TechOps / Genel Sekreter | 5–6 | Planlandı |
 | [WP-04](WP-04-uye-ve-gonullu-yonetimi.md) | Üye ve gönüllü yönetimi | Üyelik sorumlusu | 7–8 | Planlandı |
 | [WP-05](WP-05-gorev-ve-proje-yonetimi.md) | Görev ve proje yönetimi | Komite başkanları | 7–8 | Planlandı |
-| [WP-06](WP-06-etkinlik-ve-heptacert.md) | Etkinlik yönetimi ve HeptaCert entegrasyonu | Etkinlik sorumluları | 9–10 | Planlandı |
+| [WP-06](WP-06-etkinlik-ve-heptacert.md) | Etkinlik yönetimi ve HeptaCert entegrasyonu | Etkinlik sorumluları | 9–10 | Uygulandı; pilot bekliyor |
 | [WP-07](WP-07-iletisim-yonetimi.md) | İletişim yönetimi | İletişim birimi | 11–12 | Planlandı |
 | [WP-08](WP-08-sponsorluk-ve-finans.md) | Sponsorluk ve finans | Sayman / Sponsorluk sorumlusu | 11–12 | Planlandı |
 | [WP-09](WP-09-raporlama-ve-otomasyon.md) | Raporlama ve otomasyon | TechOps / Genel Sekreter | 13–14 | Planlandı |

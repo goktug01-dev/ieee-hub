@@ -19,26 +19,30 @@ const ROUTES = {
   baskan: [
     '/', '/onaylar', '/gorevler', '/gorevler?sekme=pano', '/gorevler?sekme=projeler', '/dilekceler', '/dilekceler/yeni',
     '/etkinlikler', '/iletisim', '/sponsorluk', '/butceler', '/raporlar', '/organizasyon', '/gonulluluk', '/devir', '/yardim', '/profil',
+    '/birimler/cs', '/sekreterlik-defteri',
     '/yonetim/uyeler', '/yonetim/atamalar', '/yonetim/secimler', '/yonetim/birimler', '/yonetim/roller', '/yonetim/donemler',
     '/yonetim/sablonlar', '/yonetim/sablonlar/etkinlik-izin', '/yonetim/envanter', '/yonetim/ayarlar', '/yonetim/denetim',
   ],
-  cs: ['/', '/onaylar', '/gorevler?sekme=pano', '/gonulluluk', '/etkinlikler', '/iletisim', '/devir', '/butceler'],
+  cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/etkinlikler?birim=cs', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
   uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/sponsorluk', '/iletisim'],
   gonullu: ['/', '/gorevler', '/gonulluluk', '/sponsorluk'],
   yeni: ['/'],
 };
 
-function startVite() {
+async function startVite() {
   const p = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: new URL('..', import.meta.url), shell: true, stdio: 'pipe' });
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('Vite başlamadı')), 60000);
-    p.stdout.on('data', (d) => {
-      if (String(d).includes('ready')) {
-        clearTimeout(t);
-        resolve(p);
-      }
-    });
-  });
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (p.exitCode !== null) throw new Error(`Vite erken kapandı (kod ${p.exitCode})`);
+    try {
+      const response = await fetch(BASE);
+      if (response.ok) return p;
+    } catch {
+      // Sunucu henüz dinlemiyor.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  p.kill();
+  throw new Error('Vite başlamadı');
 }
 
 const vite = await startVite();
@@ -65,7 +69,6 @@ try {
     for (const r of routes) {
       errors.length = 0;
       await page.goto(BASE + r);
-      await page.waitForLoadState('networkidle').catch(() => undefined);
       await page.waitForTimeout(1500);
       const crashed = await page.getByText(/Something went wrong|Unexpected Application Error/).count();
       const file = `${account}${r.replace(/[/?=]/g, '_') || '_'}.png`;
@@ -73,6 +76,26 @@ try {
       pages++;
       const real = errors.filter((e) => !/Missing or insufficient permissions/.test(e) || account !== 'yeni');
       if (crashed || real.length) problems.push({ account, route: r, crashed: !!crashed, errors: [...real] });
+    }
+
+    if (account === 'baskan') {
+      errors.length = 0;
+      await page.goto(BASE + '/etkinlikler');
+      await page.waitForTimeout(1500);
+      const detailHref = await page.locator('a[href^="/etkinlikler/"]').first().getAttribute('href');
+      if (detailHref) {
+        await page.goto(BASE + detailHref);
+        await page.waitForTimeout(1500);
+        for (const tab of ['vTools hazırlık', 'Katılımcılar (HeptaCert)']) {
+          await page.getByRole('tab', { name: tab }).click();
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: OUT + `baskan_event_${tab.startsWith('vTools') ? 'vtools' : 'heptacert'}.png`, fullPage: false });
+          pages++;
+        }
+        if (errors.length) problems.push({ account, route: `${detailHref} (entegrasyon sekmeleri)`, crashed: false, errors: [...errors] });
+      } else {
+        problems.push({ account, route: '/etkinlikler', crashed: false, errors: ['Demo verisinde etkinlik detayı bulunamadı.'] });
+      }
     }
     await ctx.close();
   }
@@ -94,8 +117,15 @@ try {
   await m.close();
 } finally {
   await browser.close();
-  vite.kill();
-  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(vite.pid), '/T', '/F'], { shell: true });
+  if (process.platform === 'win32') {
+    await new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(vite.pid), '/T', '/F'], { shell: false, stdio: 'ignore' });
+      killer.once('exit', resolve);
+      killer.once('error', resolve);
+    });
+  } else {
+    vite.kill();
+  }
 }
 
 console.log(`\n${pages} sayfa gezildi.`);

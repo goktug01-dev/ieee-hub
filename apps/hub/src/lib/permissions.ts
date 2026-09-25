@@ -22,6 +22,7 @@ export type PermissionId =
   | 'finance.manage'
   | 'reports.read'
   | 'reports.approve'
+  | 'secretary.ledger.manage'
   | 'inventory.manage'
   | 'handover.manage'
   // Birim kapsamlı
@@ -65,6 +66,7 @@ export const PERMISSIONS: PermissionDef[] = [
 
   { id: 'reports.read', group: 'Raporlama ve denetim', scope: 'branch', label: 'Raporları gör', description: 'Operasyon ve yönetim raporlarını, veri kalitesi uyarılarını görür.' },
   { id: 'reports.approve', group: 'Raporlama ve denetim', scope: 'branch', label: 'Raporları onayla', description: 'Rapor anlık görüntüsünü resmî olarak kabul eder ve arşivler.' },
+  { id: 'secretary.ledger.manage', group: 'Raporlama ve denetim', scope: 'branch', label: 'Sekreterlik defterini yönet', description: 'Toplantı tutanağı, karar, gelen-giden evrak ve takip notlarını kaydeder.' },
   { id: 'audit.read', group: 'Raporlama ve denetim', scope: 'branch', label: 'Denetim kaydını gör', description: 'Sistemde yapılan tüm yönetim işlemlerinin kaydını görür.' },
   { id: 'inventory.manage', group: 'Raporlama ve denetim', scope: 'branch', label: 'Sistem envanterini yönet', description: 'Sistem, erişim, kişisel veri ve risk envanterini yönetir; sorun bildirimlerini görür.' },
 

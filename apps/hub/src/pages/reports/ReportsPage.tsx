@@ -10,8 +10,9 @@ import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } fro
 import { db } from '../../firebase';
 import { hasPermission } from '../../lib/access';
 import { fmtDateTime } from '../../lib/format';
+import { vtoolsData, vtoolsMissingFields, vtoolsPreparationRows } from '../../lib/eventExports';
 import { useCollection } from '../../lib/hooks';
-import { downloadText, toCsv, updateEvent } from '../../lib/ops';
+import { downloadText, toCsv } from '../../lib/ops';
 import { ACTIVE_SPONSOR_STAGES, EVENT_STATUS } from '../../lib/opsLabels';
 import type { Budget, ContentRequest, HubEvent, ReportSnapshot, Sponsor, Task, VolunteerApplication } from '../../lib/opsTypes';
 import { useOrg } from '../../lib/org';
@@ -512,16 +513,16 @@ function Quality({ d }: { d: Data }) {
 // ---------------- vTools ----------------
 
 function VTools({ d }: { d: Data }) {
-  const { access, user } = useAuth();
+  const { access, user, orgSettings } = useAuth();
   const list = d.events.filter((e) => ['held', 'closing', 'reported', 'archived'].includes(e.status) && e.vtoolsStatus !== 'not_required');
-  const missing = (e: HubEvent) =>
-    [!e.startsAt && 'tarih', !e.location && 'yer', !e.report?.participantCount && 'katılımcı sayısı', !e.report?.summary && 'özet'].filter(Boolean) as string[];
+  const missing = (e: HubEvent) => vtoolsMissingFields(e, orgSettings);
   const canMark = (e: HubEvent) => e.ownerUids.includes(user!.uid) || hasPermission(access, 'events.manageAll');
   return (
     <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
-          IEEE vTools'a bildirilecek etkinlikler. Eksik alanları tamamlayıp paketi indirin, bildirim yapılınca işaretleyin.
+          IEEE vTools Events / L31 için form-hazırlık paketi. Eksik alanları etkinlikte tamamlayın; resmî gönderimi vTools'ta insan
+          kontrolüyle yapın. CSV doğrudan toplu yükleme dosyası değildir.
         </Text>
         <Button
           size="xs"
@@ -529,15 +530,12 @@ function VTools({ d }: { d: Data }) {
           leftSection={<IconDownload size={14} />}
           onClick={() =>
             downloadText(
-              toCsv([
-                ['Kod', 'Etkinlik', 'Birim', 'Tür', 'Başlangıç', 'Bitiş', 'Yer', 'Katılımcı', 'Özet', 'vTools durumu'],
-                ...list.map((e) => [e.code, e.name, e.unitName, e.type, e.startsAt, e.endsAt, e.location, e.report?.participantCount, e.report?.summary, e.vtoolsStatus]),
-              ]),
-              'vtools_paketi.csv',
+              toCsv(vtoolsPreparationRows(list, orgSettings)),
+              'vtools_l31_hazirlik_paketi.csv',
             )
           }
         >
-          vTools paketi (CSV)
+          vTools hazırlık paketi (CSV)
         </Button>
       </Group>
       {list.length === 0 ? (
@@ -567,8 +565,13 @@ function VTools({ d }: { d: Data }) {
                     <Table.Td>{e.vtoolsStatus === 'reported' ? <Badge color="green">Bildirildi</Badge> : <Badge color="yellow">Bildirilecek</Badge>}</Table.Td>
                     <Table.Td>
                       {e.vtoolsStatus !== 'reported' && canMark(e) && (
-                        <Button size="compact-xs" variant="light" onClick={() => updateEvent(e.id, { vtoolsStatus: 'reported' }).catch(notifyError)}>
-                          Bildirildi
+                        <Button
+                          component={Link}
+                          to={`/etkinlikler/${e.id}`}
+                          size="compact-xs"
+                          variant="light"
+                        >
+                          {m.length ? 'Eksikleri tamamla' : vtoolsData(e).eventId ? 'Kontrol et ve bildir' : 'vTools kimliği gir'}
                         </Button>
                       )}
                     </Table.Td>

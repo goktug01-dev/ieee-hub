@@ -138,6 +138,33 @@ export function SettingsPage() {
               onChange={(v) => setOrg({ ...org, allowedEmailDomains: v })}
             />
             <Title order={5} mt="md">
+              IEEE vTools Events
+            </Title>
+            <Text size="xs" c="dimmed">
+              Bu bilgiler vTools hazırlık paketindeki tüm etkinliklere uygulanır. SPOID, IEEE organizasyon biriminin resmî kimliğidir.
+            </Text>
+            <TextInput
+              label="Organizasyon birimi"
+              placeholder="Örn. Izmir Katip Celebi University Student Branch"
+              value={org.vtoolsOrganizationName}
+              onChange={(e) => setOrg({ ...org, vtoolsOrganizationName: e.currentTarget.value })}
+            />
+            <Group grow>
+              <TextInput label="SPOID" placeholder="STB..." value={org.vtoolsSpoid} onChange={(e) => setOrg({ ...org, vtoolsSpoid: e.currentTarget.value })} />
+              <TextInput
+                label="vTools iletişim e-postası"
+                type="email"
+                value={org.vtoolsContactEmail}
+                onChange={(e) => setOrg({ ...org, vtoolsContactEmail: e.currentTarget.value })}
+              />
+            </Group>
+            <TextInput
+              label="Saat dilimi"
+              description="IANA adı; Türkiye için Europe/Istanbul"
+              value={org.vtoolsTimeZone}
+              onChange={(e) => setOrg({ ...org, vtoolsTimeZone: e.currentTarget.value })}
+            />
+            <Title order={5} mt="md">
               Gönüllülük
             </Title>
             <Select

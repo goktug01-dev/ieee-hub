@@ -9,6 +9,7 @@ import {
   Menu,
   NavLink,
   ScrollArea,
+  Select,
   Stack,
   Text,
   Tooltip,
@@ -46,14 +47,16 @@ import {
   IconArrowsExchange,
   IconServer,
   IconLifebuoy,
+  IconNotebook,
 } from '@tabler/icons-react';
 import { Suspense, type ReactNode } from 'react';
-import { Link, Outlet, useLocation } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { unitsWithPermission } from '../lib/access';
 import { useInbox } from '../lib/inbox';
 import { SectionLoader } from './ui';
 import type { PermissionId } from '../lib/permissions';
+import { useUnitScope } from '../lib/unitScope';
 
 interface NavItem {
   to: string;
@@ -69,6 +72,8 @@ export function AppLayout() {
   const { member, publicSettings, can, signOut, isSuperAdmin, access } = useAuth();
   const { waiting } = useInbox();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { accessibleUnits, selectedUnitId, selectedUnit, setSelectedUnitId } = useUnitScope();
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
 
@@ -81,6 +86,12 @@ export function AppLayout() {
         { to: '/onaylar', label: 'Onayımı bekleyenler', icon: <IconChecklist size={18} />, badge: waiting.length },
         { to: '/gorevler', label: 'Görevler ve projeler', icon: <IconListCheck size={18} /> },
       ],
+    },
+    {
+      label: selectedUnit ? selectedUnit.name : 'Komitem',
+      items: selectedUnit
+        ? [{ to: `/birimler/${selectedUnit.id}`, label: 'Komite çalışma alanı', icon: <IconBuildingCommunity size={18} /> }]
+        : [],
     },
     {
       label: 'Dilekçe',
@@ -97,6 +108,7 @@ export function AppLayout() {
         { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
         ...(can('finance.read') || can('finance.manage') || unitManager ? [{ to: '/butceler', label: 'Bütçeler', icon: <IconCoin size={18} /> }] : []),
         ...(can('reports.read') || can('reports.approve') ? [{ to: '/raporlar', label: 'Raporlar', icon: <IconChartBar size={18} /> }] : []),
+        ...(can('secretary.ledger.manage') ? [{ to: '/sekreterlik-defteri', label: 'Sekreterlik defteri', icon: <IconNotebook size={18} /> }] : []),
       ],
     },
     {
@@ -221,6 +233,23 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="sm">
+        {accessibleUnits.length > 0 && (
+          <AppShell.Section mb="xs">
+            <Select
+              label="Çalışma alanı"
+              size="sm"
+              searchable
+              allowDeselect={false}
+              value={selectedUnitId}
+              data={accessibleUnits.map((unit) => ({ value: unit.id, label: `${unit.name} (${unit.shortCode})` }))}
+              onChange={(id) => {
+                setSelectedUnitId(id);
+                if (id) navigate(`/birimler/${id}`);
+                close();
+              }}
+            />
+          </AppShell.Section>
+        )}
         <AppShell.Section grow component={ScrollArea}>
           <Stack gap={2}>
             {sections

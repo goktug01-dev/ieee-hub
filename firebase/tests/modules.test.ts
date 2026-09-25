@@ -83,6 +83,7 @@ async function seed() {
       visibleTo: ['uid:oldChair', 'role:cs__birim-baskani'],
     });
   });
+
 }
 
 beforeAll(async () => {
@@ -95,6 +96,19 @@ afterAll(async () => env.cleanup());
 beforeEach(async () => {
   await env.clearFirestore();
   await seed();
+});
+
+describe('sekreterlik defteri', () => {
+  it('yalnızca yetkili rol kayıt oluşturur ve okur', async () => {
+    const entry = {
+      kind: 'meeting', date: '2026-09-25', referenceNo: 'YK-2026-01', title: 'YK toplantısı',
+      unitId: 'branch', unitName: 'Kol Geneli', summary: 'Gündem ve kararlar', attendees: '',
+      followUpDate: null, fileLink: '', createdBy: 'gs', createdByName: 'GS', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(ctx('gs'), 'secretaryLedger', 'l1'), entry));
+    await assertFails(setDoc(doc(ctx('stranger'), 'secretaryLedger', 'l2'), { ...entry, createdBy: 'stranger' }));
+    await assertFails(getDoc(doc(ctx('stranger'), 'secretaryLedger', 'l1')));
+  });
 });
 
 describe('görevler', () => {

@@ -123,6 +123,9 @@ export async function rebuildAccessMany(uids: Iterable<string>): Promise<{ ok: n
 export function hasPermission(access: Access | null, perm: string): boolean {
   if (!access) return false;
   if (access.superAdmin) return true;
+  // Eski kurulumlarda rol belgesi yeni izin kataloğundan önce oluşturulmuş olabilir.
+  // Genel Sekreterin deftere erişimi rol anahtarıyla geriye dönük uyumlu kalır.
+  if (perm === 'secretary.ledger.manage' && hasRoleKey(access, 'branch__genel-sekreter')) return true;
   const exp = access.perms?.[perm];
   return !!exp && exp.toMillis() > Date.now();
 }

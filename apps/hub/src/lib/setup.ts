@@ -44,6 +44,7 @@ export const DEFAULT_ROLES: Record<string, Role> = {
       'events.manageAll',
       'reports.read',
       'reports.approve',
+      'secretary.ledger.manage',
       'handover.manage',
       'audit.read',
     ],

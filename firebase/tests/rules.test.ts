@@ -29,8 +29,8 @@ let env: RulesTestEnvironment;
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-function ctx(uid: string, authAgoSec = 10): Firestore {
-  return env.authenticatedContext(uid, { auth_time: nowSec() - authAgoSec }).firestore() as unknown as Firestore;
+function ctx(uid: string, authAgoSec = 10, email = `${uid}@test.local`): Firestore {
+  return env.authenticatedContext(uid, { auth_time: nowSec() - authAgoSec, email }).firestore() as unknown as Firestore;
 }
 
 // Onay zinciri: 1) dilekçenin birimindeki komite başkanı, 2) kol geneli genel sekreter.
@@ -188,7 +188,7 @@ beforeEach(async () => {
 describe('kurulum', () => {
   it('sistemde kurulum yoksa ilk kullanıcı kurucu yönetici olur, ikincisi olamaz', async () => {
     await env.clearFirestore();
-    const first = ctx('u1');
+    const first = ctx('u1', 10, 'techopsieee@gmail.com');
     const b = writeBatch(first);
     b.set(doc(first, 'members', 'u1'), { uid: 'u1', status: 'active', createdAt: serverTimestamp() });
     b.set(doc(first, 'access', 'u1'), { superAdmin: true, perms: {}, roleKeys: {}, tokens: ['uid:u1'] });
@@ -200,6 +200,16 @@ describe('kurulum', () => {
     b2.set(doc(second, 'members', 'u2'), { uid: 'u2', status: 'active', createdAt: serverTimestamp() });
     b2.set(doc(second, 'access', 'u2'), { superAdmin: true, perms: {}, roleKeys: {}, tokens: ['uid:u2'] });
     await assertFails(b2.commit());
+  });
+
+  it('kurulum boş olsa bile izinli olmayan hesap kurucu olamaz', async () => {
+    await env.clearFirestore();
+    const stranger = ctx('outsider', 10, 'outsider@example.com');
+    const b = writeBatch(stranger);
+    b.set(doc(stranger, 'members', 'outsider'), { uid: 'outsider', status: 'active', createdAt: serverTimestamp() });
+    b.set(doc(stranger, 'access', 'outsider'), { superAdmin: true, perms: {}, roleKeys: {}, tokens: ['uid:outsider'] });
+    b.set(doc(stranger, 'system', 'bootstrap'), { uid: 'outsider', at: serverTimestamp() });
+    await assertFails(b.commit());
   });
 
   it('yeni kayıt yalnızca onay bekleyen olarak oluşturulabilir', async () => {
