@@ -48,6 +48,7 @@ async function seed() {
       setDoc(doc(db, 'members', uid), { uid, status, displayName: uid, createdAt: Timestamp.now() });
     await member('owner');
     await member('chair');
+    await member('vice');
     await member('secretary');
     await member('admin');
     await member('stranger');
@@ -64,11 +65,14 @@ async function seed() {
     await access('owner', {});
     await access('stranger', {});
     await access('chair', { roleKeys: { cs__chair: FAR }, tokens: ['uid:chair', 'role:cs__chair', 'unit:cs'] });
+    await access('vice', { roleKeys: { cs__vice: FAR }, tokens: ['uid:vice', 'role:cs__vice', 'unit:cs'] });
     await access('secretary', {
       roleKeys: { branch__secretary: FAR },
       tokens: ['uid:secretary', 'role:branch__secretary'],
     });
-    await access('admin', { perms: { 'org.manage': FAR, 'assignments.manage': FAR, 'audit.read': PAST } });
+    await access('admin', {
+      perms: { 'org.manage': FAR, 'assignments.manage': FAR, 'elections.manage': FAR, 'audit.read': PAST },
+    });
 
     await setDoc(doc(db, 'petitionTemplates', 'etk'), {
       name: 'Etkinlik İzin Dilekçesi',
@@ -116,6 +120,7 @@ function submitBatch(db: Firestore, opts: { seq?: number; steps?: unknown; code?
     verificationCode: code,
     revision: 1,
     approvals: [],
+    stepApprovalRoleIds: [],
     notes: [],
     submittedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -146,8 +151,15 @@ function decisionBatch(
   const approval = { ...a, at: Timestamp.now() };
   const approvals = [...prev.approvals, approval];
   const notes = withNote ? [...prev.notes, { approvalIndex: prev.approvals.length, text: 'gerekçe' }] : prev.notes;
+  const approveProgress = a.decision === 'approve'
+    ? petitionPatch.status === 'approved'
+      ? { stepApprovalRoleIds: [a.roleId] }
+      : petitionPatch.currentStep === a.step
+        ? { stepApprovalRoleIds: [a.roleId] }
+        : { stepApprovalRoleIds: [] }
+    : {};
   const b = writeBatch(db);
-  b.update(doc(db, 'petitions', 'p1'), { approvals, notes, updatedAt: serverTimestamp(), ...petitionPatch });
+  b.update(doc(db, 'petitions', 'p1'), { approvals, notes, updatedAt: serverTimestamp(), ...approveProgress, ...petitionPatch });
   b.update(doc(db, 'petitionVerifications', 'ABCDEFGHJKMN'), {
     status: petitionPatch.status,
     approvals,
@@ -243,6 +255,29 @@ describe('organizasyon ve yetki', () => {
   });
 });
 
+describe('seçim yaşam döngüsü', () => {
+  it('aşamalar atlanamaz; kesinleşen sonuç yalnızca görevlere uygulanabilir ve sonra değiştirilemez', async () => {
+    const db = ctx('admin');
+    const ref = doc(db, 'elections', 'e1');
+    await assertSucceeds(setDoc(ref, {
+      name: '2026 Olağan Seçimi',
+      status: 'draft',
+      positions: [],
+      createdBy: 'admin',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+
+    await assertFails(updateDoc(ref, { status: 'voting', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'nominations', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'voting', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'completed', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(ref, { name: 'Değiştirilmiş sonuç', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'applied', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(ref, { status: 'completed', updatedAt: serverTimestamp() }));
+  });
+});
+
 describe('dilekçe gönderimi', () => {
   it('sahibi sayaç ve doğrulama kaydıyla birlikte gönderir', async () => {
     await assertSucceeds(submitBatch(ctx('owner')).commit());
@@ -310,6 +345,31 @@ describe('onay akışı', () => {
       currentStep: 1,
     });
     await assertSucceeds(b.commit());
+  });
+
+  it('tüm makamlar kuralında farklı roller tamamlanmadan adım ilerlemez', async () => {
+    const multiStep = { ...STEPS[0], roleIds: ['chair', 'vice'], approvalMode: 'all' };
+    await env.withSecurityRulesDisabled(async (c) => {
+      await updateDoc(doc(c.firestore() as unknown as Firestore, 'petitions', 'p1'), { steps: [multiStep, STEPS[1]] });
+    });
+    await assertSucceeds(
+      decisionBatch(ctx('chair'), { approvals: [], notes: [] }, chairApproval, { status: 'pending', currentStep: 0 }).commit(),
+    );
+    let prev = { approvals: [] as unknown[], notes: [] as unknown[] };
+    await env.withSecurityRulesDisabled(async (c) => {
+      prev = (await getDoc(doc(c.firestore() as unknown as Firestore, 'petitions', 'p1'))).data() as typeof prev;
+    });
+    await assertFails(
+      decisionBatch(ctx('chair'), prev, chairApproval, { status: 'pending', currentStep: 1 }).commit(),
+    );
+    await assertSucceeds(
+      decisionBatch(
+        ctx('vice'),
+        prev,
+        { ...chairApproval, uid: 'vice', name: 'vice', roleId: 'vice', roleName: 'Başkan Yardımcısı' },
+        { status: 'pending', currentStep: 1 },
+      ).commit(),
+    );
   });
 
   it('yanlış rol onaylayamaz', async () => {
@@ -395,6 +455,7 @@ describe('onay akışı', () => {
     b.update(doc(db, 'petitions', 'p1'), {
       status: 'pending',
       currentStep: 0,
+      stepApprovalRoleIds: [],
       revision: 2,
       data: { konu: 'düzeltildi' },
       submittedAt: serverTimestamp(),

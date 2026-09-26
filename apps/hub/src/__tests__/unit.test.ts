@@ -2,13 +2,13 @@ import { Timestamp } from 'firebase/firestore';
 import PizZip from 'pizzip';
 import { describe, expect, it } from 'vitest';
 import { computeAccess } from '../lib/access';
-import { DEFAULT_BUILDER, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
+import { DEFAULT_BUILDER, appendVerificationStamp, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
 import { maskName, slugify } from '../lib/format';
 import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
 import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
 import { classifyPetitionFile } from '../lib/petitionCategories';
 import type { HubEvent } from '../lib/opsTypes';
-import { computeVisibleTo, formatDocumentNo, newVerificationCode } from '../lib/petitions';
+import { computeVisibleTo, formatDocumentNo, newVerificationCode, stepRequiredApprovals } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
 import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 import { validateTemplateContent } from '../lib/templates';
@@ -157,6 +157,13 @@ describe('erişim özeti', () => {
     ]);
     expect(v).toEqual(['uid:owner', 'unit:cs', 'role:cs__chair', 'role:cs__vice', 'role:branch__gs', 'role:techops__chair']);
   });
+
+  it('tek, tüm makamlar ve nisap için gerekli onay sayısını hesaplar', () => {
+    const base = { name: 'YK', roleIds: ['a', 'b', 'c', 'd'], unitMode: 'branch' as const, unitId: null };
+    expect(stepRequiredApprovals(base)).toBe(1);
+    expect(stepRequiredApprovals({ ...base, approvalMode: 'all' })).toBe(4);
+    expect(stepRequiredApprovals({ ...base, approvalMode: 'quorum', requiredApprovals: 3 })).toBe(3);
+  });
 });
 
 describe('Word şablon hattı', () => {
@@ -183,5 +190,18 @@ describe('Word şablon hattı', () => {
     expect(xml).toContain('Yapay Zekâ Günü');
     expect(xml).toContain('Ayşe Yılmaz');
     expect(xml).not.toContain('{etkinlik_adi}');
+
+    const stamped = await appendVerificationStamp(blob, {
+      url: 'https://hub.example/dogrula/ABCDEFGHJKMN',
+      code: 'ABCDEFGHJKMN',
+      documentNo: 'IEEEIKCU-2026-ETK-0001',
+      status: 'Onaylandı',
+      approved: true,
+    });
+    const stampedZip = new PizZip(await stamped.arrayBuffer());
+    expect(stampedZip.file('word/document.xml')!.asText()).toContain('ELEKTRONİK OLARAK ONAYLANMIŞTIR');
+    expect(stampedZip.file('word/document.xml')!.asText()).toContain('ABCDEFGHJKMN');
+    expect(stampedZip.file('word/_rels/document.xml.rels')!.asText()).toContain('hub-verification-1.png');
+    expect(stampedZip.file('word/media/hub-verification-1.png')).toBeTruthy();
   });
 });

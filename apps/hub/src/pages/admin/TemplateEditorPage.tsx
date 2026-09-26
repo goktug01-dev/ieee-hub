@@ -11,6 +11,7 @@ import {
   Group,
   Modal,
   MultiSelect,
+  NumberInput,
   SegmentedControl,
   Select,
   Stack,
@@ -281,7 +282,7 @@ export function TemplateEditorPage() {
     setDirty((d) => ({ ...d, steps: true }));
   };
   const addStep = () => {
-    setSteps((ss) => [...ss, { name: '', roleIds: [], unitMode: t.scope === 'unit' ? 'petition' : 'branch', unitId: null }]);
+    setSteps((ss) => [...ss, { name: '', roleIds: [], unitMode: t.scope === 'unit' ? 'petition' : 'branch', unitId: null, approvalMode: 'any', requiredApprovals: null }]);
     setDirty((d) => ({ ...d, steps: true }));
   };
 
@@ -560,8 +561,8 @@ export function TemplateEditorPage() {
         <Tabs.Panel value="onay">
           <Stack>
             <Text size="sm" c="dimmed">
-              Dilekçe bu adımlardan sırayla geçer. Her adımda seçilen rollerden <b>birini</b> taşıyan kişi karar verir. Dilekçe
-              sahibi kendi dilekçesini onaylayamaz.
+              Dilekçe adımlardan sırayla geçer. Bir adım tek makam, tüm makamlar veya belirlenen nisap tamamlanınca kapanabilir.
+              Aynı makam aynı adımda yalnızca bir kez onay verir; dilekçe sahibi kendi dilekçesini onaylayamaz.
             </Text>
             {steps.map((s, i) => (
               <Card key={i} padding="md">
@@ -589,10 +590,36 @@ export function TemplateEditorPage() {
                         description="Örn. Başkan ve Başkan Yardımcısı (ikame)"
                         data={rolesFor(s.unitMode)}
                         value={s.roleIds}
-                        onChange={(v) => setStep(i, { roleIds: v })}
+                        onChange={(v) => setStep(i, {
+                          roleIds: v,
+                          requiredApprovals: (s.approvalMode ?? 'any') === 'quorum'
+                            ? Math.max(1, Math.min(s.requiredApprovals ?? 1, v.length))
+                            : null,
+                        })}
                       />
                       {s.unitMode === 'fixed' && (
                         <Select label="Birim" data={unitOptions()} value={s.unitId} onChange={(v) => setStep(i, { unitId: v })} searchable />
+                      )}
+                    </Group>
+                    <Group grow wrap="wrap" align="flex-start">
+                      <Select
+                        label="Onay kuralı"
+                        data={[
+                          { value: 'any', label: 'Rollerden biri yeterli' },
+                          { value: 'all', label: 'Tüm makamlar onaylamalı' },
+                          { value: 'quorum', label: 'Belirli sayıda makam (nisap)' },
+                        ]}
+                        value={s.approvalMode ?? 'any'}
+                        onChange={(v) => setStep(i, { approvalMode: (v ?? 'any') as ApprovalStep['approvalMode'], requiredApprovals: v === 'quorum' ? Math.min(2, s.roleIds.length) : null })}
+                      />
+                      {(s.approvalMode ?? 'any') === 'quorum' && (
+                        <NumberInput
+                          label="Gerekli farklı makam sayısı"
+                          min={1}
+                          max={Math.max(1, s.roleIds.length)}
+                          value={s.requiredApprovals ?? Math.min(2, s.roleIds.length)}
+                          onChange={(v) => setStep(i, { requiredApprovals: Number(v) || 1 })}
+                        />
                       )}
                     </Group>
                   </Stack>

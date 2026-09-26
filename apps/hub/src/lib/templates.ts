@@ -86,6 +86,13 @@ export function validateSteps(steps: ApprovalStep[]): string[] {
     if (!s.name.trim()) errors.push(`${i + 1}. adımın adı boş.`);
     if (!s.roleIds.length) errors.push(`${i + 1}. adımda en az bir rol seçin.`);
     if (s.unitMode === 'fixed' && !s.unitId) errors.push(`${i + 1}. adım için birim seçin.`);
+    if (s.approvalMode === 'all' && s.roleIds.length < 2) errors.push(`${i + 1}. oybirliği adımında en az iki makam seçin.`);
+    if (
+      s.approvalMode === 'quorum' &&
+      (!Number.isInteger(s.requiredApprovals) || (s.requiredApprovals ?? 0) < 1 || (s.requiredApprovals ?? 0) > s.roleIds.length)
+    ) {
+      errors.push(`${i + 1}. adımın gerekli onay sayısı 1 ile seçilen makam sayısı arasında olmalı.`);
+    }
   });
   return errors;
 }

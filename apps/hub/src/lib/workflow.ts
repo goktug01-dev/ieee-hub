@@ -21,6 +21,14 @@ export function stepUnitId(step: ApprovalStep, petitionUnitId: string): string {
   return step.unitId ?? BRANCH;
 }
 
+export function stepRequiredApprovals(step: ApprovalStep): number {
+  if (step.approvalMode === 'all') return Math.max(1, step.roleIds.length);
+  if (step.approvalMode === 'quorum') {
+    return Math.max(1, Math.min(step.roleIds.length, Math.floor(step.requiredApprovals ?? 1)));
+  }
+  return 1;
+}
+
 /** Dilekçeyi kimlerin görebileceği: sahibi, birim okuyucuları ve zincirdeki tüm roller. */
 export function computeVisibleTo(ownerUid: string, unitId: string, steps: ApprovalStep[]): string[] {
   const set = new Set<string>([`uid:${ownerUid}`, `unit:${unitId}`]);

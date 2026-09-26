@@ -1,6 +1,6 @@
 # Uygulanan Mimari (Spark planı)
 
-Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı).
+Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı), [ADR-0024](../adr/0024-coklu-makam-onayi-ve-nisap.md) (çoklu makam/nisap), [ADR-0025](../adr/0025-secim-yasam-dongusu-ve-kesinlesmis-sonuc.md) (seçim yaşam döngüsü) ve [ADR-0026](../adr/0026-word-belgesine-qr-dogrulama-damgasi.md) (Word QR damgası).
 
 [Sistem mimarisi](sistem-mimarisi.md) ve [Firestore veri modeli](firestore-veri-modeli.md) dokümanları Blaze/Functions varsayımıyla yazılmıştır; hedef mimari olarak arşivde tutulur. Kod ile bu doküman çelişirse **kod esas alınır** ([dokümantasyon kuralları §2](../dokumantasyon-kurallari.md)).
 
@@ -39,7 +39,7 @@ flowchart LR
 | `roles/{id}` | Unvan, kapsam, izinler | Aktif üye | `org.manage` |
 | `terms/{id}` | Dönemler | Aktif üye | `org.manage` |
 | `assignments/{id}` | Kişi + rol + birim + dönem + süre | Aktif üye (şeffaflık) | `assignments.manage` |
-| `elections/{id}` | Seçim, pozisyonlar, adaylar, oylar, kazanan | Aktif üye | `elections.manage` |
+| `elections/{id}` | Seçim yaşam döngüsü; tür/yöntem, seçmen ve nisap, pozisyonlar, adaylar, oy sayımı, tutanak, kazanan | Aktif üye | `elections.manage`; kesinleşen sonuç kilitli |
 | `petitionTemplates/{id}` | Şablon, kapsam, seri, taslak içerik | Aktif üye | `templates.manage` |
 | `petitionTemplates/{id}/draftChunks/{i}` | Taslak .docx (base64 parça) | Aktif üye | `templates.manage` |
 | `petitionTemplates/{id}/versions/{v}` (+ `/chunks`) | Yayımlanmış sürüm: alanlar, onay zinciri, .docx | Aktif üye | `templates.manage`, yalnızca oluşturma (değiştirilemez) |
@@ -77,7 +77,7 @@ stateDiagram-v2
     returned --> withdrawn: Sahibi geri çeker
 ```
 
-Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğundadır ve `firebase/tests/rules.test.ts` ile test edilir.
+Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğundadır ve `firebase/tests/rules.test.ts` ile test edilir. Bir onay adımı “rollerden biri”, “tüm makamlar” veya “belirli sayıda makam” politikası kullanabilir. Aynı rol aynı adımda bir kez sayılır; nisap tamamlanmadan sonraki adıma geçilmez.
 
 ## 5. Word şablon hattı
 
@@ -86,8 +86,26 @@ Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğunda
 3. Onay zinciri tanımlanır → **Yayımla** → değiştirilemez sürüm.
 4. Üye şablonu seçer, formu doldurur; sağda belge canlı önizlenir.
 5. Gönderim/onay sonrası belge her açılışta şablon + veri + onaylardan yeniden üretilir; `.docx` indirilir veya tarayıcıdan PDF'e yazdırılır.
+6. Doğrulama kodu bulunan çıktının sonuna durum, evrak no, kod ve herkese açık doğrulama adresini taşıyan gömülü QR damgası eklenir.
 
-## 6. Ücretsiz kota bütçesi (Spark)
+## 6. Seçim durum makinesi
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft: Taslak
+    draft --> nominations: Adaylığı aç
+    nominations --> draft: Taslağa dön
+    nominations --> voting: Oylama / sayım
+    voting --> completed: Sonucu kesinleştir
+    completed --> applied: Görev atamalarına uygula
+    draft --> cancelled: İptal
+    nominations --> cancelled: İptal
+    voting --> cancelled: İptal
+```
+
+Kesinleştirme; seçmen/nisap, oy toplamları, kazananlar ve eşitlik çözüm notlarını kontrol eder. `completed` ve `applied` kayıtları değiştirilemez. Hub fiziksel gizli oy–açık sayım, açık oylama ve atama sonuçlarını kaydeder; Spark/istemci mimarisinde çevrim içi gizli oy toplamaz.
+
+## 7. Ücretsiz kota bütçesi (Spark)
 
 | Kaynak | Günlük kota | Tahmini kullanım (100 aktif üye) |
 |---|---|---|

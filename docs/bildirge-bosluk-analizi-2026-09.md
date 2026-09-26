@@ -12,8 +12,8 @@ Hub; organizasyon/RBAC, e-dilekçe, görev-proje, etkinlik, HeptaCert CSV aktar�
 
 | Alan | Hub durumu | Kalan doğrulama / boşluk |
 |---|---|---|
-| Organizasyon, rol, dönem, seçim | Uygulandı; arayüzden düzenleniyor | Gizli çevrim içi oylama kapsam dışı; seçim sonucu sisteme işlenir |
-| E-dilekçe ve onay | Uygulandı; Word şablonu, evrak no, rol bazlı onay, doğrulama | Koşullu onay adımı, kritik atamada dört-göz, Word içinde QR görseli |
+| Organizasyon, rol, dönem, seçim | Adaylık–oylama/sayım–kesinleştirme–göreve atama yaşam döngüsü; nisap, tutanak ve oy tutarlılığı kontrolleri uygulandı | Gerçek anonimlik sağlayan çevrim içi gizli oylama Spark/istemci mimarisinde kapsam dışı |
+| E-dilekçe ve onay | Word şablonu, evrak no, sıralı + tüm makamlar + nisaplı onay, doğrulama ve belge içine gömülü QR uygulandı | Koşullu onay adımı; kritik rol atamasında dört-göz |
 | Üye ve gönüllü | Başvuru, onay, atama, oryantasyon ve ayrılış uygulandı | Dönem sonu değerlendirme formu; saklama/silme talebi akışı |
 | Görev ve proje | Kanban, sorumlu, son tarih, yorum, dosya bağı ve raporlar uygulandı | Gerçek komite pilotu ve kullanım disiplininin YK tarafından kabulü |
 | Etkinlik | Öneri–onay–plan–kayıt–kapanış–arşiv akışı uygulandı | En az bir gerçek etkinlikle uçtan uca pilot |

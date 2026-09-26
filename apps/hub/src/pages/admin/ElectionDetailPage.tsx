@@ -36,6 +36,42 @@ import type { Election, ElectionPosition, Member } from '../../lib/types';
 import { BRANCH } from '../../lib/types';
 import { ELECTION_STATUS } from './ElectionsPage';
 
+const ELECTION_TYPES = [
+  { value: 'general_assembly', label: 'Olağan / olağanüstü genel kurul' },
+  { value: 'board', label: 'Yönetim kurulu içi seçim' },
+  { value: 'unit', label: 'Komite / birim seçimi' },
+  { value: 'by_election', label: 'Ara seçim' },
+];
+
+const VOTING_METHODS = [
+  { value: 'secret_ballot', label: 'Gizli oy, açık sayım (fiziksel)' },
+  { value: 'open_vote', label: 'Açık oylama' },
+  { value: 'appointment', label: 'Atama / oy kullanılmadı' },
+];
+
+function electionIssues(e: Election): string[] {
+  const issues: string[] = [];
+  if (!e.termId) issues.push('Dönem seçilmedi.');
+  if (!e.date) issues.push('Seçim tarihi girilmedi.');
+  if (!e.positions.length) issues.push('En az bir pozisyon eklenmeli.');
+  if (e.eligibleVoters != null && e.totalVotes != null && e.totalVotes > e.eligibleVoters) issues.push('Kullanılan oy, seçmen sayısından fazla.');
+  if (e.quorumRequired != null && e.totalVotes != null && e.totalVotes < e.quorumRequired) issues.push('Toplantı/seçim nisabı sağlanmadı.');
+  e.positions.forEach((p, index) => {
+    if (!p.candidates.length) issues.push(`${index + 1}. pozisyonda aday yok.`);
+    const counted = p.candidates.reduce((sum, c) => sum + c.votes, 0) + (p.blankVotes ?? 0) + (p.invalidVotes ?? 0);
+    if (e.votingMethod !== 'appointment' && e.totalVotes != null && counted !== e.totalVotes) {
+      issues.push(`${index + 1}. pozisyonda aday + boş + geçersiz oy toplamı ${counted}; kullanılan oy ${e.totalVotes}.`);
+    }
+    const sortedVotes = p.candidates.map((candidate) => candidate.votes).sort((a, b) => b - a);
+    if (p.winnerUid && sortedVotes.length > 1 && sortedVotes[0] === sortedVotes[1] && !p.tieBreakNote?.trim()) {
+      issues.push(`${index + 1}. pozisyonda eşitlik var; ikinci tur / kura / kurul kararı notu zorunlu.`);
+    }
+    if (['completed', 'applied'].includes(e.status) && !p.winnerUid) issues.push(`${index + 1}. pozisyonun kazananı belirlenmedi.`);
+    if (p.winnerUid && !p.candidates.some((c) => c.uid === p.winnerUid)) issues.push(`${index + 1}. pozisyonun kazananı aday listesinde değil.`);
+  });
+  return issues;
+}
+
 export function ElectionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -55,7 +91,9 @@ export function ElectionDetailPage() {
 
   if (loading || !draft) return loading ? <SectionLoader /> : <EmptyState title="Seçim bulunamadı" />;
 
-  const locked = draft.status === 'applied';
+  const locked = ['completed', 'applied', 'cancelled'].includes(draft.status);
+  const setupLocked = ['voting', 'completed', 'applied', 'cancelled'].includes(draft.status);
+  const issues = electionIssues(draft);
   const memberName = (uid: string) => members.data.find((m) => m.uid === uid)?.displayName ?? uid;
   const update = (patch: Partial<Election>) => {
     setDraft({ ...draft, ...patch });
@@ -70,7 +108,7 @@ export function ElectionDetailPage() {
     const unitId = role.scope === 'branch' ? BRANCH : newPos.unitId;
     if (!unitId) return;
     update({
-      positions: [...draft.positions, { key: `${Date.now()}`, roleId: role.id, unitId, candidates: [], winnerUid: null }],
+      positions: [...draft.positions, { key: `${Date.now()}`, roleId: role.id, unitId, candidates: [], winnerUid: null, blankVotes: 0, invalidVotes: 0, tieBreakNote: '' }],
     });
     setNewPos({ roleId: null, unitId: null });
   };
@@ -78,7 +116,10 @@ export function ElectionDetailPage() {
   const save = async () => {
     setBusy(true);
     try {
-      const { title, termId, date, description, positions, eligibleVoters, totalVotes, status } = draft;
+      const {
+        title, termId, date, description, positions, eligibleVoters, totalVotes, quorumRequired, status,
+        electionType, votingMethod, minutesUrl, decisionNo, electionChair, electionClerk, resultNote,
+      } = draft;
       await updateDoc(doc(db, 'elections', id!), {
         title,
         termId,
@@ -87,6 +128,14 @@ export function ElectionDetailPage() {
         positions,
         eligibleVoters: eligibleVoters ?? null,
         totalVotes: totalVotes ?? null,
+        quorumRequired: quorumRequired ?? null,
+        electionType: electionType ?? 'general_assembly',
+        votingMethod: votingMethod ?? 'secret_ballot',
+        minutesUrl: minutesUrl ?? '',
+        decisionNo: decisionNo ?? '',
+        electionChair: electionChair ?? '',
+        electionClerk: electionClerk ?? '',
+        resultNote: resultNote ?? '',
         status,
         updatedAt: serverTimestamp(),
       });
@@ -99,15 +148,18 @@ export function ElectionDetailPage() {
     }
   };
 
-  const autoWinners = () =>
-    update({
-      positions: draft.positions.map((p) => {
+  const autoWinners = () => {
+    const baseIssues = electionIssues({ ...draft, status: 'voting' });
+    if (baseIssues.length) return notifyError(new Error(baseIssues.join('\n')), 'Sonuçlar kesinleştirilemedi');
+    const positions = draft.positions.map((p) => {
         const sorted = [...p.candidates].sort((a, b) => b.votes - a.votes);
         const tie = sorted.length > 1 && sorted[0].votes === sorted[1].votes;
         return { ...p, winnerUid: sorted.length && !tie ? sorted[0].uid : p.winnerUid };
-      }),
-      status: 'completed',
     });
+    const unresolved = positions.filter((p) => !p.winnerUid);
+    update({ positions, status: unresolved.length ? 'voting' : 'completed' });
+    if (unresolved.length) notifyError(new Error('Eşit oy bulunan pozisyonlarda kazananı seçin, eşitlik çözüm notunu yazın ve yeniden kesinleştirin.'), 'Eşitlik var');
+  };
 
   const apply = () => {
     const winners = draft.positions.filter((p) => p.winnerUid);
@@ -207,10 +259,28 @@ export function ElectionDetailPage() {
         </Group>
       </Group>
 
-      {locked && (
+      {draft.status === 'applied' && (
         <Alert color="green" icon={<IconCheck size={18} />}>
           Bu seçimin sonuçları görev atamalarına işlendi. Değişiklik gerekiyorsa Görev atamaları ekranını kullanın.
         </Alert>
+      )}
+      {draft.status === 'cancelled' && <Alert color="red">Bu seçim iptal edildi; kayıt denetim izi için korunuyor.</Alert>}
+
+      {!locked && (
+        <Card>
+          <Group justify="space-between" wrap="wrap">
+            <div>
+              <Text fw={600}>Seçim aşaması</Text>
+              <Text size="sm" c="dimmed">Aday listesi oylama başlayınca, oy sayıları sonuç kesinleşince kilitlenir.</Text>
+            </div>
+            <Group gap="xs">
+              {draft.status === 'draft' && <Button variant="light" onClick={() => update({ status: 'nominations' })}>Adaylık sürecini aç</Button>}
+              {draft.status === 'nominations' && <Button color="orange" onClick={() => update({ status: 'voting' })} disabled={!draft.positions.length}>Adaylıkları kapat, oylamaya geç</Button>}
+              {draft.status === 'voting' && <Button color="blue" leftSection={<IconTrophy size={16} />} onClick={autoWinners}>Sayımı doğrula ve sonucu kesinleştir</Button>}
+              {['draft', 'nominations', 'voting'].includes(draft.status) && <Button variant="subtle" color="red" onClick={() => update({ status: 'cancelled' })}>İptal et</Button>}
+            </Group>
+          </Group>
+        </Card>
       )}
 
       <Card>
@@ -226,17 +296,37 @@ export function ElectionDetailPage() {
               disabled={locked}
             />
           </Group>
+          <Group grow wrap="wrap">
+            <Select label="Seçim türü" data={ELECTION_TYPES} value={draft.electionType ?? 'general_assembly'} onChange={(v) => update({ electionType: (v ?? 'general_assembly') as Election['electionType'] })} disabled={setupLocked} />
+            <Select label="Oylama yöntemi" data={VOTING_METHODS} value={draft.votingMethod ?? 'secret_ballot'} onChange={(v) => update({ votingMethod: (v ?? 'secret_ballot') as Election['votingMethod'] })} disabled={setupLocked} />
+          </Group>
           <Group grow>
             <NumberInput label="Oy kullanma hakkı olan" value={draft.eligibleVoters ?? ''} onChange={(v) => update({ eligibleVoters: v === '' ? null : Number(v) })} disabled={locked} min={0} />
             <NumberInput label="Kullanılan oy" value={draft.totalVotes ?? ''} onChange={(v) => update({ totalVotes: v === '' ? null : Number(v) })} disabled={locked} min={0} />
+            <NumberInput label="Gerekli nisap" value={draft.quorumRequired ?? ''} onChange={(v) => update({ quorumRequired: v === '' ? null : Number(v) })} disabled={locked} min={0} />
+          </Group>
+          <Group grow wrap="wrap">
+            <TextInput label="Divan / seçim kurulu başkanı" value={draft.electionChair ?? ''} onChange={(e) => update({ electionChair: e.currentTarget.value })} disabled={locked} />
+            <TextInput label="Katip / sayım sorumlusu" value={draft.electionClerk ?? ''} onChange={(e) => update({ electionClerk: e.currentTarget.value })} disabled={locked} />
+          </Group>
+          <Group grow wrap="wrap">
+            <TextInput label="Karar / tutanak numarası" value={draft.decisionNo ?? ''} onChange={(e) => update({ decisionNo: e.currentTarget.value })} disabled={locked} />
+            <TextInput label="İmzalı tutanak / Drive bağlantısı" value={draft.minutesUrl ?? ''} onChange={(e) => update({ minutesUrl: e.currentTarget.value })} disabled={locked} />
           </Group>
           <Textarea label="Açıklama / tutanak notu" autosize minRows={2} value={draft.description ?? ''} onChange={(e) => update({ description: e.currentTarget.value })} disabled={locked} />
+          <Textarea label="Sonuç ve eşitlik çözüm notu" autosize minRows={2} value={draft.resultNote ?? ''} onChange={(e) => update({ resultNote: e.currentTarget.value })} disabled={locked} />
         </Stack>
       </Card>
 
+      {issues.length > 0 && (
+        <Alert color="orange" title="Seçim kaydındaki kontroller">
+          {issues.map((issue) => <div key={issue}>{issue}</div>)}
+        </Alert>
+      )}
+
       <Group justify="space-between">
         <Title order={4}>Pozisyonlar ve adaylar</Title>
-        {!locked && draft.positions.length > 0 && (
+        {draft.status === 'voting' && draft.positions.length > 0 && (
           <Button variant="light" leftSection={<IconTrophy size={16} />} onClick={autoWinners}>
             En çok oy alanı kazanan yap
           </Button>
@@ -252,7 +342,7 @@ export function ElectionDetailPage() {
                 {unitName(p.unitId)}
               </Text>
             </div>
-            {!locked && (
+            {!setupLocked && (
               <ActionIcon variant="subtle" color="red" onClick={() => update({ positions: draft.positions.filter((x) => x.key !== p.key) })} aria-label="Pozisyonu kaldır">
                 <IconTrash size={16} />
               </ActionIcon>
@@ -270,7 +360,7 @@ export function ElectionDetailPage() {
                 winnerUid: uids.includes(p.winnerUid ?? '') ? p.winnerUid : null,
               })
             }
-            disabled={locked}
+            disabled={setupLocked}
             mb="sm"
           />
           {p.candidates.length > 0 && (
@@ -307,10 +397,19 @@ export function ElectionDetailPage() {
               </Table>
             </Radio.Group>
           )}
+          {p.candidates.length > 0 && draft.votingMethod !== 'appointment' && (
+            <Group grow mt="sm">
+              <NumberInput label="Boş oy" min={0} value={p.blankVotes ?? 0} disabled={locked} onChange={(v) => updatePos(p.key, { blankVotes: Number(v) || 0 })} />
+              <NumberInput label="Geçersiz oy" min={0} value={p.invalidVotes ?? 0} disabled={locked} onChange={(v) => updatePos(p.key, { invalidVotes: Number(v) || 0 })} />
+            </Group>
+          )}
+          {p.candidates.length > 1 && (
+            <TextInput mt="sm" label="Eşitlik / ikinci tur açıklaması" value={p.tieBreakNote ?? ''} disabled={locked} onChange={(e) => updatePos(p.key, { tieBreakNote: e.currentTarget.value })} />
+          )}
         </Card>
       ))}
 
-      {!locked && (
+      {!setupLocked && (
         <Card>
           <Text fw={600} mb="sm">
             Pozisyon ekle
@@ -334,7 +433,7 @@ export function ElectionDetailPage() {
         </Card>
       )}
 
-      {!locked && draft.positions.some((p) => p.winnerUid) && (
+      {draft.status === 'completed' && draft.positions.every((p) => p.winnerUid) && (
         <Card style={{ borderColor: 'var(--mantine-color-green-5)', borderWidth: 2 }}>
           <Stack>
             <Text fw={600}>Sonuçları görevlere işle</Text>

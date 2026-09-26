@@ -51,6 +51,7 @@ import {
   petitionFileName,
   renderPetitionDocx,
   resubmitPetition,
+  stepRequiredApprovals,
   stepUnitId,
   submitPetition,
   updateDraft,
@@ -349,7 +350,7 @@ function ApprovalTimeline({
     );
   }
 
-  const activeIdx = p.status === 'pending' ? (p.currentStep ?? 0) : current.length;
+  const activeIdx = p.status === 'pending' ? (p.currentStep ?? 0) : steps.length;
 
   return (
     <Card>
@@ -358,33 +359,38 @@ function ApprovalTimeline({
       </Text>
       <Timeline active={Math.max(0, activeIdx - (p.status === 'pending' ? 1 : 0))} bulletSize={24} lineWidth={2}>
         {steps.map((s, i) => {
-          const a = current.find((x) => x.step === i);
-          const idx = a ? allApprovals.indexOf(a) : -1;
-          const note = idx >= 0 ? noteFor(idx) : undefined;
+          const records = current.filter((x) => x.step === i);
+          const terminal = records.find((x) => x.decision !== 'approve');
+          const approved = records.filter((x) => x.decision === 'approve');
+          const required = stepRequiredApprovals(s);
           const isCurrent = p.status === 'pending' && (p.currentStep ?? 0) === i;
-          const color = a ? (a.decision === 'approve' ? 'green' : a.decision === 'reject' ? 'red' : 'orange') : isCurrent ? 'blue' : 'gray';
-          const icon = a ? (
-            a.decision === 'approve' ? <IconCheck size={14} /> : a.decision === 'reject' ? <IconX size={14} /> : <IconArrowBackUp size={14} />
+          const completed = approved.length >= required;
+          const color = terminal ? (terminal.decision === 'reject' ? 'red' : 'orange') : completed ? 'green' : isCurrent ? 'blue' : 'gray';
+          const icon = terminal ? (
+            terminal.decision === 'reject' ? <IconX size={14} /> : <IconArrowBackUp size={14} />
+          ) : completed ? (
+            <IconCheck size={14} />
           ) : (
             <IconCircleDashed size={14} />
           );
           return (
-            <Timeline.Item key={i} bullet={icon} color={color} title={s.name} lineVariant={a ? 'solid' : 'dashed'}>
-              {a ? (
-                <>
-                  <Text size="sm">
-                    <b>{a.name}</b> — {DECISION_LABEL[a.decision]}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {a.roleName}
-                    {a.unitId !== 'branch' ? ` · ${a.unitName}` : ''} · {fmtDateTime(a.at)}
-                  </Text>
-                  {note && (
-                    <Text size="sm" mt={4} p="xs" bg="var(--mantine-color-default-hover)" style={{ borderRadius: 8 }}>
-                      “{note}”
-                    </Text>
-                  )}
-                </>
+            <Timeline.Item key={i} bullet={icon} color={color} title={s.name} lineVariant={records.length ? 'solid' : 'dashed'}>
+              {records.length ? (
+                <Stack gap={6}>
+                  {records.map((a) => {
+                    const note = noteFor(allApprovals.indexOf(a));
+                    return (
+                      <div key={`${a.uid}-${a.roleId}-${a.at.toMillis?.() ?? ''}`}>
+                        <Text size="sm"><b>{a.name}</b> — {DECISION_LABEL[a.decision]}</Text>
+                        <Text size="xs" c="dimmed">
+                          {a.roleName}{a.unitId !== 'branch' ? ` · ${a.unitName}` : ''} · {fmtDateTime(a.at)}
+                        </Text>
+                        {note && <Text size="sm" mt={4} p="xs" bg="var(--mantine-color-default-hover)" style={{ borderRadius: 8 }}>“{note}”</Text>}
+                      </div>
+                    );
+                  })}
+                  {isCurrent && !terminal && <Badge size="xs" variant="light">{approved.length}/{required} makam onayı</Badge>}
+                </Stack>
               ) : (
                 <Text size="xs" c="dimmed">
                   {s.roleIds.map(roleName).join(' / ')} · {unitName(stepUnitId(s, p.unitId))}
@@ -442,6 +448,8 @@ function DecisionPanel({
   const pwResolver = useRef<((v: string | null) => void) | null>(null);
   const step = p.steps![p.currentStep ?? 0];
   const stepUnit = stepUnitId(step, p.unitId);
+  const required = stepRequiredApprovals(step);
+  const approvedCount = p.stepApprovalRoleIds?.length ?? 0;
 
   const askPassword = () =>
     new Promise<string | null>((resolve) => {
@@ -488,6 +496,7 @@ function DecisionPanel({
           <Text size="sm" c="dimmed">
             Adım: {step.name} · {unitName(stepUnit)}
           </Text>
+          {required > 1 && <Badge mt={6} variant="light">{approvedCount}/{required} farklı makam onayladı</Badge>}
         </div>
         {roleOptions.length > 1 && (
           <Radio.Group label="Hangi rolünüzle karar veriyorsunuz?" value={roleId} onChange={setRoleId}>

@@ -100,9 +100,14 @@ export interface ElectionPosition {
   unitId: string;
   candidates: ElectionCandidate[];
   winnerUid: string | null;
+  blankVotes?: number;
+  invalidVotes?: number;
+  tieBreakNote?: string;
 }
 
-export type ElectionStatus = 'draft' | 'completed' | 'applied';
+export type ElectionStatus = 'draft' | 'nominations' | 'voting' | 'completed' | 'applied' | 'cancelled';
+export type ElectionType = 'general_assembly' | 'board' | 'unit' | 'by_election';
+export type VotingMethod = 'secret_ballot' | 'open_vote' | 'appointment';
 
 export interface Election {
   title: string;
@@ -110,9 +115,17 @@ export interface Election {
   date: Timestamp | null;
   description?: string;
   status: ElectionStatus;
+  electionType?: ElectionType;
+  votingMethod?: VotingMethod;
   positions: ElectionPosition[];
   eligibleVoters?: number | null;
   totalVotes?: number | null;
+  quorumRequired?: number | null;
+  minutesUrl?: string;
+  decisionNo?: string;
+  electionChair?: string;
+  electionClerk?: string;
+  resultNote?: string;
   createdBy: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -135,12 +148,16 @@ export interface TemplateField {
 }
 
 export type StepUnitMode = 'petition' | 'branch' | 'fixed';
+export type ApprovalMode = 'any' | 'all' | 'quorum';
 
 export interface ApprovalStep {
   name: string;
   roleIds: string[];
   unitMode: StepUnitMode;
   unitId: string | null;
+  /** any: rollerden biri; all: her makam; quorum: requiredApprovals kadar farklı makam. */
+  approvalMode?: ApprovalMode;
+  requiredApprovals?: number | null;
 }
 
 export interface BuilderSpec {
@@ -237,6 +254,8 @@ export interface Petition {
   verificationCode?: string;
   revision?: number;
   approvals?: ApprovalRecord[];
+  /** Yalnızca etkin adımda onay vermiş farklı makamlar; adım ilerleyince sıfırlanır. */
+  stepApprovalRoleIds?: string[];
   notes?: PetitionNote[];
   submittedAt?: Timestamp;
   completedAt?: Timestamp;

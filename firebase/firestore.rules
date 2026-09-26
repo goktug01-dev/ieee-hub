@@ -242,7 +242,28 @@ service cloud.firestore {
 
     match /elections/{id} {
       allow read: if isActive();
-      allow write: if hasPerm('elections.manage');
+      allow create: if hasPerm('elections.manage')
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.status == 'draft'
+        && request.resource.data.positions is list;
+      allow update: if hasPerm('elections.manage')
+        && resource.data.status != 'applied'
+        && resource.data.status != 'cancelled'
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.positions is list
+        && (
+             (request.resource.data.status == resource.data.status
+               && resource.data.status in ['draft', 'nominations', 'voting'])
+          || (resource.data.status == 'draft' && request.resource.data.status in ['nominations', 'cancelled'])
+          || (resource.data.status == 'nominations' && request.resource.data.status in ['draft', 'voting', 'cancelled'])
+          || (resource.data.status == 'voting' && request.resource.data.status in ['completed', 'cancelled'])
+          || (resource.data.status == 'completed' && request.resource.data.status == 'applied')
+        );
+      allow delete: if hasPerm('elections.manage') && resource.data.status in ['draft', 'cancelled'];
     }
 
     // ---------- Denetim kaydı (yalnızca ekleme) ----------
@@ -347,6 +368,11 @@ service cloud.firestore {
           : (step.unitMode == 'branch' ? 'branch' : step.unitId);
       }
 
+      function requiredApprovals(step) {
+        return step.get('approvalMode', 'any') == 'all' ? step.roleIds.size()
+          : (step.get('approvalMode', 'any') == 'quorum' ? step.get('requiredApprovals', 1) : 1);
+      }
+
       // --- Taslak ---
 
       function draftKeys() {
@@ -402,10 +428,11 @@ service cloud.firestore {
           && existsAfter(docPath('petitionVerifications', np().verificationCode))
           && np().revision == 1
           && np().approvals == []
+          && np().stepApprovalRoleIds == []
           && np().notes == []
           && commonSubmit()
           && onlyKeys(['status', 'steps', 'currentStep', 'counterId', 'documentSeq', 'documentNo',
-                       'verificationCode', 'revision', 'approvals', 'notes', 'submittedAt', 'updatedAt',
+                       'verificationCode', 'revision', 'approvals', 'stepApprovalRoleIds', 'notes', 'submittedAt', 'updatedAt',
                        'visibleTo', 'data', 'title', 'unitId', 'unitName', 'templateVersion', 'templateName']);
       }
 
@@ -416,8 +443,9 @@ service cloud.firestore {
           && np().revision == p().revision + 1
           && np().templateVersion == p().templateVersion
           && np().unitId == p().unitId
+          && np().stepApprovalRoleIds == []
           && commonSubmit()
-          && onlyKeys(['status', 'currentStep', 'revision', 'submittedAt', 'updatedAt', 'data', 'title', 'visibleTo']);
+          && onlyKeys(['status', 'currentStep', 'stepApprovalRoleIds', 'revision', 'submittedAt', 'updatedAt', 'data', 'title', 'visibleTo']);
       }
 
       // --- Onay / ret / iade ---
@@ -428,6 +456,13 @@ service cloud.firestore {
         let step = p().steps[p().currentStep];
         let unitKey = stepUnit(step);
         let isLast = p().currentStep == p().steps.size() - 1;
+        let oldRoles = p().get('stepApprovalRoleIds', []);
+        let newRoles = np().get('stepApprovalRoleIds', []);
+        let completesStep = oldRoles.size() + 1 >= requiredApprovals(step);
+        let appendsRole = !(a.roleId in oldRoles)
+          && newRoles.size() == oldRoles.size() + 1
+          && (oldRoles.size() == 0 || newRoles[0:oldRoles.size()] == oldRoles)
+          && newRoles[oldRoles.size()] == a.roleId;
         return p().status == 'pending'
           && p().ownerUid != me()
           && recentAuth()
@@ -443,6 +478,7 @@ service cloud.firestore {
           && a.revision == p().revision
           && a.unitId == unitKey
           && a.roleId in step.roleIds
+          && !(a.roleId in oldRoles)
           && hasRoleKey(unitKey + '__' + a.roleId)
           && np().updatedAt == request.time
           && (np().notes.size() == p().notes.size()
@@ -450,12 +486,18 @@ service cloud.firestore {
                   && (p().notes.size() == 0 || np().notes[0:p().notes.size()] == p().notes)
                   && np().notes[p().notes.size()].approvalIndex == n))
           && (
-               (a.decision == 'approve' && !isLast
+               (a.decision == 'approve' && !completesStep
+                  && appendsRole
+                  && np().status == 'pending' && np().currentStep == p().currentStep
+                  && onlyKeys(['approvals', 'notes', 'status', 'stepApprovalRoleIds', 'updatedAt']))
+            || (a.decision == 'approve' && completesStep && !isLast
+                  && np().stepApprovalRoleIds == []
                   && np().status == 'pending' && np().currentStep == p().currentStep + 1
-                  && onlyKeys(['approvals', 'notes', 'status', 'currentStep', 'updatedAt']))
-            || (a.decision == 'approve' && isLast
+                  && onlyKeys(['approvals', 'notes', 'status', 'currentStep', 'stepApprovalRoleIds', 'updatedAt']))
+            || (a.decision == 'approve' && completesStep && isLast
+                  && appendsRole
                   && np().status == 'approved' && np().completedAt == request.time
-                  && onlyKeys(['approvals', 'notes', 'status', 'completedAt', 'updatedAt']))
+                  && onlyKeys(['approvals', 'notes', 'status', 'stepApprovalRoleIds', 'completedAt', 'updatedAt']))
             || (a.decision == 'reject'
                   && np().status == 'rejected' && np().completedAt == request.time
                   && np().notes.size() == p().notes.size() + 1
