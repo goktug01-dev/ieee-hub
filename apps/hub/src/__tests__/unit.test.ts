@@ -7,11 +7,15 @@ import { maskName, slugify } from '../lib/format';
 import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
 import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
 import { classifyPetitionFile } from '../lib/petitionCategories';
-import type { HubEvent } from '../lib/opsTypes';
+import type { HubEvent, Meeting } from '../lib/opsTypes';
+import { buildMeetingMinutes } from '../lib/meetingDocx';
+import { parseExternalData, stringifyExternalData } from '../lib/externalFirebase';
 import { computeVisibleTo, formatDocumentNo, newVerificationCode, stepRequiredApprovals } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
 import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 import { validateTemplateContent } from '../lib/templates';
+import { validateStatuteFile } from '../lib/statutes';
+import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall } from '../lib/recruitment';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -36,6 +40,35 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('tüzük dosyası', () => {
+  it('PDF ve Word kabul eder; farklı türü ve 4 MB üstünü reddeder', () => {
+    expect(validateStatuteFile({ name: 'tuzuk.pdf', type: 'application/pdf', size: 1024 })).toBeNull();
+    expect(validateStatuteFile({ name: 'tuzuk.docx', type: '', size: 1024 })).toBeNull();
+    expect(validateStatuteFile({ name: 'tuzuk.txt', type: 'text/plain', size: 10 })).toContain('PDF');
+    expect(validateStatuteFile({ name: 'buyuk.pdf', type: 'application/pdf', size: 5 * 1024 * 1024 })).toContain('4 MB');
+  });
+});
+
+describe('başvuru ilanı yardımcıları', () => {
+  const call = {
+    unitId: 'cs', unitName: 'Computer Society', title: 'Güz ekip alımı', roleTitle: 'Gönüllü',
+    summary: 'Teknik etkinliklerde birlikte çalışacak ekip arkadaşları arıyoruz.', description: '', expectations: '',
+    capacity: 5, opensAt: ts('2026-09-01'), closesAt: ts('2026-10-01'), questions: [],
+  };
+
+  it('ilan tarihini ve tekil başvuru kimliğini belirler', () => {
+    expect(recruitmentCallIsOpen({ ...call, status: 'open' }, new Date('2026-09-15').getTime())).toBe(true);
+    expect(recruitmentCallIsOpen({ ...call, status: 'closed' }, new Date('2026-09-15').getTime())).toBe(false);
+    expect(applicationDocumentId('ilan-1', 'uye-1')).toBe('ilan-1__uye-1');
+  });
+
+  it('hatalı tarih ve seçeneksiz özel soruyu reddeder', () => {
+    expect(validateRecruitmentCall({ ...call, opensAt: call.closesAt, closesAt: call.opensAt })).toContain('bitişi');
+    expect(validateRecruitmentCall({ ...call, questions: [{ id: 'q1', label: 'Alan', type: 'choice', required: true, options: ['Tek'] }] })).toContain('iki seçenek');
+    expect(validateRecruitmentCall(call)).toBeNull();
   });
 });
 
@@ -203,5 +236,30 @@ describe('Word şablon hattı', () => {
     expect(stampedZip.file('word/document.xml')!.asText()).toContain('ABCDEFGHJKMN');
     expect(stampedZip.file('word/_rels/document.xml.rels')!.asText()).toContain('hub-verification-1.png');
     expect(stampedZip.file('word/media/hub-verification-1.png')).toBeTruthy();
+  });
+});
+
+describe('toplantı tutanağı ve harici veri', () => {
+  it('yapılandırılmış toplantıyı Word tutanağına dönüştürür', async () => {
+    const meeting: Meeting = {
+      unitId: 'cs', unitName: 'Computer Society', title: 'Aylık toplantı', meetingNo: 'CS-2026-04',
+      date: '2026-09-27', startTime: '19:00', endTime: '20:00', location: 'B-201', chairName: 'Ayşe', recorderName: 'Can',
+      attendeeUids: ['u1'], attendeeNames: ['Zeynep Kaya'], guestAttendees: '',
+      agenda: [{ id: 'a1', title: 'Etkinlik planı', notes: 'Salon ve konuşmacı görüşüldü.' }],
+      decisions: [{ id: 'd1', number: 'CS-04/1', text: 'Salon başvurusu yapılacak.', vote: 'Oy birliği', responsible: 'Can', dueDate: '2026-10-01' }],
+      generalNotes: '', nextMeetingDate: null, status: 'final', createdBy: 'u1', createdByName: 'Zeynep', createdAt: ts('2026-09-27'), updatedAt: ts('2026-09-27'),
+    };
+    const zip = new PizZip(await (await buildMeetingMinutes(meeting)).arrayBuffer());
+    const xml = zip.file('word/document.xml')!.asText();
+    expect(xml).toContain('TOPLANTI TUTANAĞI');
+    expect(xml).toContain('Salon başvurusu yapılacak.');
+    expect(xml).toContain('kesinleştirilmiştir');
+  });
+
+  it('Firestore zaman işaretlerini JSON düzenlemede türünü koruyarak taşır', () => {
+    const original = { name: 'Üye', updatedAt: ts('2026-09-27T12:00:00Z') };
+    const parsed = parseExternalData(stringifyExternalData(original));
+    expect(parsed.updatedAt).toBeInstanceOf(Timestamp);
+    expect((parsed.updatedAt as Timestamp).toDate().toISOString()).toBe('2026-09-27T12:00:00.000Z');
   });
 });

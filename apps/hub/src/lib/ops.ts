@@ -277,6 +277,21 @@ export async function decideVolunteer(
   });
   if (!accept) return { orientationTasks: 0 };
 
+  return onboardVolunteer(app, unitShortCode, `volunteerApplications/${app.id}`, 'Gönüllü başvurusu kabulü');
+}
+
+/**
+ * Kabul edilen bir adayı güvenli gönüllü rolüne bağlar ve standart oryantasyon
+ * görevlerini açar. Hem sürekli gönüllülük hem tarihli ilan akışı bunu kullanır.
+ */
+export async function onboardVolunteer(
+  app: Pick<VolunteerApplication, 'uid' | 'name' | 'unitId' | 'unitName'>,
+  unitShortCode: string,
+  auditTarget: string,
+  sourceNote: string,
+): Promise<{ orientationTasks: number }> {
+  const who = me();
+
   const settings = await orgSettings();
   const roleId = settings.volunteerRoleId;
   const roleSnap = await getDoc(doc(db, 'roles', roleId));
@@ -301,7 +316,7 @@ export async function decideVolunteer(
     status: 'active',
     source: 'volunteer',
     electionId: null,
-    note: 'Gönüllü başvurusu kabulü',
+    note: sourceNote,
     createdBy: who.uid,
     createdAt: serverTimestamp(),
     endedAt: null,
@@ -362,7 +377,7 @@ export async function decideVolunteer(
     );
     n++;
   }
-  await logAudit('volunteer.accept', `volunteerApplications/${app.id}`, { name: app.name, unit: app.unitName });
+  await logAudit('volunteer.accept', auditTarget, { name: app.name, unit: app.unitName, source: sourceNote });
   return { orientationTasks: n };
 }
 

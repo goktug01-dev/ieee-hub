@@ -18,12 +18,12 @@ mkdirSync(OUT, { recursive: true });
 const ROUTES = {
   baskan: [
     '/', '/onaylar', '/gorevler', '/gorevler?sekme=pano', '/gorevler?sekme=projeler', '/dilekceler', '/dilekceler/yeni',
-    '/etkinlikler', '/iletisim', '/sponsorluk', '/butceler', '/raporlar', '/organizasyon', '/gonulluluk', '/devir', '/yardim', '/profil',
+    '/etkinlikler', '/toplantilar', '/iletisim', '/sponsorluk', '/demirbas', '/butceler', '/raporlar', '/organizasyon', '/tuzuk', '/gonulluluk', '/basvuru-yonetimi', '/devir', '/yardim', '/profil',
     '/birimler/cs', '/sekreterlik-defteri',
     '/yonetim/uyeler', '/yonetim/atamalar', '/yonetim/secimler', '/yonetim/birimler', '/yonetim/roller', '/yonetim/donemler',
-    '/yonetim/sablonlar', '/yonetim/sablonlar/etkinlik-izin', '/yonetim/envanter', '/yonetim/ayarlar', '/yonetim/denetim',
+    '/yonetim/sablonlar', '/yonetim/sablonlar/etkinlik-izin', '/yonetim/envanter', '/yonetim/harici-firebase', '/yonetim/ayarlar', '/yonetim/denetim',
   ],
-  cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/etkinlikler?birim=cs', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
+  cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/basvuru-yonetimi', '/etkinlikler?birim=cs', '/toplantilar', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
   uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/sponsorluk', '/iletisim'],
   gonullu: ['/', '/gorevler', '/gonulluluk', '/sponsorluk'],
   yeni: ['/'],
@@ -52,6 +52,19 @@ const problems = [];
 let pages = 0;
 
 try {
+  const publicCtx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'tr-TR' });
+  const publicPage = await publicCtx.newPage();
+  await publicPage.goto(BASE + '/tuzuk');
+  await publicPage.getByRole('heading', { name: 'Tüzük', exact: true }).waitFor({ timeout: 30000 });
+  await publicPage.getByText('Henüz tüzük yayımlanmadı').waitFor({ timeout: 15000 });
+  await publicPage.screenshot({ path: OUT + 'public_tuzuk.png', fullPage: false });
+  pages++;
+  await publicPage.goto(BASE + '/kariyer');
+  await publicPage.getByRole('heading', { name: 'Açık pozisyonlar' }).waitFor({ timeout: 15000 });
+  await publicPage.screenshot({ path: OUT + 'public_kariyer.png', fullPage: false });
+  pages++;
+  await publicCtx.close();
+
   for (const [account, routes] of Object.entries(ROUTES)) {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'tr-TR' });
     const page = await ctx.newPage();
@@ -70,6 +83,7 @@ try {
       errors.length = 0;
       await page.goto(BASE + r);
       await page.waitForTimeout(1500);
+      if (r === '/yonetim/harici-firebase') await page.getByText('Harici Firebase sistemleri').waitFor({ timeout: 15000 });
       const crashed = await page.getByText(/Something went wrong|Unexpected Application Error/).count();
       const file = `${account}${r.replace(/[/?=]/g, '_') || '_'}.png`;
       await page.screenshot({ path: OUT + file, fullPage: false });
@@ -79,6 +93,29 @@ try {
     }
 
     if (account === 'baskan') {
+      errors.length = 0;
+      await page.goto(BASE + '/demirbas');
+      await page.getByRole('button', { name: 'Demirbaş ekle' }).click();
+      await page.getByLabel('Varlık adı').fill('Duman testi tripodu');
+      await page.getByLabel('Kategori').fill('Etkinlik ekipmanı');
+      await page.getByLabel('Fiziksel konum').fill('Kulüp odası');
+      await page.getByRole('button', { name: 'Kaydet' }).click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 15000 });
+      await page.getByText('Duman testi tripodu', { exact: true }).waitFor({ timeout: 15000 });
+      await page.screenshot({ path: OUT + 'baskan_demirbas_kayitli.png', fullPage: false });
+      pages++;
+      if (errors.length) problems.push({ account, route: '/demirbas (kayıt)', crashed: false, errors: [...errors] });
+
+      errors.length = 0;
+      await page.goto(BASE + '/toplantilar');
+      await page.getByLabel('Yeni toplantı').fill('Duman testi toplantısı');
+      await page.getByRole('button', { name: 'Oluştur' }).click();
+      await page.waitForURL(/\/toplantilar\/[A-Za-z0-9_-]+$/, { timeout: 15000 });
+      await page.getByRole('heading', { name: 'Duman testi toplantısı' }).waitFor();
+      await page.screenshot({ path: OUT + 'baskan_toplanti_detay.png', fullPage: false });
+      pages++;
+      if (errors.length) problems.push({ account, route: '/toplantilar/:id', crashed: false, errors: [...errors] });
+
       errors.length = 0;
       await page.goto(BASE + '/etkinlikler');
       await page.waitForTimeout(1500);

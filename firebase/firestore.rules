@@ -76,6 +76,79 @@ service cloud.firestore {
       return hasUnitPerm(u, 'unit.manage');
     }
 
+    function meetingManager(u) {
+      return unitManager(u)
+        || hasUnitPerm(u, 'unit.meetings.manage')
+        || hasPerm('work.manageAll')
+        || hasPerm('secretary.ledger.manage');
+    }
+
+    function statuteManager() {
+      return hasPerm('org.manage') || hasPerm('secretary.ledger.manage');
+    }
+
+    function validStatute(d) {
+      return d.keys().hasOnly([
+          'versionId', 'title', 'versionLabel', 'summary', 'fileName', 'mimeType',
+          'size', 'sha256', 'chunkCount', 'publishedAt', 'publishedByName'
+        ])
+        && d.versionId is string && d.versionId.size() > 0
+        && d.title is string && d.title.size() > 0
+        && d.versionLabel is string && d.versionLabel.size() > 0
+        && d.summary is string
+        && d.fileName is string && d.fileName.size() > 0
+        && d.mimeType in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        && d.size is int && d.size > 0 && d.size <= 4 * 1024 * 1024
+        && d.sha256 is string && d.sha256.size() == 64
+        && d.chunkCount is int && d.chunkCount > 0 && d.chunkCount <= 8
+        && d.publishedAt is timestamp
+        && d.publishedByName is string && d.publishedByName.size() > 0;
+    }
+
+    function assetReader() {
+      return hasPerm('inventory.manage')
+        || hasPerm('finance.read')
+        || hasPerm('finance.manage')
+        || hasPerm('secretary.ledger.manage')
+        || hasPerm('work.manageAll');
+    }
+
+    function assetManager() {
+      return hasPerm('inventory.manage')
+        || hasPerm('finance.manage')
+        || hasPerm('secretary.ledger.manage');
+    }
+
+    function validAsset(d) {
+      return d.keys().hasOnly([
+          'code', 'name', 'category', 'description', 'serialNo', 'unitId', 'unitName', 'location',
+          'status', 'condition', 'custodianUid', 'custodianName', 'purchaseDate', 'purchaseValue',
+          'warrantyEndDate', 'notes', 'lastMovementId', 'createdBy', 'createdByName', 'createdAt',
+          'updatedBy', 'updatedByName', 'updatedAt'
+        ])
+        && d.code is string && d.code.size() > 0
+        && d.name is string && d.name.size() > 0
+        && d.category is string && d.description is string && d.serialNo is string
+        && d.unitId is string && d.unitName is string && d.location is string
+        && d.status in ['available', 'assigned', 'maintenance', 'lost', 'retired']
+        && d.condition in ['good', 'needs_service', 'damaged']
+        && (d.custodianUid == null || d.custodianUid is string)
+        && d.custodianName is string
+        && (d.purchaseDate == null || d.purchaseDate is string)
+        && (d.purchaseValue == null || d.purchaseValue is number)
+        && (d.warrantyEndDate == null || d.warrantyEndDate is string)
+        && d.notes is string
+        && d.lastMovementId is string && d.lastMovementId.size() > 0;
+    }
+
+    function matchingAssetMovement(id, d) {
+      return existsAfter(/databases/$(database)/documents/assetMovements/$(d.lastMovementId))
+        && getAfter(/databases/$(database)/documents/assetMovements/$(d.lastMovementId)).data.assetId == id
+        && getAfter(/databases/$(database)/documents/assetMovements/$(d.lastMovementId)).data.assetCode == d.code
+        && getAfter(/databases/$(database)/documents/assetMovements/$(d.lastMovementId)).data.assetName == d.name
+        && getAfter(/databases/$(database)/documents/assetMovements/$(d.lastMovementId)).data.at == request.time;
+    }
+
     function isMember(u) {
       return hasAccessDoc() && u in acc().get('memberOf', {}) && acc().memberOf[u] > request.time;
     }
@@ -130,6 +203,37 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if isActive();
       allow write: if hasPerm('org.manage');
+    }
+
+    // ---------- Herkese açık tüzük ve değiştirilemez sürüm arşivi ----------
+
+    match /statutes/current {
+      allow read: if true;
+      allow create, update: if statuteManager()
+        && validStatute(request.resource.data)
+        && request.resource.data == getAfter(/databases/$(database)/documents/statuteVersions/$(request.resource.data.versionId)).data;
+      allow delete: if false;
+    }
+
+    match /statuteVersions/{versionId} {
+      allow read: if true;
+      allow create: if statuteManager()
+        && request.resource.data.versionId == versionId
+        && request.resource.data.publishedAt == request.time
+        && validStatute(request.resource.data);
+      allow update, delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow create: if statuteManager()
+          && request.resource.data.keys().hasOnly(['index', 'data'])
+          && request.resource.data.index is int && request.resource.data.index >= 0
+          && request.resource.data.data is string && request.resource.data.data.size() > 0
+          && request.resource.data.data.size() <= 700000
+          && existsAfter(/databases/$(database)/documents/statuteVersions/$(versionId))
+          && getAfter(/databases/$(database)/documents/statuteVersions/$(versionId)).data.publishedAt == request.time;
+        allow update, delete: if false;
+      }
     }
 
     // ---------- Üyeler ----------
@@ -589,6 +693,109 @@ service cloud.firestore {
       allow delete: if isActive() && resource.data.uid == me() && resource.data.status == 'pending';
     }
 
+    // ---------- Tarihli komite / YK başvuru ilanları ----------
+
+    function recruitmentManager(u) {
+      return unitManager(u) || hasPerm('assignments.manage');
+    }
+
+    function validRecruitmentCall(d) {
+      return d.keys().hasOnly([
+          'unitId', 'unitName', 'title', 'roleTitle', 'summary', 'description',
+          'expectations', 'capacity', 'status', 'opensAt', 'closesAt', 'questions',
+          'createdBy', 'createdByName', 'createdAt', 'updatedAt'
+        ])
+        && d.unitId is string && d.unitId.size() > 0
+        && d.unitName is string && d.unitName.size() > 0
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 120
+        && d.roleTitle is string && d.roleTitle.size() > 0 && d.roleTitle.size() <= 120
+        && d.summary is string && d.summary.size() > 0 && d.summary.size() <= 500
+        && d.description is string && d.description.size() <= 5000
+        && d.expectations is string && d.expectations.size() <= 3000
+        && (d.capacity == null || (d.capacity is int && d.capacity > 0 && d.capacity <= 500))
+        && d.status in ['draft', 'open', 'closed', 'archived']
+        && d.opensAt is timestamp && d.closesAt is timestamp && d.opensAt < d.closesAt
+        && d.questions is list && d.questions.size() <= 10
+        && d.createdBy is string && d.createdByName is string
+        && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+
+    match /recruitmentCalls/{id} {
+      // Açık ilan içeriği aday vitrininin bilinçli olarak herkese açık bölümüdür.
+      allow read: if resource.data.status == 'open' || recruitmentManager(resource.data.unitId);
+      allow create: if recruitmentManager(request.resource.data.unitId)
+        && validRecruitmentCall(request.resource.data)
+        && request.resource.data.status == 'draft'
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if recruitmentManager(resource.data.unitId)
+        && recruitmentManager(request.resource.data.unitId)
+        && request.resource.data.unitId == resource.data.unitId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && validRecruitmentCall(request.resource.data);
+      allow delete: if false;
+    }
+
+    function recruitmentCallForApplication() {
+      return get(docPath('recruitmentCalls', request.resource.data.callId)).data;
+    }
+
+    function validRecruitmentApplication(d) {
+      return d.keys().hasOnly([
+          'callId', 'callTitle', 'unitId', 'unitName', 'uid', 'name', 'email',
+          'phone', 'department', 'studentNo', 'ieeeMemberNo', 'motivation',
+          'availability', 'answers', 'privacyConsent', 'status', 'submittedAt', 'updatedAt'
+        ])
+        && d.callId is string && d.callId.size() > 0
+        && d.callTitle is string && d.callTitle.size() > 0
+        && d.unitId is string && d.unitId.size() > 0
+        && d.unitName is string && d.unitName.size() > 0
+        && d.uid == me()
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 150
+        && d.email is string && d.email.size() <= 254
+        && d.phone is string && d.phone.size() <= 40
+        && d.department is string && d.department.size() > 0 && d.department.size() <= 160
+        && d.studentNo is string && d.studentNo.size() <= 40
+        && d.ieeeMemberNo is string && d.ieeeMemberNo.size() <= 40
+        && d.motivation is string && d.motivation.size() >= 40 && d.motivation.size() <= 5000
+        && d.availability is string && d.availability.size() <= 500
+        && d.answers is map
+        && d.privacyConsent == true
+        && d.status == 'pending'
+        && d.submittedAt == request.time && d.updatedAt == request.time;
+    }
+
+    match /recruitmentApplications/{id} {
+      allow read: if signedIn()
+        && (resource.data.uid == me() || recruitmentManager(resource.data.unitId));
+      allow create: if signedIn()
+        && id == request.resource.data.callId + '__' + me()
+        && validRecruitmentApplication(request.resource.data)
+        && recruitmentCallForApplication().status == 'open'
+        && recruitmentCallForApplication().unitId == request.resource.data.unitId
+        && recruitmentCallForApplication().title == request.resource.data.callTitle
+        && recruitmentCallForApplication().opensAt <= request.time
+        && recruitmentCallForApplication().closesAt >= request.time;
+      allow update: if signedIn() && (
+        (resource.data.uid == me()
+          && resource.data.status in ['pending', 'reviewing', 'waitlisted']
+          && request.resource.data.status == 'withdrawn'
+          && request.resource.data.updatedAt == request.time
+          && onlyKeys(['status', 'updatedAt']))
+        || (recruitmentManager(resource.data.unitId)
+          && resource.data.status in ['pending', 'reviewing', 'waitlisted']
+          && request.resource.data.status in ['reviewing', 'waitlisted', 'accepted', 'rejected']
+          && request.resource.data.reviewedBy == me()
+          && request.resource.data.reviewedAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && onlyKeys(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'decisionNote', 'updatedAt']))
+      );
+      allow delete: if false;
+    }
+
     // ---------- Görevler ve projeler (WP-05) ----------
 
     function canManageWork(u) {
@@ -853,6 +1060,98 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && validLedger(request.resource.data);
       allow delete: if hasPerm('secretary.ledger.manage');
+    }
+
+    // ---------- Birim toplantıları ve tutanakları ----------
+
+    match /meetings/{id} {
+      function validMeeting(d) {
+        return d.unitId is string && d.unitId.size() > 0
+          && d.unitName is string
+          && d.title is string && d.title.size() > 0
+          && d.date is string && d.date.size() > 0
+          && d.status in ['draft', 'final']
+          && d.attendeeUids is list
+          && d.attendeeNames is list
+          && d.agenda is list
+          && d.decisions is list;
+      }
+
+      allow read: if isActive()
+        && (isMember(resource.data.unitId)
+            || meetingManager(resource.data.unitId));
+      allow create: if meetingManager(request.resource.data.unitId)
+        && request.resource.data.status == 'draft'
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validMeeting(request.resource.data);
+      allow update: if meetingManager(resource.data.unitId)
+        && resource.data.status == 'draft'
+        && request.resource.data.unitId == resource.data.unitId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.status in ['draft', 'final']
+        && validMeeting(request.resource.data)
+        && (request.resource.data.status == 'draft'
+            || (request.resource.data.finalizedBy == me()
+                && request.resource.data.finalizedAt == request.time));
+      allow delete: if meetingManager(resource.data.unitId) && resource.data.status == 'draft';
+    }
+
+    // Bağlantı ayarı gizli anahtar içermez; yine de yalnızca yetkili TechOps görevlileri görür/değiştirir.
+    match /externalIntegrations/{id} {
+      allow read: if hasPerm('external.firebase.manage');
+      allow create, update: if hasPerm('external.firebase.manage')
+        && request.resource.data.updatedBy == me()
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.apiKey is string
+        && request.resource.data.authDomain is string
+        && request.resource.data.projectId is string
+        && request.resource.data.appId is string
+        && request.resource.data.resources is list;
+      allow delete: if hasPerm('external.firebase.manage');
+    }
+
+    // ---------- Fiziksel demirbaş, zimmet ve değiştirilemez hareket geçmişi ----------
+
+    match /assets/{id} {
+      allow read: if assetReader();
+      allow create: if assetManager()
+        && validAsset(request.resource.data)
+        && matchingAssetMovement(id, request.resource.data)
+        && request.resource.data.createdBy == me()
+        && request.resource.data.updatedBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if assetManager()
+        && validAsset(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.lastMovementId != resource.data.lastMovementId
+        && matchingAssetMovement(id, request.resource.data)
+        && request.resource.data.updatedBy == me()
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /assetMovements/{id} {
+      allow read: if assetReader();
+      allow create: if assetManager()
+        && request.resource.data.keys().hasOnly([
+          'assetId', 'assetCode', 'assetName', 'type', 'note', 'from', 'to', 'byUid', 'byName', 'at'
+        ])
+        && request.resource.data.assetId is string
+        && request.resource.data.assetCode is string
+        && request.resource.data.assetName is string
+        && request.resource.data.type in ['create', 'update', 'assign', 'return', 'move', 'maintenance', 'lost', 'retire']
+        && request.resource.data.note is string
+        && request.resource.data.byUid == me()
+        && request.resource.data.byName is string
+        && request.resource.data.at == request.time
+        && request.resource.data.to is map;
+      allow update, delete: if false;
     }
 
     // ---------- Raporlar (WP-09) ----------

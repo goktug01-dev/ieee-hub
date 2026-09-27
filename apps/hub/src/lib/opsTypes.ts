@@ -282,6 +282,65 @@ export interface VolunteerApplication {
   decidedAt?: Timestamp;
 }
 
+export type RecruitmentCallStatus = 'draft' | 'open' | 'closed' | 'archived';
+export type RecruitmentQuestionType = 'short' | 'long' | 'choice' | 'boolean';
+
+export interface RecruitmentQuestion {
+  id: string;
+  label: string;
+  type: RecruitmentQuestionType;
+  required: boolean;
+  options: string[];
+}
+
+/** Komite/YK tarafından açılan tarihli gönüllü alım ilanı. */
+export interface RecruitmentCall {
+  unitId: string;
+  unitName: string;
+  title: string;
+  roleTitle: string;
+  summary: string;
+  description: string;
+  expectations: string;
+  capacity: number | null;
+  status: RecruitmentCallStatus;
+  opensAt: Timestamp;
+  closesAt: Timestamp;
+  questions: RecruitmentQuestion[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type RecruitmentApplicationStatus = 'pending' | 'reviewing' | 'waitlisted' | 'accepted' | 'rejected' | 'withdrawn';
+
+/** Kariyer vitrini üzerinden bir ilana gönderilen başvuru. */
+export interface RecruitmentApplication {
+  callId: string;
+  callTitle: string;
+  unitId: string;
+  unitName: string;
+  uid: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  studentNo: string;
+  ieeeMemberNo: string;
+  motivation: string;
+  availability: string;
+  answers: Record<string, string>;
+  privacyConsent: true;
+  status: RecruitmentApplicationStatus;
+  submittedAt: Timestamp;
+  updatedAt: Timestamp;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  decisionNote?: string;
+}
+
 export interface Handover {
   authorUid: string;
   authorName: string;
@@ -307,6 +366,50 @@ export interface InventoryItem {
   fields: Record<string, string>;
   updatedAt: Timestamp;
   updatedByName: string;
+}
+
+export type AssetStatus = 'available' | 'assigned' | 'maintenance' | 'lost' | 'retired';
+export type AssetCondition = 'good' | 'needs_service' | 'damaged';
+
+export interface Asset {
+  code: string;
+  name: string;
+  category: string;
+  description: string;
+  serialNo: string;
+  unitId: string;
+  unitName: string;
+  location: string;
+  status: AssetStatus;
+  condition: AssetCondition;
+  custodianUid: string | null;
+  custodianName: string;
+  purchaseDate: string | null;
+  purchaseValue: number | null;
+  warrantyEndDate: string | null;
+  notes: string;
+  lastMovementId: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: Timestamp;
+}
+
+export type AssetMovementType = 'create' | 'update' | 'assign' | 'return' | 'move' | 'maintenance' | 'lost' | 'retire';
+
+export interface AssetMovement {
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  type: AssetMovementType;
+  note: string;
+  from: { status: AssetStatus; location: string; custodianName: string } | null;
+  to: { status: AssetStatus; location: string; custodianName: string };
+  byUid: string;
+  byName: string;
+  at: Timestamp;
 }
 
 export interface Feedback {
@@ -350,5 +453,68 @@ export interface SecretaryLedgerEntry {
   createdBy: string;
   createdByName: string;
   createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface MeetingAgendaItem {
+  id: string;
+  title: string;
+  notes: string;
+}
+
+export interface MeetingDecision {
+  id: string;
+  number: string;
+  text: string;
+  vote: string;
+  responsible: string;
+  dueDate: string | null;
+}
+
+export interface Meeting {
+  unitId: string;
+  unitName: string;
+  title: string;
+  meetingNo: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  chairName: string;
+  recorderName: string;
+  attendeeUids: string[];
+  attendeeNames: string[];
+  guestAttendees: string;
+  agenda: MeetingAgendaItem[];
+  decisions: MeetingDecision[];
+  generalNotes: string;
+  nextMeetingDate: string | null;
+  status: 'draft' | 'final';
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  finalizedBy?: string;
+  finalizedByName?: string;
+  finalizedAt?: Timestamp;
+}
+
+export interface ExternalFirebaseResource {
+  id: string;
+  label: string;
+  database: 'firestore' | 'realtime';
+  path: string;
+  displayFields: string[];
+  readOnly: boolean;
+}
+
+export interface ExternalFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  appId: string;
+  databaseURL: string;
+  resources: ExternalFirebaseResource[];
+  updatedBy: string;
   updatedAt: Timestamp;
 }

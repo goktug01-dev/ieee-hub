@@ -79,7 +79,7 @@ export interface Assignment {
   startsAt: Timestamp;
   endsAt: Timestamp | null;
   status: 'active' | 'ended';
-  source: 'manual' | 'election';
+  source: 'manual' | 'election' | 'volunteer';
   electionId?: string | null;
   note?: string;
   createdBy: string;
@@ -281,6 +281,21 @@ export interface PublicSettings {
   orgShortName: string;
   logoDataUrl?: string | null;
   loginNote?: string;
+}
+
+/** Herkese açık, değiştirilemez bir tüzük sürümünün üstverisi. */
+export interface StatuteVersion {
+  versionId: string;
+  title: string;
+  versionLabel: string;
+  summary: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  sha256: string;
+  chunkCount: number;
+  publishedAt: Timestamp;
+  publishedByName: string;
 }
 
 export interface OrgSettings {

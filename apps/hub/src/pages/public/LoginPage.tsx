@@ -145,6 +145,12 @@ export function LoginPage() {
             <Anchor component={Link} to="/dogrula" size="sm" c="dimmed">
               Belge doğrula
             </Anchor>
+            <Anchor component={Link} to="/tuzuk" size="sm" c="dimmed">
+              Tüzüğü görüntüle
+            </Anchor>
+            <Anchor component={Link} to="/kariyer" size="sm" c="dimmed">
+              Açık komite ve ekip başvuruları
+            </Anchor>
           </Stack>
         </Stack>
       </Paper>

@@ -1,6 +1,6 @@
 # Uygulanan Mimari (Spark planı)
 
-Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı), [ADR-0024](../adr/0024-coklu-makam-onayi-ve-nisap.md) (çoklu makam/nisap), [ADR-0025](../adr/0025-secim-yasam-dongusu-ve-kesinlesmis-sonuc.md) (seçim yaşam döngüsü) ve [ADR-0026](../adr/0026-word-belgesine-qr-dogrulama-damgasi.md) (Word QR damgası).
+Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı), [ADR-0024](../adr/0024-coklu-makam-onayi-ve-nisap.md) (çoklu makam/nisap), [ADR-0025](../adr/0025-secim-yasam-dongusu-ve-kesinlesmis-sonuc.md) (seçim yaşam döngüsü), [ADR-0026](../adr/0026-word-belgesine-qr-dogrulama-damgasi.md) (Word QR damgası), [ADR-0027](../adr/0027-harici-firebase-ikincil-oturum.md) (harici Firebase), [ADR-0028](../adr/0028-birim-toplantilari-ve-kilitli-tutanak.md) (birim toplantıları) ve [ADR-0031](../adr/0031-ayri-kariyer-vitrini-ve-tarihli-birim-basvurulari.md) (kariyer vitrini ve başvurular).
 
 [Sistem mimarisi](sistem-mimarisi.md) ve [Firestore veri modeli](firestore-veri-modeli.md) dokümanları Blaze/Functions varsayımıyla yazılmıştır; hedef mimari olarak arşivde tutulur. Kod ile bu doküman çelişirse **kod esas alınır** ([dokümantasyon kuralları §2](../dokumantasyon-kurallari.md)).
 
@@ -11,9 +11,13 @@ flowchart LR
     U[Tarayıcı<br/>React + Mantine] -->|Google / e-posta girişi| A[Firebase Auth<br/>Spark]
     U -->|okuma/yazma| F[(Cloud Firestore<br/>europe-west1)]
     F -. her istekte .-> R{{Security Rules<br/>firebase/firestore.rules}}
-    H[Firebase Hosting] -->|SPA| U
+    H[Hub Firebase Hosting] -->|iç SPA| U
+    K[Kariyer Firebase Hosting] -->|açık ilan vitrini| U
     V[Harici doğrulayıcı] -->|/dogrula/kod| H
     V -->|tek doküman okuması| F
+    U -->|ayrı kullanıcı oturumu| EA[Harici Firebase Auth]
+    U -->|izinli koleksiyon/yollar| EF[(IEEE Puan / harici Firebase)]
+    EF -. uzak proje kuralları .-> ER{{Harici Security Rules}}
 ```
 
 | Katman | Teknoloji | Not |
@@ -23,7 +27,7 @@ flowchart LR
 | Veri | Cloud Firestore (`europe-west1`) | İstemci yerel önbelleği açık (okuma kotasını korur). |
 | Güvenlik | Firestore Security Rules | Tek güvenilir katman; emülatörde testli. |
 | Word | docxtemplater + PizZip (doldurma), docx (oluşturucu), docx-preview (önizleme) | Tamamı tarayıcıda. |
-| Barındırma | Firebase Hosting | SPA yönlendirmesi, güvenlik başlıkları. |
+| Barındırma | Firebase Hosting multi-site | `hub` iç operasyon SPA'sı ve `career` aday vitrini; ortak Auth/Firestore, ayrı alan adları. |
 | Sunucu kodu | **Yok** | Spark planı. |
 
 ## 2. Koleksiyonlar
@@ -51,6 +55,14 @@ flowchart LR
 | `events/{id}/participants/{pid}` | HeptaCert kurumsal katılımcı kopyası | Etkinlik sorumlusu / birim yöneticisi | Aynı kapsam |
 | `events/{id}/syncRuns/{rid}` | HeptaCert aktarım mutabakatı ve veri sözleşmesi sürümü | Etkinlik sorumlusu, birim yöneticisi, rapor okuyucu | Aktarımı yapan yetkili |
 | `secretaryLedger/{id}` | Toplantı, karar, gelen-giden evrak, takip ve not defteri | `secretary.ledger.manage` | `secretary.ledger.manage` |
+| `meetings/{id}` | Birim toplantısı; katılım, gündem, görüşme, karar ve takip maddeleri | Birim üyeleri ve üst yetkililer | Birim toplantı/yönetim yetkilisi; kesinleşen kayıt kilitli |
+| `externalIntegrations/firebase` | Harici Firebase web yapılandırması ve izin verilen veri yolları; gizli anahtar içermez | `external.firebase.manage` | `external.firebase.manage` |
+| `statutes/current` | Herkese açık güncel tüzük üstverisi | Herkes | Organizasyon yöneticisi / Genel Sekreter |
+| `statuteVersions/{id}` + `chunks` | Değiştirilemez PDF/Word tüzük sürümü ve dosya parçaları | Herkes | Organizasyon yöneticisi / Genel Sekreter; yalnız oluşturma |
+| `assets/{id}` | Fiziksel demirbaş, konum, kondisyon ve zimmet durumu | Envanter/finans/sekreterlik/operasyon yetkilileri | Envanter, finans veya sekreterlik yöneticisi |
+| `assetMovements/{id}` | Değiştirilemez zimmet, iade, taşıma, bakım, kayıp ve hurda hareketi | Demirbaş okuyucuları | Demirbaş yöneticileri; yalnız oluşturma |
+| `recruitmentCalls/{id}` | Komite/YK tarihli alım ilanı, kontenjan ve özel sorular | Açık ilanlar herkes; taslak/kapalı ilan ilgili yönetici | İlgili `unit.manage` veya `assignments.manage`; silinmez |
+| `recruitmentApplications/{ilan__uid}` | Aday kimliği, iletişim, form yanıtları ve değerlendirme durumu | Başvuru sahibi ve ilgili birim yöneticisi | Aday ilk gönderim/geri çekme; ilgili yönetici değerlendirme |
 
 ## 3. Yetki modeli
 

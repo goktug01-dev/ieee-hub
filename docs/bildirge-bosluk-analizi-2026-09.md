@@ -14,7 +14,7 @@ Hub; organizasyon/RBAC, e-dilekçe, görev-proje, etkinlik, HeptaCert CSV aktar�
 |---|---|---|
 | Organizasyon, rol, dönem, seçim | Adaylık–oylama/sayım–kesinleştirme–göreve atama yaşam döngüsü; nisap, tutanak ve oy tutarlılığı kontrolleri uygulandı | Gerçek anonimlik sağlayan çevrim içi gizli oylama Spark/istemci mimarisinde kapsam dışı |
 | E-dilekçe ve onay | Word şablonu, evrak no, sıralı + tüm makamlar + nisaplı onay, doğrulama ve belge içine gömülü QR uygulandı | Koşullu onay adımı; kritik rol atamasında dört-göz |
-| Üye ve gönüllü | Başvuru, onay, atama, oryantasyon ve ayrılış uygulandı | Dönem sonu değerlendirme formu; saklama/silme talebi akışı |
+| Üye ve gönüllü | Standart üyelik harici sistemde bırakıldı; ayrı kariyer vitrininde tarihli komite/YK ilanı, özel soru, aday takibi, kabul, atama, oryantasyon ve ayrılış uygulandı | Harici üyelik kaydının gerçek ortamda doğrulanması; dönem sonu değerlendirme; saklama/silme talebi akışı |
 | Görev ve proje | Kanban, sorumlu, son tarih, yorum, dosya bağı ve raporlar uygulandı | Gerçek komite pilotu ve kullanım disiplininin YK tarafından kabulü |
 | Etkinlik | Öneri–onay–plan–kayıt–kapanış–arşiv akışı uygulandı | En az bir gerçek etkinlikle uçtan uca pilot |
 | HeptaCert | Sütun eş adlı, önizlemeli, idempotent CSV/TSV senkronu; sayım kaydı | Canlı API, Spark planında gizli anahtar saklanamadığı için güvenli değil; CSV kalıcı yol |
@@ -23,6 +23,10 @@ Hub; organizasyon/RBAC, e-dilekçe, görev-proje, etkinlik, HeptaCert CSV aktar�
 | Sponsorluk ve finans | Sponsor kilidi/geçmişi, bütçe planı/gerçekleşeni ve belge bağları uygulandı | Resmî muhasebe sistemi değil; mali onay ve asıl belgeler kurum prosedüründe |
 | Raporlama | Haftalık, aylık, dilekçe, veri kalitesi, vTools ve arşiv uygulandı | Looker Studio/Apps Script otomasyonu ve zamanlanmış e-posta Spark kapsamı dışı |
 | Envanter ve devir | Sistem envanteri, erişim kapatma görevleri, devir paketleri uygulandı | Gerçek Drive/Groups/GitHub sahipliklerinin insan tarafından doğrulanması |
+| Birim toplantıları | Komite bazlı gündem, katılım, görüşme, karar/takip, kilitli tutanak ve Word çıktısı uygulandı | Gerçek komite toplantısıyla kabul testi |
+| Harici Firebase / IEEE Puan | Firestore ve Realtime Database için ikincil oturumlu, izin listeli yönetim paneli uygulandı | Uzak proje web config'i, gerçek veri yolları ve uzak Security Rules henüz bağlanmalı |
+| Tüzük yayımı | Girişsiz güncel belge, değiştirilemez sürüm arşivi ve SHA-256 bütünlük kontrolü uygulandı | Gerçek tüzük PDF/Word dosyasının yetkili kişi tarafından yayımlanması |
+| Fiziksel demirbaş | Zimmet, konum, kondisyon, bakım/kayıp/hurda, hareket defteri, CSV ve QR etiketi uygulandı | İlk fiziksel sayım ve mevcut zimmetlerin sisteme girilmesi |
 | Güvenlik ve KVKK | RBAC, süreli yetki, katılımcı gizliliği, denetim kaydı | MFA, acil erişim, saklama süresi motoru, düzeltme/silme vaka yönetimi, dönemsel erişim kanıtı |
 
 ## Öncelikli kalan işler

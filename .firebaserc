@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "ieee-hub-techops"
+  },
+  "targets": {
+    "ieee-hub-techops": {
+      "hosting": {
+        "hub": ["ieee-hub-techops"],
+        "career": ["ieee-ikcu-kariyer"]
+      }
+    }
   }
 }

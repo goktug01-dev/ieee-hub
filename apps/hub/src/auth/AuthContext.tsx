@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [bootstrapped, setBootstrapped] = useState<boolean | null>(null);
+  const careerMode = window.location.pathname.startsWith('/kariyer') || window.location.hostname.includes('ieee-ikcu-kariyer');
 
   useEffect(
     () =>
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // İlk girişte üyelik kaydı (onay bekleyen) otomatik oluşturulur.
   useEffect(() => {
-    if (!user || memberState.loading || memberState.data || bootstrapped !== true) return;
+    if (!user || memberState.loading || memberState.data || bootstrapped !== true || careerMode) return;
     setDoc(doc(db, 'members', user.uid), {
       uid: user.uid,
       displayName: user.displayName ?? user.email?.split('@')[0] ?? 'Yeni üye',
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status: 'pending',
       createdAt: serverTimestamp(),
     }).catch((e) => console.error('Üyelik kaydı oluşturulamadı', e));
-  }, [user, memberState.loading, memberState.data, bootstrapped]);
+  }, [user, memberState.loading, memberState.data, bootstrapped, careerMode]);
 
   const access = accessState.data;
 

@@ -110,6 +110,7 @@ Finansal kayıtların ana kaynağı Google Sheets ve Drive'dır (Bildirge §7). 
 | `report.approve` | Raporu resmî kabul etme | GS (B) |
 | `vtools.package.manage` | vTools paketi hazırlama, durum güncelleme | vTools (B), GS (B) |
 | `secretary.ledger.manage` | Toplantı, karar, gelen-giden evrak ve takip defterini yönetme | GS (B), Başkan (B) |
+| `unit.meetings.manage` | Kendi biriminde toplantı ve tutanak oluşturma, taslağı kesinleştirme | B.Bşk. (U), B.Yrd. (U) |
 | `dataquality.read` | Veri kalitesi uyarıları | YK (B), B.Bşk. (U), SysAdm (B: yalnızca teknik uyarılar) |
 
 ## 9. E-Dilekçe
@@ -133,6 +134,7 @@ Finansal kayıtların ana kaynağı Google Sheets ve Drive'dır (Bildirge §7). 
 | `audit.read` | İş denetim kayıtları (rol, dilekçe, onay işlemleri) | Başkan (B), GS (B), Danışman (B) |
 | `audit.read_technical` | Sistem, otomasyon ve eşitleme kayıtları | SysAdm (B), GS (B) |
 | `system.config` | Sistem yapılandırması, entegrasyon ayarları | SysAdm (B) |
+| `external.firebase.manage` | Ayrı Firebase projesine kendi hesabıyla bağlanma ve izin verilen yolları yönetme | SysAdm (B), Başkan (B) |
 | `breakglass.request` | Acil erişim talebi | SysAdm (B) |
 | `breakglass.approve` | Acil erişim onayı (talep edenden farklı kişi) | Başkan (B), GS (B) |
 

@@ -30,8 +30,11 @@ const PetitionsPage = lazy(() => import('./pages/petitions/PetitionsPage').then(
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const SetupPage = lazy(() => import('./pages/public/SetupPage').then((m) => ({ default: m.SetupPage })));
 const VerifyPage = lazy(() => import('./pages/public/VerifyPage').then((m) => ({ default: m.VerifyPage })));
+const StatutePage = lazy(() => import('./pages/public/StatutePage').then((m) => ({ default: m.StatutePage })));
+const CareerPage = lazy(() => import('./pages/public/CareerPage').then((m) => ({ default: m.CareerPage })));
 const TasksPage = lazy(() => import('./pages/work/TasksPage').then((m) => ({ default: m.TasksPage })));
 const VolunteerPage = lazy(() => import('./pages/work/VolunteerPage').then((m) => ({ default: m.VolunteerPage })));
+const RecruitmentPage = lazy(() => import('./pages/work/RecruitmentPage').then((m) => ({ default: m.RecruitmentPage })));
 const EventsPage = lazy(() => import('./pages/events/EventsPage').then((m) => ({ default: m.EventsPage })));
 const EventDetailPage = lazy(() => import('./pages/events/EventDetailPage').then((m) => ({ default: m.EventDetailPage })));
 const ContentPage = lazy(() => import('./pages/content/ContentPage').then((m) => ({ default: m.ContentPage })));
@@ -43,6 +46,10 @@ const HandoverPage = lazy(() => import('./pages/HandoverPage').then((m) => ({ de
 const HelpPage = lazy(() => import('./pages/HelpPage').then((m) => ({ default: m.HelpPage })));
 const UnitWorkspacePage = lazy(() => import('./pages/UnitWorkspacePage').then((m) => ({ default: m.UnitWorkspacePage })));
 const SecretaryLedgerPage = lazy(() => import('./pages/SecretaryLedgerPage').then((m) => ({ default: m.SecretaryLedgerPage })));
+const MeetingsPage = lazy(() => import('./pages/meetings/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
+const MeetingDetailPage = lazy(() => import('./pages/meetings/MeetingDetailPage').then((m) => ({ default: m.MeetingDetailPage })));
+const ExternalFirebasePage = lazy(() => import('./pages/admin/ExternalFirebasePage').then((m) => ({ default: m.ExternalFirebasePage })));
+const AssetsPage = lazy(() => import('./pages/assets/AssetsPage').then((m) => ({ default: m.AssetsPage })));
 
 function RequirePerm({ perm, children }: { perm: PermissionId; children: React.ReactElement }) {
   const { can } = useAuth();
@@ -56,12 +63,19 @@ function RequireAny({ perms, children }: { perms: PermissionId[]; children: Reac
 
 export function App() {
   const { phase } = useAuth();
+  const careerHost = window.location.hostname.includes('ieee-ikcu-kariyer');
+
+  if (careerHost) {
+    return <Suspense fallback={<FullPageLoader />}><CareerPage /></Suspense>;
+  }
 
   return (
     <Routes>
       {/* Herkese açık doğrulama sayfası: giriş gerektirmez */}
       <Route path="/dogrula" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />
       <Route path="/dogrula/:code" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />
+      <Route path="/tuzuk" element={<Suspense fallback={<FullPageLoader />}><StatutePage /></Suspense>} />
+      <Route path="/kariyer" element={<Suspense fallback={<FullPageLoader />}><CareerPage /></Suspense>} />
       <Route path="*" element={<Gate phase={phase} />} />
     </Routes>
   );
@@ -98,10 +112,14 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="profil" element={<ProfilePage />} />
               <Route path="gorevler" element={<TasksPage />} />
               <Route path="gonulluluk" element={<VolunteerPage />} />
+              <Route path="basvuru-yonetimi" element={<RecruitmentPage />} />
               <Route path="etkinlikler" element={<EventsPage />} />
               <Route path="etkinlikler/:id" element={<EventDetailPage />} />
+              <Route path="toplantilar" element={<MeetingsPage />} />
+              <Route path="toplantilar/:id" element={<MeetingDetailPage />} />
               <Route path="iletisim" element={<ContentPage />} />
               <Route path="sponsorluk" element={<SponsorsPage />} />
+              <Route path="demirbas" element={<RequireAny perms={['inventory.manage', 'finance.read', 'finance.manage', 'secretary.ledger.manage', 'work.manageAll']}><AssetsPage /></RequireAny>} />
               <Route path="butceler" element={<BudgetsPage />} />
               <Route path="devir" element={<HandoverPage />} />
               <Route path="yardim" element={<HelpPage />} />
@@ -109,6 +127,7 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="birimler/:unitId" element={<UnitWorkspacePage />} />
               <Route path="sekreterlik-defteri" element={<RequirePerm perm="secretary.ledger.manage"><SecretaryLedgerPage /></RequirePerm>} />
               <Route path="yonetim/envanter" element={<RequirePerm perm="inventory.manage"><InventoryPage /></RequirePerm>} />
+              <Route path="yonetim/harici-firebase" element={<RequirePerm perm="external.firebase.manage"><ExternalFirebasePage /></RequirePerm>} />
               <Route path="yonetim/uyeler" element={<RequirePerm perm="members.manage"><MembersPage /></RequirePerm>} />
               <Route path="yonetim/atamalar" element={<RequirePerm perm="assignments.manage"><AssignmentsPage /></RequirePerm>} />
               <Route path="yonetim/secimler" element={<RequirePerm perm="elections.manage"><ElectionsPage /></RequirePerm>} />
