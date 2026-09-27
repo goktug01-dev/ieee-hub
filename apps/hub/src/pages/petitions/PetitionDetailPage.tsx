@@ -59,6 +59,7 @@ import {
   withdrawPetition,
 } from '../../lib/petitions';
 import type { Decision, Petition, TemplateVersion } from '../../lib/types';
+import { printArea } from '../../lib/print';
 
 export function PetitionDetailPage() {
   const { id } = useParams();
@@ -272,7 +273,7 @@ export function PetitionDetailPage() {
                     Word (.docx)
                   </Button>
                   <Tooltip label="Tarayıcının yazdır penceresinde 'PDF olarak kaydet'i seçin">
-                    <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} disabled={!blob} onClick={() => window.print()}>
+                    <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} disabled={!blob} onClick={() => printArea(petitionFileName(p))}>
                       Yazdır / PDF
                     </Button>
                   </Tooltip>

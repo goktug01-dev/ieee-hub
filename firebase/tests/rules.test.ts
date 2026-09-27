@@ -10,6 +10,7 @@ import {
   Timestamp,
   collection,
   doc,
+  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -487,5 +488,22 @@ describe('onay akışı', () => {
       currentStep: 1,
     });
     await assertFails(b.commit());
+  });
+});
+
+describe('üye yöneticisinin kendi kaydı', () => {
+  it('yönetici kendi üyelik durumunu değiştiremez ve kendi kaydını silemez; başkalarınınkini yönetir', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'members', 'memberAdmin'), { uid: 'memberAdmin', status: 'active', displayName: 'Yönetici', createdAt: Timestamp.now() });
+      await setDoc(doc(db, 'access', 'memberAdmin'), { superAdmin: true, perms: { 'members.manage': FAR }, roleKeys: {}, tokens: ['uid:memberAdmin'] });
+    });
+    const db = ctx('memberAdmin');
+    // Otomatik "onay bekleyen" kaydın mevcut yönetici kaydının üzerine yazılması (yaşanan hata) reddedilir.
+    await assertFails(setDoc(doc(db, 'members', 'memberAdmin'), { uid: 'memberAdmin', status: 'pending', displayName: 'x', createdAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db, 'members', 'memberAdmin'), { status: 'suspended' }));
+    await assertSucceeds(updateDoc(doc(db, 'members', 'memberAdmin'), { displayName: 'Yeni ad' }));
+    await assertFails(deleteDoc(doc(db, 'members', 'memberAdmin')));
+    await assertSucceeds(updateDoc(doc(db, 'members', 'pendingUser'), { status: 'active' }));
   });
 });

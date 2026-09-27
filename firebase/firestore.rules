@@ -279,9 +279,11 @@ service cloud.firestore {
                          && onlyKeys(['displayName', 'phone', 'department', 'studentNo', 'photoURL', 'updatedAt']))
                     || (me() == uid && resource.data.status == 'pending'
                          && onlyKeys(['displayName', 'phone', 'department', 'studentNo', 'photoURL', 'updatedAt']))
-                    || hasPerm('members.manage');
+                    // Üye yöneticisi kendi üyelik durumunu değiştiremez (kendini yanlışlıkla pasifleştirmeyi önler).
+                    || (hasPerm('members.manage')
+                        && (me() != uid || request.resource.data.status == resource.data.status));
 
-      allow delete: if hasPerm('members.manage');
+      allow delete: if hasPerm('members.manage') && me() != uid;
     }
 
     // ---------- Erişim özeti ----------

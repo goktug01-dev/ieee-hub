@@ -50,6 +50,7 @@ import { CONTENT_STATUS, CONTENT_TYPES, EVENT_FLOW, EVENT_STATUS, EVENT_TYPES, T
 import type { ContentRequest, HubEvent, Participant, SyncRun, Task, VToolsEventData } from '../../lib/opsTypes';
 import type { Petition } from '../../lib/types';
 import { fmtEventDate } from './EventsPage';
+import { printArea } from '../../lib/print';
 
 export function EventDetailPage() {
   const { id } = useParams();
@@ -671,7 +672,7 @@ function Closing({ e, id, canManage }: { e: HubEvent; id: string; canManage: boo
             <Textarea label="Çıktılar ve etki" autosize minRows={2} value={report.outcomes} onChange={(x) => setReport({ ...report, outcomes: x.currentTarget.value })} readOnly={ro} />
             <Textarea label="Öğrenilenler / öneriler" autosize minRows={2} value={report.lessons} onChange={(x) => setReport({ ...report, lessons: x.currentTarget.value })} readOnly={ro} />
             <Group justify="flex-end">
-              <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>
+              <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => printArea()}>
                 Yazdır / PDF
               </Button>
               {!ro && (

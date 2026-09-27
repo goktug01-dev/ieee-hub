@@ -60,6 +60,7 @@ async function signInWithGoogle(): Promise<boolean> {
     const code = (error as { code?: string }).code;
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return false;
     if (code === 'auth/popup-blocked') throw new Error('Tarayıcı giriş penceresini engelledi. Açılır pencerelere izin verip tekrar deneyin.');
+    if (code === 'auth/unauthorized-domain') throw new Error('Google ile giriş bu adreste geçici olarak kullanılamıyor. Şimdilik “E-posta ile” giriş yapabilirsin.');
     throw error;
   }
 }
