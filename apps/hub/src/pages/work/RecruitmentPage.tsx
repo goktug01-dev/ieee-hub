@@ -35,6 +35,7 @@ import {
   decideRecruitmentApplication,
   emptyRecruitmentQuestion,
   setRecruitmentCallStatus,
+  publishRecruitmentCallById,
   updateRecruitmentCall,
 } from '../../lib/recruitment';
 import { BRANCH, type WithId } from '../../lib/types';
@@ -147,11 +148,17 @@ export function RecruitmentPage() {
                         <Badge color={CALL_STATUS[call.status].color}>{CALL_STATUS[call.status].label}</Badge>
                       </Group>
                       <Text size="sm">{call.summary}</Text>
+                      {call.status === 'draft' && (
+                        <Text size="xs" c="orange">Taslak — kariyer sayfasında görünmez. Yayınlamak için “Yayımla” deyin.</Text>
+                      )}
+                      {call.status === 'open' && call.opensAt.toMillis() > Date.now() && (
+                        <Text size="xs" c="orange">Kariyer sayfasında “Yakında” olarak görünüyor; başvurular başlangıç tarihinde kendiliğinden açılır.</Text>
+                      )}
                       <Text size="xs" c="dimmed">
                         {call.opensAt.toDate().toLocaleString('tr-TR')} – {call.closesAt.toDate().toLocaleString('tr-TR')} · {count} başvuru
                       </Text>
                       <Group gap="xs">
-                        {call.status === 'draft' && <Button size="xs" variant="default" leftSection={<IconEdit size={14} />} disabled={statusBusy === call.id} onClick={() => openCreator(call)}>Düzenle</Button>}
+                        {call.status !== 'archived' && <Button size="xs" variant="default" leftSection={<IconEdit size={14} />} disabled={statusBusy === call.id} onClick={() => openCreator(call)}>Düzenle</Button>}
                         {call.status === 'draft' && <Button size="xs" color="green" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'open')}>Yayımla</Button>}
                         {call.status === 'open' && <Button size="xs" color="orange" variant="light" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'closed')}>Başvuruyu kapat</Button>}
                         {call.status === 'closed' && call.closesAt.toMillis() > Date.now() && <Button size="xs" color="green" variant="light" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'open')}>Yeniden aç</Button>}
@@ -227,6 +234,8 @@ function CallEditor({ opened, onClose, unitId, unitName, call }: {
   call: WithId<RecruitmentCall> | null;
 }) {
   const [form, setForm] = useState<CallForm>(EMPTY_FORM);
+  // Yayımlanmış/kapalı ilanda tarih ve metin düzenlenir; sorular başvurulara bağlı olduğu için kilitlidir.
+  const locked = !!call && call.status !== 'draft';
   const [busy, setBusy] = useState(false);
 
   // Modal her açıldığında düzenlenen ilanla ya da boş formla başlar.
@@ -246,9 +255,11 @@ function CallEditor({ opened, onClose, unitId, unitName, call }: {
     : closes.getTime() <= Date.now() ? 'Bitiş tarihi geçmişte kalıyor.'
     : null;
 
-  const submit = async () => {
+  const [busyMode, setBusyMode] = useState<'draft' | 'publish' | null>(null);
+  const submit = async (publish: boolean) => {
     if (dateError) return notifyError(new Error(dateError), 'Tarihleri kontrol edin');
     setBusy(true);
+    setBusyMode(publish ? 'publish' : 'draft');
     try {
       const input = {
         unitId,
@@ -267,26 +278,35 @@ function CallEditor({ opened, onClose, unitId, unitName, call }: {
           options: question.type === 'choice' ? question.options.map((option) => option.trim()).filter(Boolean) : [],
         })),
       };
-      if (call) {
-        await updateRecruitmentCall(call, input);
-        notifySuccess('Taslak güncellendi.');
+      let id = call?.id;
+      if (call) await updateRecruitmentCall(call, input);
+      else id = await createRecruitmentCall(input);
+      if (publish && id) {
+        await publishRecruitmentCallById(id, input);
+        notifySuccess(
+          opens.getTime() > Date.now()
+            ? `İlan yayımlandı; kariyer sayfasında “Yakında” olarak görünüyor, başvurular ${opens.toLocaleString('tr-TR')} tarihinde açılır.`
+            : 'İlan yayımlandı ve kariyer sayfasında görünüyor.',
+        );
       } else {
-        await createRecruitmentCall(input);
-        notifySuccess('İlan taslak olarak oluşturuldu. Kontrol ettikten sonra yayımlayabilirsiniz.');
+        notifySuccess(locked ? 'İlan güncellendi.' : call ? 'Taslak güncellendi.' : 'İlan taslak olarak kaydedildi. Kariyer sayfasında görünmesi için “Yayımla” deyin.');
       }
       onClose();
     } catch (error) {
-      notifyError(error, call ? 'Taslak güncellenemedi' : 'İlan oluşturulamadı');
+      notifyError(error, publish ? 'İlan yayımlanamadı' : call ? 'Taslak güncellenemedi' : 'İlan oluşturulamadı');
     } finally {
       setBusy(false);
+      setBusyMode(null);
     }
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={call ? 'Taslak ilanı düzenle' : 'Yeni başvuru ilanı'} size="xl" centered>
+    <Modal opened={opened} onClose={onClose} title={locked ? 'İlanı düzenle' : call ? 'Taslak ilanı düzenle' : 'Yeni başvuru ilanı'} size="xl" centered>
       <Stack>
         <Alert color="gray" variant="light">
-          {unitName} için. İlan önce taslak olarak kaydedilir; “Yayımla” dediğinizde kariyer sayfasında görünür. Yayımlanan ilanın soruları değiştirilemez.
+          {locked
+            ? `${unitName} için. Tarih ve metin değişiklikleri kaydettiğinizde kariyer sayfasına hemen yansır. Başvurular sorulara bağlı olduğu için sorular değiştirilemez.`
+            : `${unitName} için. “Kaydet ve yayımla” ilanı kariyer sayfasına çıkarır; taslak olarak kaydedilen ilan görünmez. Yayımlanan ilanın soruları değiştirilemez.`}
         </Alert>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput
@@ -361,12 +381,14 @@ function CallEditor({ opened, onClose, unitId, unitName, call }: {
             size="xs"
             variant="default"
             leftSection={<IconPlus size={14} />}
-            disabled={form.questions.length >= 10}
+            disabled={locked || form.questions.length >= 10}
             onClick={() => set('questions', [...form.questions, emptyRecruitmentQuestion(form.questions.length)])}
           >
             Soru ekle
           </Button>
         </Group>
+        <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <Stack gap="sm">
         {form.questions.map((question, index) => (
           <Card key={question.id} bg="var(--mantine-color-default-hover)" padding="sm" withBorder={false}>
             <Stack gap="xs">
@@ -421,9 +443,24 @@ function CallEditor({ opened, onClose, unitId, unitName, call }: {
             </Stack>
           </Card>
         ))}
+        </Stack>
+        </fieldset>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Vazgeç</Button>
-          <Button onClick={submit} loading={busy} disabled={!!dateError}>{call ? 'Taslağı kaydet' : 'Taslağı oluştur'}</Button>
+          {locked ? (
+            <Button onClick={() => void submit(false)} loading={busyMode === 'draft'} disabled={!!dateError || busy}>
+              Kaydet
+            </Button>
+          ) : (
+            <>
+              <Button variant="default" onClick={() => void submit(false)} loading={busyMode === 'draft'} disabled={!!dateError || busy}>
+                {call ? 'Taslağı kaydet' : 'Taslak olarak kaydet'}
+              </Button>
+              <Button onClick={() => void submit(true)} loading={busyMode === 'publish'} disabled={!!dateError || busy}>
+                Kaydet ve yayımla
+              </Button>
+            </>
+          )}
         </Group>
       </Stack>
     </Modal>

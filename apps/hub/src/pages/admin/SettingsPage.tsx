@@ -29,8 +29,11 @@ export function SettingsPage() {
   const save = async () => {
     setBusy(true);
     try {
-      await setDoc(doc(db, 'settings', 'public'), pub, { merge: true });
-      await setDoc(doc(db, 'settings', 'org'), org);
+      // useDoc belge kimliğini "id" olarak ekler; ayar belgesine yazılmamalı.
+      const { id: _pubId, ...pubData } = pub as PublicSettings & { id?: string };
+      const { id: _orgId, ...orgData } = org as OrgSettings & { id?: string };
+      await setDoc(doc(db, 'settings', 'public'), pubData, { merge: true });
+      await setDoc(doc(db, 'settings', 'org'), orgData);
       await logAudit('settings.update', 'settings', { orgName: pub.orgName, numberingPattern: org.numberingPattern });
       notifySuccess('Ayarlar kaydedildi.');
     } catch (e) {

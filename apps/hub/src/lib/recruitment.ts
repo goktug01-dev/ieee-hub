@@ -77,9 +77,29 @@ export async function createRecruitmentCall(input: RecruitmentCallInput): Promis
   return ref.id;
 }
 
-/** Taslak ilanın içeriğini günceller; yayımlanmış ilanın soruları başvurularla eşleştiği için yalnız taslak düzenlenir. */
+/** Taslak ilanı kariyer sayfasında yayımlar (oluşturma veya düzenleme sonrası tek adımda yayım için). */
+export async function publishRecruitmentCallById(id: string, input: RecruitmentCallInput) {
+  const error = validateRecruitmentCall(input);
+  if (error) throw new Error(error);
+  if (input.closesAt.toMillis() <= Date.now()) throw new Error('Bitiş tarihi geçmiş bir ilan yayımlanamaz.');
+  await updateDoc(doc(db, 'recruitmentCalls', id), {
+    status: 'open',
+    updatedAt: serverTimestamp(),
+    createdBy: deleteField(),
+    createdByName: deleteField(),
+  });
+  await logAudit('recruitment.call.open', `recruitmentCalls/${id}`, { title: input.title, unitId: input.unitId });
+}
+
+/**
+ * İlan içeriğini ve tarihlerini günceller. Yayımlanmış veya kapatılmış ilanda sorular değiştirilemez,
+ * çünkü gelen başvuruların yanıtları soru kimliklerine bağlıdır.
+ */
 export async function updateRecruitmentCall(call: WithId<RecruitmentCall>, input: RecruitmentCallInput) {
-  if (call.status !== 'draft') throw new Error('Yalnız taslak ilan düzenlenebilir.');
+  if (call.status === 'archived') throw new Error('Arşivdeki ilan düzenlenemez.');
+  if (call.status !== 'draft' && JSON.stringify(input.questions) !== JSON.stringify(call.questions)) {
+    throw new Error('Yayımlanmış ilanın soruları değiştirilemez.');
+  }
   if (input.unitId !== call.unitId) throw new Error('İlanın birimi değiştirilemez.');
   const error = validateRecruitmentCall(input);
   if (error) throw new Error(error);

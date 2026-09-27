@@ -24,10 +24,10 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowRight, IconBriefcase2, IconCalendar, IconLogout, IconMoon, IconSun, IconUsersGroup } from '@tabler/icons-react';
+import { IconArrowRight, IconBrandGoogle, IconBriefcase2, IconCalendar, IconLogout, IconMail, IconMoon, IconSun, IconUsersGroup } from '@tabler/icons-react';
 import { GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { where } from 'firebase/firestore';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { PolicyLinks } from '../../components/PolicyLinks';
 import { ErrorAlert, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
@@ -49,8 +49,25 @@ const STATUS = {
 const dateTime = (value: RecruitmentCall['closesAt']) =>
   new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Istanbul' }).format(value.toDate());
 
+/** Aday girişi: Google hesabı seçimi her seferinde sorulur; pencereyi kapatmak hata sayılmaz. */
+async function signInWithGoogle(): Promise<boolean> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    await signInWithPopup(auth, provider);
+    return true;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return false;
+    if (code === 'auth/popup-blocked') throw new Error('Tarayıcı giriş penceresini engelledi. Açılır pencerelere izin verip tekrar deneyin.');
+    throw error;
+  }
+}
+
 export function CareerPage() {
-  const { user, publicSettings, signOut } = useAuth();
+  const { user, phase, publicSettings, signOut } = useAuth();
+  // Oturum durumu netleşmeden giriş düğmeleri gösterilmez (sayfa açılışında titremeyi önler).
+  const signedOut = phase === 'signedOut';
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
   const calls = useCollection<RecruitmentCall>('recruitmentCalls', [where('status', '==', 'open')], 'career-open-calls');
@@ -67,11 +84,41 @@ export function CareerPage() {
   const notice = useDoc<PrivacyNotice>(noticeId ? `privacyNotices/${noticeId}` : null);
   // Yayımlı aydınlatma metni yoksa kurallar başvuruyu zaten reddeder; arayüz de başvuruyu kapatır.
   const applicationsClosed = !notice.loading && !notice.data;
+  // Başlangıcı gelmemiş yayındaki ilanlar da "yakında" olarak gösterilir; saat geldiğinde başvuru kendiliğinden açılır.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const openCalls = useMemo(
-    () => calls.data.filter((call) => recruitmentCallIsOpen(call)).sort((a, b) => a.closesAt.toMillis() - b.closesAt.toMillis()),
-    [calls.data],
+    () =>
+      calls.data
+        .filter((call) => call.status === 'open' && call.closesAt.toMillis() >= now)
+        .sort((a, b) => {
+          const aOpen = recruitmentCallIsOpen(a, now);
+          const bOpen = recruitmentCallIsOpen(b, now);
+          if (aOpen !== bOpen) return aOpen ? -1 : 1;
+          return aOpen ? a.closesAt.toMillis() - b.closesAt.toMillis() : a.opensAt.toMillis() - b.opensAt.toMillis();
+        }),
+    [calls.data, now],
   );
   const applicationByCall = useMemo(() => new Map(mine.data.map((application) => [application.callId, application])), [mine.data]);
+
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const google = async () => {
+    setGoogleBusy(true);
+    try {
+      if (await signInWithGoogle()) notifySuccess('Giriş yapıldı. Açık pozisyonlara başvurabilirsin.');
+    } catch (error) {
+      notifyError(error, 'Google ile giriş yapılamadı');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+  const openEmailLogin = () => {
+    setSelected(null);
+    authModal.open();
+  };
 
   const choose = (call: WithId<RecruitmentCall>) => {
     if (!user) {
@@ -109,7 +156,11 @@ export function CareerPage() {
                 <Button variant="white" color="dark" size="xs" leftSection={<IconLogout size={15} />} onClick={() => void signOut()}>
                   Çıkış
                 </Button>
-              ) : null}
+              ) : signedOut && (
+                <Button variant="white" color="dark" size="sm" leftSection={<IconBrandGoogle size={16} />} loading={googleBusy} onClick={() => void google()}>
+                  Google ile giriş yap
+                </Button>
+              )}
             </Group>
           </Group>
           <Stack maw={760} gap="md">
@@ -126,6 +177,27 @@ export function CareerPage() {
         <Alert color="blue" variant="light" mb="xl">
           Bu sayfa komite ve ekip başvuruları içindir; buradan yapılan başvuru IEEE üyeliği yerine geçmez.
         </Alert>
+
+        {signedOut && (
+          <Card withBorder mb="xl" padding="lg">
+            <Group justify="space-between" align="center" gap="md">
+              <div style={{ flex: '1 1 320px' }}>
+                <Text fw={700}>Başvurmak için giriş yap</Text>
+                <Text size="sm" c="dimmed">
+                  Başvuru gönderebilmek ve durumunu takip edebilmek için Google hesabınla giriş yapman gerekir. Bu hesap IEEE üyeliği oluşturmaz.
+                </Text>
+              </div>
+              <Group gap="xs">
+                <Button leftSection={<IconBrandGoogle size={16} />} loading={googleBusy} onClick={() => void google()}>
+                  Google ile giriş yap
+                </Button>
+                <Button variant="subtle" leftSection={<IconMail size={16} />} onClick={openEmailLogin}>
+                  E-posta ile
+                </Button>
+              </Group>
+            </Group>
+          </Card>
+        )}
 
         {user && (
           <Card withBorder mb="xl" padding="lg">
@@ -173,7 +245,6 @@ export function CareerPage() {
             <Title order={2}>Açık pozisyonlar</Title>
             <Text c="dimmed">Sana uygun ekibi seç, soruları yanıtla ve başvurunu takip et.</Text>
           </div>
-          {!user && <Badge color="gray" variant="light">Başvuru için giriş gerekir</Badge>}
         </Group>
 
         {applicationsClosed && openCalls.length > 0 && (
@@ -192,12 +263,16 @@ export function CareerPage() {
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
             {openCalls.map((call) => {
               const existing = applicationByCall.get(call.id);
+              const upcoming = call.opensAt.toMillis() > now;
               return (
                 <Card key={call.id} withBorder padding="xl" radius="lg">
                   <Stack h="100%">
                     <Group justify="space-between" align="flex-start">
                       <Badge leftSection={<IconUsersGroup size={13} />} variant="light">{call.unitName}</Badge>
-                      {call.capacity && <Badge color="gray" variant="outline">{call.capacity} kişi</Badge>}
+                      <Group gap={6}>
+                        {upcoming && <Badge color="orange" variant="light">Yakında</Badge>}
+                        {call.capacity && <Badge color="gray" variant="outline">{call.capacity} kişi</Badge>}
+                      </Group>
                     </Group>
                     <div>
                       <Title order={3}>{call.title}</Title>
@@ -207,9 +282,14 @@ export function CareerPage() {
                     {call.expectations && <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{call.expectations}</Text>}
                     <Divider mt="auto" />
                     <Group justify="space-between" align="center">
-                      <Text size="xs" c="dimmed"><IconCalendar size={14} style={{ verticalAlign: -2 }} /> Son gün: {dateTime(call.closesAt)}</Text>
+                      <Text size="xs" c="dimmed">
+                        <IconCalendar size={14} style={{ verticalAlign: -2 }} />{' '}
+                        {upcoming ? `Başvurular ${dateTime(call.opensAt)} tarihinde açılır` : `Son gün: ${dateTime(call.closesAt)}`}
+                      </Text>
                       {existing ? (
                         <Badge color={STATUS[existing.status].color}>{STATUS[existing.status].label}</Badge>
+                      ) : upcoming ? (
+                        <Button variant="light" disabled>Yakında açılacak</Button>
                       ) : (
                         <Button rightSection={<IconArrowRight size={16} />} onClick={() => choose(call)} disabled={!notice.data}>
                           {user ? 'Başvur' : 'Giriş yap ve başvur'}
@@ -237,7 +317,11 @@ export function CareerPage() {
       <CandidateAuthModal
         opened={authOpened}
         onClose={authModal.close}
-        onDone={() => { authModal.close(); modal.open(); }}
+        onDone={() => {
+          authModal.close();
+          // İlan üzerinden gelindiyse giriş sonrası başvuru formu açılır.
+          if (selected) modal.open();
+        }}
         onShowNotice={notice.data ? noticeModal.open : undefined}
       />
       <PrivacyNoticeModal notice={notice.data} opened={noticeOpened} onClose={noticeModal.close} />
@@ -265,10 +349,7 @@ function CandidateAuthModal({ opened, onClose, onDone, onShowNotice }: { opened:
   const google = async () => {
     setBusy(true);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
-      onDone();
+      if (await signInWithGoogle()) onDone();
     } catch (error) {
       notifyError(error, 'Google ile giriş yapılamadı');
     } finally {
