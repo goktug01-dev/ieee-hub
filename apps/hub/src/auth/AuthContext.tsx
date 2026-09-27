@@ -37,7 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [bootstrapped, setBootstrapped] = useState<boolean | null>(null);
-  const careerMode = window.location.pathname.startsWith('/kariyer') || window.location.hostname.includes('ieee-ikcu-kariyer');
+  // Kariyer vitrini ve herkese açık politika sayfaları Hub üyelik kaydı açmaz.
+  const careerMode =
+    window.location.pathname.startsWith('/kariyer') ||
+    window.location.pathname.startsWith('/politika/') ||
+    window.location.hostname.includes('ieee-ikcu-kariyer');
 
   useEffect(
     () =>

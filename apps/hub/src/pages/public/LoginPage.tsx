@@ -27,6 +27,7 @@ import {
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
+import { PolicyLinks } from '../../components/PolicyLinks';
 import { ErrorAlert, friendlyError, notifySuccess } from '../../components/ui';
 import { auth, useEmulators } from '../../firebase';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../lib/demo';
@@ -151,6 +152,7 @@ export function LoginPage() {
             <Anchor component={Link} to="/kariyer" size="sm" c="dimmed">
               Açık komite ve ekip başvuruları
             </Anchor>
+            <PolicyLinks kinds={['members', 'cookies', 'terms']} />
           </Stack>
         </Stack>
       </Paper>

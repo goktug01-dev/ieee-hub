@@ -281,6 +281,25 @@ export interface PublicSettings {
   orgShortName: string;
   logoDataUrl?: string | null;
   loginNote?: string;
+  /** Kariyer başvurularında gösterilen, yürürlükteki KVKK aydınlatma metni (privacyNotices/{id}). */
+  recruitmentPrivacyNoticeId?: string;
+  /** Hub üyeleri için yürürlükteki KVKK aydınlatma metni. */
+  memberPrivacyNoticeId?: string;
+  /** Yürürlükteki çerez ve yerel depolama politikası. */
+  cookiePolicyId?: string;
+  /** Yürürlükteki kullanım koşulları. */
+  termsId?: string;
+}
+
+export type PolicyKind = 'recruitment' | 'members' | 'cookies' | 'terms';
+
+/** Herkese açık, değiştirilemez politika sürümü (KVKK aydınlatma, çerez, kullanım koşulları). */
+export interface PrivacyNotice {
+  kind: PolicyKind;
+  title: string;
+  versionLabel: string;
+  body: string;
+  publishedAt: Timestamp;
 }
 
 /** Herkese açık, değiştirilemez bir tüzük sürümünün üstverisi. */

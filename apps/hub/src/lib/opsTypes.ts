@@ -307,10 +307,15 @@ export interface RecruitmentCall {
   opensAt: Timestamp;
   closesAt: Timestamp;
   questions: RecruitmentQuestion[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** recruitmentCalls/{id}/internal/meta — ilanı açan kişi; yalnız birim yöneticileri okur. */
+export interface RecruitmentCallMeta {
   createdBy: string;
   createdByName: string;
   createdAt: Timestamp;
-  updatedAt: Timestamp;
 }
 
 export type RecruitmentApplicationStatus = 'pending' | 'reviewing' | 'waitlisted' | 'accepted' | 'rejected' | 'withdrawn';
@@ -332,13 +337,22 @@ export interface RecruitmentApplication {
   availability: string;
   answers: Record<string, string>;
   privacyConsent: true;
+  /** Adayın okuduğunu beyan ettiği aydınlatma metni sürümü (privacyNotices/{id}). */
+  privacyNoticeId: string;
   status: RecruitmentApplicationStatus;
   submittedAt: Timestamp;
   updatedAt: Timestamp;
-  reviewedBy?: string;
-  reviewedByName?: string;
   reviewedAt?: Timestamp;
+  /** Adaya gösterilen karar notu. */
   decisionNote?: string;
+}
+
+/** recruitmentApplications/{id}/internal/review — son değerlendiren; aday okuyamaz. */
+export interface RecruitmentReview {
+  reviewedBy: string;
+  reviewedByName: string;
+  reviewedAt: Timestamp;
+  status: Exclude<RecruitmentApplicationStatus, 'pending' | 'withdrawn'>;
 }
 
 export interface Handover {

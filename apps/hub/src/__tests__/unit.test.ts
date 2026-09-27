@@ -16,6 +16,7 @@ import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 import { validateTemplateContent } from '../lib/templates';
 import { validateStatuteFile } from '../lib/statutes';
 import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall } from '../lib/recruitment';
+import { POLICIES, RECRUITMENT_PRIVACY_TEMPLATE, fillPlaceholders, privacyPlaceholders, validatePrivacyNotice } from '../lib/privacy';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -261,5 +262,26 @@ describe('toplantı tutanağı ve harici veri', () => {
     const parsed = parseExternalData(stringifyExternalData(original));
     expect(parsed.updatedAt).toBeInstanceOf(Timestamp);
     expect((parsed.updatedAt as Timestamp).toDate().toISOString()).toBe('2026-09-27T12:00:00.000Z');
+  });
+});
+
+describe('KVKK aydınlatma metni', () => {
+  it('doldurulmamış yer tutucu varken yayımlanamaz', () => {
+    const input = { title: 'KVKK', versionLabel: 'v1', body: RECRUITMENT_PRIVACY_TEMPLATE };
+    expect(privacyPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE)).toContain('[SAKLAMA SÜRESİ]');
+    expect(validatePrivacyNotice(input)).toContain('Doldurulmamış');
+    expect(privacyPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE)).toContain('[BAŞVURU E-POSTA ADRESİ]');
+    const filled = fillPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE, 'Doldurulmuş değer');
+    expect(validatePrivacyNotice({ ...input, body: filled })).toBeNull();
+    expect(validatePrivacyNotice({ ...input, body: 'kısa' })).toContain('200');
+  });
+
+  it('her politika taslağı doldurulunca yayımlanabilir ve benzersiz kısa yola sahiptir', () => {
+    for (const policy of POLICIES) {
+      expect(privacyPlaceholders(policy.template).length).toBeGreaterThan(0);
+      expect(validatePrivacyNotice({ title: policy.defaultTitle, versionLabel: 'v1', body: fillPlaceholders(policy.template, 'x') })).toBeNull();
+    }
+    expect(new Set(POLICIES.map((policy) => policy.slug)).size).toBe(POLICIES.length);
+    expect(new Set(POLICIES.map((policy) => policy.field)).size).toBe(POLICIES.length);
   });
 });

@@ -197,12 +197,39 @@ service cloud.firestore {
     match /settings/public {
       // Giriş ekranındaki kurum adı ve logo herkese açıktır.
       allow read: if true;
-      allow write: if hasPerm('org.manage');
+      // Politika işaretçileri yalnız aynı türde yayımlanmış bir sürümü gösterebilir.
+      allow write: if hasPerm('org.manage')
+        && policyPointerOk('recruitmentPrivacyNoticeId', 'recruitment')
+        && policyPointerOk('memberPrivacyNoticeId', 'members')
+        && policyPointerOk('cookiePolicyId', 'cookies')
+        && policyPointerOk('termsId', 'terms');
+    }
+
+    // ---------- Politika metinleri (KVKK, çerez, kullanım koşulları): herkese açık, değiştirilemez sürümler ----------
+
+    function policyPointerOk(field, kind) {
+      return !(field in request.resource.data)
+        || (request.resource.data[field] is string
+            && existsAfter(docPath('privacyNotices', request.resource.data[field]))
+            && getAfter(docPath('privacyNotices', request.resource.data[field])).data.kind == kind);
+    }
+
+    match /privacyNotices/{id} {
+      allow read: if true;
+      allow create: if hasPerm('org.manage')
+        && request.resource.data.keys().hasOnly(['kind', 'title', 'versionLabel', 'body', 'publishedAt'])
+        && request.resource.data.kind in ['recruitment', 'members', 'cookies', 'terms']
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
+        && request.resource.data.versionLabel is string && request.resource.data.versionLabel.size() > 0 && request.resource.data.versionLabel.size() <= 60
+        && request.resource.data.body is string && request.resource.data.body.size() >= 200 && request.resource.data.body.size() <= 30000
+        && request.resource.data.publishedAt == request.time;
+      allow update, delete: if false;
     }
 
     match /settings/{docId} {
       allow read: if isActive();
-      allow write: if hasPerm('org.manage');
+      // settings/public kendi eşleşmesinde doğrulanır; kurallar VEYA ile birleştiği için burada dışlanır.
+      allow write: if docId != 'public' && hasPerm('org.manage');
     }
 
     // ---------- Herkese açık tüzük ve değiştirilemez sürüm arşivi ----------
@@ -703,7 +730,7 @@ service cloud.firestore {
       return d.keys().hasOnly([
           'unitId', 'unitName', 'title', 'roleTitle', 'summary', 'description',
           'expectations', 'capacity', 'status', 'opensAt', 'closesAt', 'questions',
-          'createdBy', 'createdByName', 'createdAt', 'updatedAt'
+          'createdAt', 'updatedAt'
         ])
         && d.unitId is string && d.unitId.size() > 0
         && d.unitName is string && d.unitName.size() > 0
@@ -716,8 +743,13 @@ service cloud.firestore {
         && d.status in ['draft', 'open', 'closed', 'archived']
         && d.opensAt is timestamp && d.closesAt is timestamp && d.opensAt < d.closesAt
         && d.questions is list && d.questions.size() <= 10
-        && d.createdBy is string && d.createdByName is string
         && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+
+    // İlanı açan kişinin kimliği herkese açık ilan belgesinde tutulmaz; yalnız yöneticilerin
+    // okuyabildiği internal/meta alt belgesinde, ilanla aynı yazımda saklanır.
+    function recruitmentCallMetaPath(id) {
+      return /databases/$(database)/documents/recruitmentCalls/$(id)/internal/meta;
     }
 
     match /recruitmentCalls/{id} {
@@ -726,17 +758,38 @@ service cloud.firestore {
       allow create: if recruitmentManager(request.resource.data.unitId)
         && validRecruitmentCall(request.resource.data)
         && request.resource.data.status == 'draft'
-        && request.resource.data.createdBy == me()
         && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && getAfter(recruitmentCallMetaPath(id)).data.createdBy == me();
+      // Eski kayıtlardaki createdBy/createdByName alanları ilk güncellemede silinmek zorundadır
+      // (validRecruitmentCall bu alanlara izin vermez).
       allow update: if recruitmentManager(resource.data.unitId)
         && recruitmentManager(request.resource.data.unitId)
         && request.resource.data.unitId == resource.data.unitId
-        && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
         && validRecruitmentCall(request.resource.data);
       allow delete: if false;
+    }
+
+    match /recruitmentCalls/{id}/internal/{docId} {
+      allow read: if signedIn() && recruitmentManager(get(docPath('recruitmentCalls', id)).data.unitId);
+      allow create: if signedIn()
+        && docId == 'meta'
+        && !exists(docPath('recruitmentCalls', id))
+        && recruitmentManager(getAfter(docPath('recruitmentCalls', id)).data.unitId)
+        && request.resource.data.keys().hasOnly(['createdBy', 'createdByName', 'createdAt'])
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdByName is string
+        && request.resource.data.createdByName.size() > 0 && request.resource.data.createdByName.size() <= 150
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // Değerlendiren yöneticinin kimliği adayın okuyabildiği başvuru belgesinde tutulmaz;
+    // internal/review alt belgesinde, karar güncellemesiyle aynı yazımda saklanır.
+    function recruitmentReviewPath(id) {
+      return /databases/$(database)/documents/recruitmentApplications/$(id)/internal/review;
     }
 
     function recruitmentCallForApplication() {
@@ -747,7 +800,7 @@ service cloud.firestore {
       return d.keys().hasOnly([
           'callId', 'callTitle', 'unitId', 'unitName', 'uid', 'name', 'email',
           'phone', 'department', 'studentNo', 'ieeeMemberNo', 'motivation',
-          'availability', 'answers', 'privacyConsent', 'status', 'submittedAt', 'updatedAt'
+          'availability', 'answers', 'privacyConsent', 'privacyNoticeId', 'status', 'submittedAt', 'updatedAt'
         ])
         && d.callId is string && d.callId.size() > 0
         && d.callTitle is string && d.callTitle.size() > 0
@@ -764,6 +817,10 @@ service cloud.firestore {
         && d.availability is string && d.availability.size() <= 500
         && d.answers is map
         && d.privacyConsent == true
+        // Aday, başvuru anında yayımlı olan aydınlatma metni sürümünü okuduğunu beyan eder;
+        // yayımlı metin yoksa başvuru alınmaz.
+        && d.privacyNoticeId is string
+        && d.privacyNoticeId == get(docPath('settings', 'public')).data.recruitmentPrivacyNoticeId
         && d.status == 'pending'
         && d.submittedAt == request.time && d.updatedAt == request.time;
     }
@@ -788,11 +845,31 @@ service cloud.firestore {
         || (recruitmentManager(resource.data.unitId)
           && resource.data.status in ['pending', 'reviewing', 'waitlisted']
           && request.resource.data.status in ['reviewing', 'waitlisted', 'accepted', 'rejected']
-          && request.resource.data.reviewedBy == me()
+          && !('reviewedBy' in request.resource.data)
+          && !('reviewedByName' in request.resource.data)
           && request.resource.data.reviewedAt == request.time
           && request.resource.data.updatedAt == request.time
-          && onlyKeys(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'decisionNote', 'updatedAt']))
+          && (!('decisionNote' in request.resource.data)
+              || (request.resource.data.decisionNote is string && request.resource.data.decisionNote.size() <= 2000))
+          && onlyKeys(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'decisionNote', 'updatedAt'])
+          && getAfter(recruitmentReviewPath(id)).data.reviewedBy == me()
+          && getAfter(recruitmentReviewPath(id)).data.reviewedAt == request.time)
       );
+      allow delete: if false;
+    }
+
+    match /recruitmentApplications/{id}/internal/{docId} {
+      allow read: if signedIn() && recruitmentManager(get(docPath('recruitmentApplications', id)).data.unitId);
+      allow create, update: if signedIn()
+        && docId == 'review'
+        && recruitmentManager(get(docPath('recruitmentApplications', id)).data.unitId)
+        && request.resource.data.keys().hasOnly(['reviewedBy', 'reviewedByName', 'reviewedAt', 'status'])
+        && request.resource.data.reviewedBy == me()
+        && request.resource.data.reviewedByName is string
+        && request.resource.data.reviewedByName.size() > 0 && request.resource.data.reviewedByName.size() <= 150
+        && request.resource.data.reviewedAt == request.time
+        && getAfter(docPath('recruitmentApplications', id)).data.status == request.resource.data.status
+        && getAfter(docPath('recruitmentApplications', id)).data.reviewedAt == request.time;
       allow delete: if false;
     }
 

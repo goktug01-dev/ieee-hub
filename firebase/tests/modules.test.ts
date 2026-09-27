@@ -12,6 +12,7 @@ import {
   collection,
   doc,
   deleteDoc,
+  deleteField,
   getDoc,
   getDocs,
   query,
@@ -35,10 +36,15 @@ const baseAccess = (uid: string) => ({ superAdmin: false, perms: {}, roleKeys: {
 async function seed() {
   await env.withSecurityRulesDisabled(async (c) => {
     const db = c.firestore() as unknown as Firestore;
-    for (const u of ['chair', 'csVol', 'rasVol', 'stranger', 'gs', 'sponsorMgr', 'sayman', 'comms', 'newbie', 'coord', 'techops']) {
+    for (const u of ['chair', 'csVol', 'rasVol', 'stranger', 'gs', 'sponsorMgr', 'sayman', 'comms', 'newbie', 'coord', 'techops', 'orgAdmin']) {
       await setDoc(doc(db, 'members', u), { uid: u, status: 'active', displayName: u, createdAt: Timestamp.now() });
     }
     await setDoc(doc(db, 'settings', 'org'), { volunteerRoleId: 'gonullu' });
+    await setDoc(doc(db, 'privacyNotices', 'n1'), {
+      kind: 'recruitment', title: 'KVKK', versionLabel: 'v1', body: 'x'.repeat(300), publishedAt: Timestamp.now(),
+    });
+    await setDoc(doc(db, 'settings', 'public'), { orgName: 'IEEE', orgShortName: 'IEEE', recruitmentPrivacyNoticeId: 'n1' });
+    await setDoc(doc(db, 'access', 'orgAdmin'), { ...baseAccess('orgAdmin'), perms: { 'org.manage': FAR } });
     await setDoc(doc(db, 'access', 'chair'), {
       ...baseAccess('chair'),
       roleKeys: { 'cs__birim-baskani': FAR },
@@ -293,46 +299,167 @@ describe('komite ve YK başvuru ilanları', () => {
     unitId: 'cs', unitName: 'Computer Society', title: 'CS Güz Ekip Alımı', roleTitle: 'Etkinlik ekibi gönüllüsü',
     summary: 'Birlikte teknik etkinlikler üretmek isteyen ekip arkadaşları arıyoruz.', description: '', expectations: '',
     capacity: 8, status, opensAt: yesterday, closesAt: nextWeek, questions: [],
-    createdBy: 'chair', createdByName: 'chair', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
+  const application = () => ({
+    callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
+    uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
+    studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
+    availability: '', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending', submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  const meta = (uid: string) => ({ createdBy: uid, createdByName: uid, createdAt: serverTimestamp() });
+  // İlan ve açanın kimliğini taşıyan internal/meta aynı batch'te yazılır.
+  const createCall = (uid: string, id: string, data: Record<string, unknown> = call(), metaData: Record<string, unknown> = meta(uid)) => {
+    const db = ctx(uid);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'recruitmentCalls', id), data);
+    batch.set(doc(db, 'recruitmentCalls', id, 'internal', 'meta'), metaData);
+    return batch.commit();
+  };
+  // Karar ve değerlendirenin kimliğini taşıyan internal/review aynı batch'te yazılır.
+  const review = (uid: string, status: string, reviewer = uid) => {
+    const db = ctx(uid);
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'recruitmentApplications', 'c1__candidate'), {
+      status, reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, 'recruitmentApplications', 'c1__candidate', 'internal', 'review'), {
+      reviewedBy: reviewer, reviewedByName: reviewer, reviewedAt: serverTimestamp(), status,
+    });
+    return batch.commit();
+  };
+  const openCall = async () => {
+    await createCall('chair', 'c1');
+    await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });
+  };
 
   it('birim yöneticisi taslak açar; yalnız yayımlanmış ilan anonim vitrinde görünür', async () => {
-    await assertSucceeds(setDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), call()));
+    await assertSucceeds(createCall('chair', 'c1'));
     const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
     await assertFails(getDoc(doc(publicDb, 'recruitmentCalls', 'c1')));
     await assertSucceeds(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() }));
     await assertSucceeds(getDoc(doc(publicDb, 'recruitmentCalls', 'c1')));
     await assertSucceeds(getDocs(query(collection(publicDb, 'recruitmentCalls'), where('status', '==', 'open'))));
-    await assertFails(setDoc(doc(ctx('rasVol'), 'recruitmentCalls', 'bad'), { ...call(), createdBy: 'rasVol', createdByName: 'rasVol' }));
+    await assertFails(createCall('rasVol', 'bad'));
+  });
+
+  it('ilanı açanın kimliği herkese açık belgeye yazılamaz; yalnız yöneticiler okur', async () => {
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    await assertFails(createCall('chair', 'leak', { ...call(), createdBy: 'chair', createdByName: 'chair' }));
+    await assertFails(setDoc(doc(ctx('chair'), 'recruitmentCalls', 'nometa'), call()));
+    await assertFails(createCall('chair', 'spoof', call(), meta('rasVol')));
+    await openCall();
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(getDoc(doc(publicDb, 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(getDoc(doc(ctx('candidate'), 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1', 'internal', 'meta'), { createdByName: 'x' }));
+    await assertFails(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { createdByName: 'chair', updatedAt: serverTimestamp() }));
+  });
+
+  it('eski sürümden kalan kişi alanları ilk güncellemede silinmek zorundadır', async () => {
+    await env.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'recruitmentCalls', 'legacy'), {
+        ...call(), createdBy: 'chair', createdByName: 'Başkan', createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      });
+    });
+    const ref = doc(ctx('chair'), 'recruitmentCalls', 'legacy');
+    await assertFails(updateDoc(ref, { status: 'open', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'open', updatedAt: serverTimestamp(), createdBy: deleteField(), createdByName: deleteField() }));
+  });
+
+  it('değerlendirenin kimliği adaya görünmez; kayıtsız veya sahte kimlikli karar reddedilir', async () => {
+    await openCall();
+    await setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application());
+    const appRef = doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate');
+    await assertFails(updateDoc(appRef, {
+      status: 'reviewing', reviewedBy: 'chair', reviewedByName: 'chair', reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(appRef, { status: 'reviewing', reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp() }));
+    await assertFails(review('chair', 'reviewing', 'rasVol'));
+    await assertFails(setDoc(doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review'), {
+      reviewedBy: 'chair', reviewedByName: 'chair', reviewedAt: serverTimestamp(), status: 'reviewing',
+    }));
+    await assertSucceeds(review('chair', 'reviewing'));
+    await assertSucceeds(review('chair', 'accepted'));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(getDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(getDoc(doc(ctx('rasVol'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(review('chair', 'rejected'));
+  });
+
+  it('KVKK aydınlatma metni zorunludur: yayımlı sürüm dışında veya metin yokken başvuru alınmaz', async () => {
+    await openCall();
+    const ref = doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate');
+    await assertFails(setDoc(ref, { ...application(), privacyNoticeId: 'eski-surum' }));
+    const { privacyNoticeId: _omit, ...withoutNotice } = application();
+    await assertFails(setDoc(ref, withoutNotice));
+    await assertFails(setDoc(ref, { ...application(), privacyConsent: false }));
+    await env.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'settings', 'public'), { orgName: 'IEEE', orgShortName: 'IEEE' });
+    });
+    await assertFails(setDoc(ref, application()));
+  });
+
+  it('aydınlatma metni herkese açık, değiştirilemez sürümlerle yalnız organizasyon yöneticisince yayımlanır', async () => {
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    const notice = { kind: 'recruitment', title: 'KVKK', versionLabel: 'v2', body: 'y'.repeat(300), publishedAt: serverTimestamp() };
+    const publish = (uid: string, id: string, data: Record<string, unknown> = notice, pointer = id) => {
+      const db = ctx(uid);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'privacyNotices', id), data);
+      batch.set(doc(db, 'settings', 'public'), { recruitmentPrivacyNoticeId: pointer }, { merge: true });
+      return batch.commit();
+    };
+    await assertSucceeds(getDoc(doc(publicDb, 'privacyNotices', 'n1')));
+    await assertFails(publish('chair', 'n2'));
+    await assertFails(publish('orgAdmin', 'short', { ...notice, body: 'kısa' }));
+    await assertFails(publish('orgAdmin', 'extra', { ...notice, publishedByName: 'Yönetici' }));
+    await assertFails(setDoc(doc(ctx('orgAdmin'), 'settings', 'public'), { recruitmentPrivacyNoticeId: 'yok' }, { merge: true }));
+    await assertFails(publish('orgAdmin', 'wrongkind', { ...notice, kind: 'unknown' }));
+    // Çerez politikası, başvuru metni yerine yürürlüğe konamaz; kendi işaretçisine konabilir.
+    const adminDb = ctx('orgAdmin');
+    const cookies = writeBatch(adminDb);
+    cookies.set(doc(adminDb, 'privacyNotices', 'cookie1'), { ...notice, kind: 'cookies' });
+    cookies.set(doc(adminDb, 'settings', 'public'), { recruitmentPrivacyNoticeId: 'cookie1' }, { merge: true });
+    await assertFails(cookies.commit());
+    const cookiesOk = writeBatch(adminDb);
+    cookiesOk.set(doc(adminDb, 'privacyNotices', 'cookie1'), { ...notice, kind: 'cookies' });
+    cookiesOk.set(doc(adminDb, 'settings', 'public'), { cookiePolicyId: 'cookie1' }, { merge: true });
+    await assertSucceeds(cookiesOk.commit());
+    await assertFails(setDoc(doc(ctx('orgAdmin'), 'settings', 'public'), { termsId: 'cookie1' }, { merge: true }));
+    await assertSucceeds(publish('orgAdmin', 'n2'));
+    await assertFails(updateDoc(doc(ctx('orgAdmin'), 'privacyNotices', 'n2'), { body: 'z'.repeat(300) }));
+    await assertFails(deleteDoc(doc(ctx('orgAdmin'), 'privacyNotices', 'n1')));
+    // Yeni sürüm yürürlüğe girince eski sürüme bağlı başvuru reddedilir.
+    await openCall();
+    await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application()));
+    await assertSucceeds(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), { ...application(), privacyNoticeId: 'n2' }));
   });
 
   it('Hub üyeliği olmayan oturum açık ilana bir kez başvurur; ilgili başkan değerlendirir', async () => {
-    await setDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), call());
+    await createCall('chair', 'c1');
     await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });
     const application = {
       callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
       uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
       studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
-      availability: 'Haftada dört saat', answers: {}, privacyConsent: true, status: 'pending',
+      availability: 'Haftada dört saat', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending',
       submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     };
     await assertSucceeds(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application));
     await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'another-id'), application));
     await assertSucceeds(getDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate')));
     await assertFails(getDoc(doc(ctx('rasVol'), 'recruitmentApplications', 'c1__candidate')));
-    await assertSucceeds(updateDoc(doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate'), {
-      status: 'reviewing', reviewedBy: 'chair', reviewedByName: 'chair', reviewedAt: serverTimestamp(),
-      decisionNote: 'Görüşmeye çağrılacak', updatedAt: serverTimestamp(),
-    }));
+    await assertSucceeds(review('chair', 'reviewing'));
   });
 
   it('kapalı ilana başvuru ve başvuru içeriğini sonradan değiştirme reddedilir', async () => {
-    await setDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), call());
+    await createCall('chair', 'c1');
     const application = {
       callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
       uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
       studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
-      availability: '', answers: {}, privacyConsent: true, status: 'pending', submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      availability: '', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending', submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     };
     await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application));
     await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });

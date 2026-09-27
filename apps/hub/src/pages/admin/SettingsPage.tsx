@@ -1,4 +1,4 @@
-import { Alert, Button, Card, FileButton, Group, Image, Select, SimpleGrid, Stack, TagsInput, Text, TextInput, Textarea, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Card, FileButton, Group, Image, Select, SimpleGrid, Stack, Tabs, TagsInput, Text, TextInput, Textarea, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { IconPhoto, IconShieldLock } from '@tabler/icons-react';
 import { doc, setDoc, where } from 'firebase/firestore';
@@ -8,10 +8,11 @@ import { PageHeader, notifyError, notifySuccess } from '../../components/ui';
 import { db } from '../../firebase';
 import { rebuildAccess } from '../../lib/access';
 import { logAudit } from '../../lib/audit';
-import { useCollection } from '../../lib/hooks';
+import { useCollection, useDoc } from '../../lib/hooks';
 import { useOrg } from '../../lib/org';
+import { POLICIES, privacyPlaceholders, publishPolicy, type PolicyDefinition } from '../../lib/privacy';
 import { formatDocumentNo } from '../../lib/workflow';
-import type { Access, Member, OrgSettings, PublicSettings } from '../../lib/types';
+import type { Access, Member, OrgSettings, PolicyKind, PrivacyNotice, PublicSettings } from '../../lib/types';
 
 const MAX_LOGO = 150 * 1024;
 
@@ -28,7 +29,7 @@ export function SettingsPage() {
   const save = async () => {
     setBusy(true);
     try {
-      await setDoc(doc(db, 'settings', 'public'), pub);
+      await setDoc(doc(db, 'settings', 'public'), pub, { merge: true });
       await setDoc(doc(db, 'settings', 'org'), org);
       await logAudit('settings.update', 'settings', { orgName: pub.orgName, numberingPattern: org.numberingPattern });
       notifySuccess('Ayarlar kaydedildi.');
@@ -192,7 +193,115 @@ export function SettingsPage() {
           </Stack>
         </Card>
       </SimpleGrid>
+      <PoliciesCard settings={publicSettings} />
       {isSuperAdmin && <SuperAdmins myUid={user!.uid} />}
+    </Stack>
+  );
+}
+
+function PoliciesCard({ settings }: { settings: PublicSettings }) {
+  const [kind, setKind] = useState<PolicyKind>('recruitment');
+  return (
+    <Card>
+      <Stack>
+        <div>
+          <Title order={5}>Politikalar ve KVKK metinleri</Title>
+          <Text size="xs" c="dimmed">
+            Herkese açık yayımlanır; her yayım yeni ve değiştirilemez bir sürümdür. Kariyer başvurusu, yürürlükte bir başvuru aydınlatma
+            metni yoksa alınmaz.
+          </Text>
+        </div>
+        <Alert color="yellow" variant="light">
+          Hazır gelen metinler taslaktır ve hukuki görüş yerine geçmez. Veri sorumlusu, yurt dışı aktarım dayanağı, saklama süresi ve
+          iletişim adreslerini üniversitenin veya bir hukukçunun görüşüyle doldurun.
+        </Alert>
+        <Tabs value={kind} onChange={(value) => value && setKind(value as PolicyKind)} keepMounted={false}>
+          <Tabs.List>
+            {POLICIES.map((policy) => (
+              <Tabs.Tab key={policy.kind} value={policy.kind} rightSection={settings[policy.field] ? null : <Badge size="xs" color="red">yok</Badge>}>
+                {policy.label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          {POLICIES.map((policy) => (
+            <Tabs.Panel key={policy.kind} value={policy.kind} pt="md">
+              <PolicyEditor policy={policy} currentId={settings[policy.field] ?? null} />
+            </Tabs.Panel>
+          ))}
+        </Tabs>
+      </Stack>
+    </Card>
+  );
+}
+
+function PolicyEditor({ policy, currentId }: { policy: PolicyDefinition; currentId: string | null }) {
+  const current = useDoc<PrivacyNotice>(currentId ? `privacyNotices/${currentId}` : null);
+  const [title, setTitle] = useState(policy.defaultTitle);
+  const [versionLabel, setVersionLabel] = useState(`v${new Date().toISOString().slice(0, 10)}`);
+  const [body, setBody] = useState(policy.template);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!current.data) return;
+    setTitle(current.data.title);
+    setBody(current.data.body);
+  }, [current.data]);
+
+  const missing = privacyPlaceholders(body);
+  const publish = () =>
+    modals.openConfirmModal({
+      title: `${policy.label} — yeni sürüm`,
+      children: (
+        <Text size="sm">
+          Yeni sürüm hemen herkese açık sayfada yürürlüğe girer. Yayımlanan sürüm sonradan değiştirilemez; önceki sürümler arşivde kalır.
+        </Text>
+      ),
+      labels: { confirm: 'Yayımla', cancel: 'Vazgeç' },
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await publishPolicy(policy.kind, { title, versionLabel, body });
+          notifySuccess(`${policy.label} yayımlandı.`);
+        } catch (e) {
+          notifyError(e);
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        {current.data ? (
+          <Badge color="green">Yürürlükte: {current.data.versionLabel}</Badge>
+        ) : (
+          <Badge color="red">{policy.kind === 'recruitment' ? 'Yayımlanmadı — başvurular kapalı' : 'Yayımlanmadı'}</Badge>
+        )}
+        <Anchor href={`/politika/${policy.slug}`} target="_blank" size="sm">
+          Herkese açık sayfa
+        </Anchor>
+      </Group>
+      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+        <TextInput label="Başlık" maxLength={200} value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
+        <TextInput label="Sürüm etiketi" maxLength={60} value={versionLabel} onChange={(e) => setVersionLabel(e.currentTarget.value)} />
+      </SimpleGrid>
+      <Textarea label="Metin" autosize minRows={12} maxRows={30} maxLength={30000} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
+      {missing.length > 0 && (
+        <Text size="sm" c="red">
+          Yayımlamadan önce doldurun: {missing.join(', ')}
+        </Text>
+      )}
+      <Group justify="space-between">
+        {current.data ? (
+          <Button variant="subtle" size="xs" onClick={() => { setTitle(policy.defaultTitle); setBody(policy.template); }}>
+            Hazır taslağı yükle
+          </Button>
+        ) : <span />}
+        <Button onClick={publish} loading={busy} disabled={missing.length > 0}>
+          Yeni sürüm olarak yayımla
+        </Button>
+      </Group>
     </Stack>
   );
 }

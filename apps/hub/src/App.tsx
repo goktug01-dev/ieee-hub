@@ -32,6 +32,7 @@ const SetupPage = lazy(() => import('./pages/public/SetupPage').then((m) => ({ d
 const VerifyPage = lazy(() => import('./pages/public/VerifyPage').then((m) => ({ default: m.VerifyPage })));
 const StatutePage = lazy(() => import('./pages/public/StatutePage').then((m) => ({ default: m.StatutePage })));
 const CareerPage = lazy(() => import('./pages/public/CareerPage').then((m) => ({ default: m.CareerPage })));
+const PolicyPage = lazy(() => import('./pages/public/PolicyPage').then((m) => ({ default: m.PolicyPage })));
 const TasksPage = lazy(() => import('./pages/work/TasksPage').then((m) => ({ default: m.TasksPage })));
 const VolunteerPage = lazy(() => import('./pages/work/VolunteerPage').then((m) => ({ default: m.VolunteerPage })));
 const RecruitmentPage = lazy(() => import('./pages/work/RecruitmentPage').then((m) => ({ default: m.RecruitmentPage })));
@@ -66,11 +67,18 @@ export function App() {
   const careerHost = window.location.hostname.includes('ieee-ikcu-kariyer');
 
   if (careerHost) {
-    return <Suspense fallback={<FullPageLoader />}><CareerPage /></Suspense>;
+    return (
+      <Routes>
+        <Route path="/politika/:slug" element={<Suspense fallback={<FullPageLoader />}><PolicyPage /></Suspense>} />
+        <Route path="*" element={<Suspense fallback={<FullPageLoader />}><CareerPage /></Suspense>} />
+      </Routes>
+    );
   }
 
   return (
     <Routes>
+      {/* Herkese açık politika metinleri: giriş gerektirmez */}
+      <Route path="/politika/:slug" element={<Suspense fallback={<FullPageLoader />}><PolicyPage /></Suspense>} />
       {/* Herkese açık doğrulama sayfası: giriş gerektirmez */}
       <Route path="/dogrula" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />
       <Route path="/dogrula/:code" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />

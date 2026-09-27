@@ -62,7 +62,10 @@ flowchart LR
 | `assets/{id}` | Fiziksel demirbaş, konum, kondisyon ve zimmet durumu | Envanter/finans/sekreterlik/operasyon yetkilileri | Envanter, finans veya sekreterlik yöneticisi |
 | `assetMovements/{id}` | Değiştirilemez zimmet, iade, taşıma, bakım, kayıp ve hurda hareketi | Demirbaş okuyucuları | Demirbaş yöneticileri; yalnız oluşturma |
 | `recruitmentCalls/{id}` | Komite/YK tarihli alım ilanı, kontenjan ve özel sorular | Açık ilanlar herkes; taslak/kapalı ilan ilgili yönetici | İlgili `unit.manage` veya `assignments.manage`; silinmez |
+| `recruitmentCalls/{id}/internal/meta` | İlanı açan kişinin uid ve adı (herkese açık ilan belgesinde tutulmaz) | Yalnız ilgili yönetici | İlanla aynı batch'te bir kez; değişmez |
 | `recruitmentApplications/{ilan__uid}` | Aday kimliği, iletişim, form yanıtları ve değerlendirme durumu | Başvuru sahibi ve ilgili birim yöneticisi | Aday ilk gönderim/geri çekme; ilgili yönetici değerlendirme |
+| `recruitmentApplications/{id}/internal/review` | Son değerlendirenin uid ve adı (adaya gösterilmez) | Yalnız ilgili yönetici | Karar güncellemesiyle aynı batch'te |
+| `privacyNotices/{id}` | Politika sürümü (`recruitment`, `members`, `cookies`, `terms`); yürürlükteki sürümler `settings/public` işaretçilerinde | Herkes | `org.manage`; yalnız oluşturma, değiştirilemez |
 
 ## 3. Yetki modeli
 

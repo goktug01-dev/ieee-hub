@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -12,15 +13,16 @@ import {
   Stack,
   Table,
   Tabs,
+  TagsInput,
   Text,
   TextInput,
   Textarea,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconExternalLink, IconPlus, IconSettings, IconTrash } from '@tabler/icons-react';
+import { IconEdit, IconExternalLink, IconPlus, IconSettings, IconTrash } from '@tabler/icons-react';
 import { Timestamp, where } from 'firebase/firestore';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { hasPermission, unitsWithPermission } from '../../lib/access';
@@ -33,6 +35,7 @@ import {
   decideRecruitmentApplication,
   emptyRecruitmentQuestion,
   setRecruitmentCallStatus,
+  updateRecruitmentCall,
 } from '../../lib/recruitment';
 import { BRANCH, type WithId } from '../../lib/types';
 
@@ -65,11 +68,30 @@ export function RecruitmentPage() {
     return unitsWithPermission(access, 'unit.manage');
   }, [access, units]);
   const [unitId, setUnitId] = useState(managedIds[0] ?? '');
+  // Yetki ve birimler geç yüklenirse ilk yönetilen birimi seç.
+  useEffect(() => {
+    if (!unitId && managedIds[0]) setUnitId(managedIds[0]);
+  }, [unitId, managedIds]);
   const calls = useCollection<RecruitmentCall>(unitId ? 'recruitmentCalls' : null, unitId ? [where('unitId', '==', unitId)] : [], `recruitment-calls-${unitId}`);
   const applications = useCollection<RecruitmentApplication>(unitId ? 'recruitmentApplications' : null, unitId ? [where('unitId', '==', unitId)] : [], `recruitment-applications-${unitId}`);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>('ilanlar');
   const [creatorOpen, creator] = useDisclosure(false);
+  const [editing, setEditing] = useState<WithId<RecruitmentCall> | null>(null);
+  const [statusBusy, setStatusBusy] = useState<string | null>(null);
+  const openCreator = (call: WithId<RecruitmentCall> | null) => { setEditing(call); creator.open(); };
+  const changeStatus = async (call: WithId<RecruitmentCall>, status: RecruitmentCall['status']) => {
+    setStatusBusy(call.id);
+    try {
+      await setRecruitmentCallStatus(call, status);
+      notifySuccess(status === 'open' ? 'İlan kariyer sayfasında yayımlandı.' : 'İlan durumu güncellendi.');
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setStatusBusy(null);
+    }
+  };
+  const sortedCalls = [...calls.data].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
   const selectedCall = calls.data.find((call) => call.id === selectedCallId) ?? null;
   const selectedApplications = applications.data
     .filter((application) => application.callId === selectedCallId)
@@ -99,7 +121,7 @@ export function RecruitmentPage() {
           searchable
           w={{ base: '100%', sm: 360 }}
         />
-        <Button leftSection={<IconPlus size={16} />} onClick={creator.open}>Yeni ilan aç</Button>
+        <Button leftSection={<IconPlus size={16} />} onClick={() => openCreator(null)} disabled={!unitId}>Yeni ilan aç</Button>
       </Group>
 
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
@@ -112,7 +134,7 @@ export function RecruitmentPage() {
             <EmptyState title="Henüz ilan yok" description="Bu birim için ilk tarihli başvuru ilanını oluşturun." />
           ) : (
             <SimpleGrid cols={{ base: 1, lg: 2 }}>
-              {calls.data.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).map((call) => {
+              {sortedCalls.map((call) => {
                 const count = applications.data.filter((application) => application.callId === call.id).length;
                 return (
                   <Card key={call.id} withBorder>
@@ -129,10 +151,11 @@ export function RecruitmentPage() {
                         {call.opensAt.toDate().toLocaleString('tr-TR')} – {call.closesAt.toDate().toLocaleString('tr-TR')} · {count} başvuru
                       </Text>
                       <Group gap="xs">
-                        {call.status === 'draft' && <Button size="xs" color="green" onClick={() => changeStatus(call, 'open')}>Yayımla</Button>}
-                        {call.status === 'open' && <Button size="xs" color="orange" variant="light" onClick={() => changeStatus(call, 'closed')}>Başvuruyu kapat</Button>}
-                        {call.status === 'closed' && call.closesAt.toMillis() > Date.now() && <Button size="xs" color="green" variant="light" onClick={() => changeStatus(call, 'open')}>Yeniden aç</Button>}
-                        {call.status !== 'archived' && <Button size="xs" color="gray" variant="subtle" onClick={() => changeStatus(call, 'archived')}>Arşivle</Button>}
+                        {call.status === 'draft' && <Button size="xs" variant="default" leftSection={<IconEdit size={14} />} disabled={statusBusy === call.id} onClick={() => openCreator(call)}>Düzenle</Button>}
+                        {call.status === 'draft' && <Button size="xs" color="green" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'open')}>Yayımla</Button>}
+                        {call.status === 'open' && <Button size="xs" color="orange" variant="light" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'closed')}>Başvuruyu kapat</Button>}
+                        {call.status === 'closed' && call.closesAt.toMillis() > Date.now() && <Button size="xs" color="green" variant="light" loading={statusBusy === call.id} onClick={() => void changeStatus(call, 'open')}>Yeniden aç</Button>}
+                        {call.status !== 'archived' && <Button size="xs" color="gray" variant="subtle" disabled={statusBusy === call.id} onClick={() => void changeStatus(call, 'archived')}>Arşivle</Button>}
                         <Button size="xs" variant="default" leftSection={<IconSettings size={14} />} onClick={() => { setSelectedCallId(call.id); setTab('adaylar'); }}>Adayları yönet</Button>
                       </Group>
                     </Stack>
@@ -146,7 +169,7 @@ export function RecruitmentPage() {
           <Select
             label="İlan"
             placeholder="Adaylarını görmek için ilan seçin"
-            data={calls.data.map((call) => ({ value: call.id, label: `${call.title} · ${CALL_STATUS[call.status].label}` }))}
+            data={sortedCalls.map((call) => ({ value: call.id, label: `${call.title} · ${CALL_STATUS[call.status].label}` }))}
             value={selectedCallId}
             onChange={setSelectedCallId}
             searchable
@@ -162,93 +185,200 @@ export function RecruitmentPage() {
         </Tabs.Panel>
       </Tabs>
 
-      <CallCreator opened={creatorOpen} onClose={creator.close} unitId={unitId} unitName={unitName(unitId)} />
+      <CallEditor opened={creatorOpen} onClose={creator.close} unitId={unitId} unitName={unitName(unitId)} call={editing} />
     </Stack>
   );
 }
 
-async function changeStatus(call: WithId<RecruitmentCall>, status: RecruitmentCall['status']) {
-  try {
-    await setRecruitmentCallStatus(call, status);
-    notifySuccess(status === 'open' ? 'İlan aday vitrininde yayımlandı.' : 'İlan durumu güncellendi.');
-  } catch (error) {
-    notifyError(error);
-  }
-}
+const EMPTY_FORM = () => ({
+  title: '',
+  roleTitle: 'Gönüllü ekip üyesi',
+  summary: '',
+  description: '',
+  expectations: '',
+  capacity: '' as string | number,
+  opensAt: localDateTime(new Date()),
+  closesAt: localDateTime(new Date(Date.now() + 7 * 864e5)),
+  questions: [] as RecruitmentQuestion[],
+});
 
-function CallCreator({ opened, onClose, unitId, unitName }: { opened: boolean; onClose: () => void; unitId: string; unitName: string }) {
-  const [title, setTitle] = useState('');
-  const [roleTitle, setRoleTitle] = useState('Gönüllü ekip üyesi');
-  const [summary, setSummary] = useState('');
-  const [description, setDescription] = useState('');
-  const [expectations, setExpectations] = useState('');
-  const [capacity, setCapacity] = useState<string | number>('');
-  const [opensAt, setOpensAt] = useState(localDateTime(new Date()));
-  const [closesAt, setClosesAt] = useState(localDateTime(new Date(Date.now() + 7 * 864e5)));
-  const [questions, setQuestions] = useState<RecruitmentQuestion[]>([]);
+type CallForm = ReturnType<typeof EMPTY_FORM>;
+
+const formFromCall = (call: WithId<RecruitmentCall>): CallForm => ({
+  title: call.title,
+  roleTitle: call.roleTitle,
+  summary: call.summary,
+  description: call.description,
+  expectations: call.expectations,
+  capacity: call.capacity ?? '',
+  opensAt: localDateTime(call.opensAt.toDate()),
+  closesAt: localDateTime(call.closesAt.toDate()),
+  questions: call.questions,
+});
+
+const counter = (value: string, max: number) => `${value.length}/${max}`;
+
+/** Yeni ilan oluşturur veya bir taslağı düzenler. */
+function CallEditor({ opened, onClose, unitId, unitName, call }: {
+  opened: boolean;
+  onClose: () => void;
+  unitId: string;
+  unitName: string;
+  call: WithId<RecruitmentCall> | null;
+}) {
+  const [form, setForm] = useState<CallForm>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
 
+  // Modal her açıldığında düzenlenen ilanla ya da boş formla başlar.
+  useEffect(() => {
+    if (opened) setForm(call ? formFromCall(call) : EMPTY_FORM());
+  }, [opened, call]);
+
+  const set = <K extends keyof CallForm>(key: K, value: CallForm[K]) => setForm((current) => ({ ...current, [key]: value }));
   const updateQuestion = (index: number, patch: Partial<RecruitmentQuestion>) =>
-    setQuestions((current) => current.map((question, questionIndex) => questionIndex === index ? { ...question, ...patch } : question));
+    set('questions', form.questions.map((question, questionIndex) => questionIndex === index ? { ...question, ...patch } : question));
+
+  const opens = new Date(form.opensAt);
+  const closes = new Date(form.closesAt);
+  const dateError = !form.opensAt || Number.isNaN(opens.getTime()) ? 'Başlangıç tarihini girin.'
+    : !form.closesAt || Number.isNaN(closes.getTime()) ? 'Bitiş tarihini girin.'
+    : closes <= opens ? 'Bitiş, başlangıçtan sonra olmalı.'
+    : closes.getTime() <= Date.now() ? 'Bitiş tarihi geçmişte kalıyor.'
+    : null;
 
   const submit = async () => {
+    if (dateError) return notifyError(new Error(dateError), 'Tarihleri kontrol edin');
     setBusy(true);
     try {
-      await createRecruitmentCall({
+      const input = {
         unitId,
         unitName,
-        title: title.trim(),
-        roleTitle: roleTitle.trim(),
-        summary: summary.trim(),
-        description: description.trim(),
-        expectations: expectations.trim(),
-        capacity: capacity === '' ? null : Number(capacity),
-        opensAt: Timestamp.fromDate(new Date(opensAt)),
-        closesAt: Timestamp.fromDate(new Date(closesAt)),
-        questions: questions.map((question) => ({ ...question, label: question.label.trim(), options: question.options.map((option) => option.trim()).filter(Boolean) })),
-      });
-      notifySuccess('İlan taslak olarak oluşturuldu. Kontrol ettikten sonra yayımlayabilirsiniz.');
-      setTitle('');
-      setSummary('');
-      setDescription('');
-      setExpectations('');
-      setQuestions([]);
+        title: form.title.trim(),
+        roleTitle: form.roleTitle.trim(),
+        summary: form.summary.trim(),
+        description: form.description.trim(),
+        expectations: form.expectations.trim(),
+        capacity: form.capacity === '' ? null : Number(form.capacity),
+        opensAt: Timestamp.fromDate(opens),
+        closesAt: Timestamp.fromDate(closes),
+        questions: form.questions.map((question) => ({
+          ...question,
+          label: question.label.trim(),
+          options: question.type === 'choice' ? question.options.map((option) => option.trim()).filter(Boolean) : [],
+        })),
+      };
+      if (call) {
+        await updateRecruitmentCall(call, input);
+        notifySuccess('Taslak güncellendi.');
+      } else {
+        await createRecruitmentCall(input);
+        notifySuccess('İlan taslak olarak oluşturuldu. Kontrol ettikten sonra yayımlayabilirsiniz.');
+      }
       onClose();
     } catch (error) {
-      notifyError(error, 'İlan oluşturulamadı');
+      notifyError(error, call ? 'Taslak güncellenemedi' : 'İlan oluşturulamadı');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Yeni başvuru ilanı" size="xl" centered>
+    <Modal opened={opened} onClose={onClose} title={call ? 'Taslak ilanı düzenle' : 'Yeni başvuru ilanı'} size="xl" centered>
       <Stack>
-        <Alert color="gray">İlan önce taslak oluşur; siz “Yayımla” dediğinizde kariyer vitrininde görünür.</Alert>
+        <Alert color="gray" variant="light">
+          {unitName} için. İlan önce taslak olarak kaydedilir; “Yayımla” dediğinizde kariyer sayfasında görünür. Yayımlanan ilanın soruları değiştirilemez.
+        </Alert>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <TextInput label="İlan başlığı" placeholder="Örn. CS 2026 Güz Ekip Alımı" required value={title} onChange={(event) => setTitle(event.currentTarget.value)} />
-          <TextInput label="Pozisyon / ekip" placeholder="Örn. Etkinlik ekibi gönüllüsü" required value={roleTitle} onChange={(event) => setRoleTitle(event.currentTarget.value)} />
+          <TextInput
+            label="İlan başlığı"
+            placeholder="Örn. CS 2026 Güz Ekip Alımı"
+            required
+            maxLength={120}
+            description={counter(form.title, 120)}
+            value={form.title}
+            onChange={(event) => set('title', event.currentTarget.value)}
+          />
+          <TextInput
+            label="Pozisyon / ekip"
+            placeholder="Örn. Etkinlik ekibi gönüllüsü"
+            required
+            maxLength={120}
+            description={counter(form.roleTitle, 120)}
+            value={form.roleTitle}
+            onChange={(event) => set('roleTitle', event.currentTarget.value)}
+          />
         </SimpleGrid>
-        <Textarea label="Kartta görünecek kısa açıklama" required maxLength={500} autosize minRows={2} value={summary} onChange={(event) => setSummary(event.currentTarget.value)} />
-        <Textarea label="İlan ayrıntıları" autosize minRows={3} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
-        <Textarea label="Beklentiler" placeholder="Maddeleri satır satır yazabilirsiniz" autosize minRows={3} value={expectations} onChange={(event) => setExpectations(event.currentTarget.value)} />
+        <Textarea
+          label="Kartta görünecek kısa açıklama"
+          required
+          maxLength={500}
+          description={counter(form.summary, 500)}
+          autosize
+          minRows={2}
+          value={form.summary}
+          onChange={(event) => set('summary', event.currentTarget.value)}
+        />
+        <Textarea
+          label="İlan ayrıntıları"
+          description={`Başvuru formunun üstünde görünür · ${counter(form.description, 5000)}`}
+          maxLength={5000}
+          autosize
+          minRows={3}
+          maxRows={12}
+          value={form.description}
+          onChange={(event) => set('description', event.currentTarget.value)}
+        />
+        <Textarea
+          label="Beklentiler"
+          placeholder="Maddeleri satır satır yazabilirsiniz"
+          description={counter(form.expectations, 3000)}
+          maxLength={3000}
+          autosize
+          minRows={3}
+          maxRows={10}
+          value={form.expectations}
+          onChange={(event) => set('expectations', event.currentTarget.value)}
+        />
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput type="datetime-local" label="Başlangıç" required value={opensAt} onChange={(event) => setOpensAt(event.currentTarget.value)} />
-          <TextInput type="datetime-local" label="Bitiş" required value={closesAt} onChange={(event) => setClosesAt(event.currentTarget.value)} />
-          <NumberInput label="Kontenjan" placeholder="Sınırsız" min={1} max={500} value={capacity} onChange={setCapacity} />
+          <TextInput type="datetime-local" label="Başlangıç" required value={form.opensAt} onChange={(event) => set('opensAt', event.currentTarget.value)} />
+          <TextInput
+            type="datetime-local"
+            label="Bitiş"
+            required
+            value={form.closesAt}
+            min={form.opensAt || undefined}
+            error={dateError}
+            onChange={(event) => set('closesAt', event.currentTarget.value)}
+          />
+          <NumberInput label="Kontenjan" placeholder="Sınırsız" min={1} max={500} allowDecimal={false} value={form.capacity} onChange={(value) => set('capacity', value)} />
         </SimpleGrid>
         <Group justify="space-between">
           <div>
             <Text fw={600}>Özel sorular</Text>
-            <Text size="xs" c="dimmed">En fazla 10 soru; dosya yükleme ücretsiz planda desteklenmez.</Text>
+            <Text size="xs" c="dimmed">En fazla 10 soru; dosya yükleme desteklenmez. Bölüm, telefon ve motivasyon zaten formda sorulur.</Text>
           </div>
-          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} disabled={questions.length >= 10} onClick={() => setQuestions((current) => [...current, emptyRecruitmentQuestion(current.length)])}>Soru ekle</Button>
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<IconPlus size={14} />}
+            disabled={form.questions.length >= 10}
+            onClick={() => set('questions', [...form.questions, emptyRecruitmentQuestion(form.questions.length)])}
+          >
+            Soru ekle
+          </Button>
         </Group>
-        {questions.map((question, index) => (
-          <Card key={question.id} bg="gray.0" padding="sm">
+        {form.questions.map((question, index) => (
+          <Card key={question.id} bg="var(--mantine-color-default-hover)" padding="sm" withBorder={false}>
             <Stack gap="xs">
-              <Group align="end" wrap="wrap">
-                <TextInput label={`${index + 1}. soru`} value={question.label} onChange={(event) => updateQuestion(index, { label: event.currentTarget.value })} style={{ flex: '1 1 280px' }} />
+              <Group align="flex-start" wrap="wrap">
+                <TextInput
+                  label={`${index + 1}. soru`}
+                  required
+                  maxLength={300}
+                  value={question.label}
+                  onChange={(event) => updateQuestion(index, { label: event.currentTarget.value })}
+                  style={{ flex: '1 1 260px' }}
+                />
                 <Select
                   label="Yanıt türü"
                   data={[
@@ -259,21 +389,41 @@ function CallCreator({ opened, onClose, unitId, unitName }: { opened: boolean; o
                   ]}
                   value={question.type}
                   onChange={(value) => updateQuestion(index, { type: (value ?? 'long') as RecruitmentQuestionType })}
-                  w={170}
+                  w={{ base: '100%', xs: 170 }}
                   allowDeselect={false}
                 />
-                <Checkbox label="Zorunlu" checked={question.required} onChange={(event) => updateQuestion(index, { required: event.currentTarget.checked })} mb={8} />
-                <Button color="red" variant="subtle" px="xs" onClick={() => setQuestions((current) => current.filter((_, questionIndex) => questionIndex !== index))}><IconTrash size={16} /></Button>
+                <Checkbox
+                  label="Zorunlu"
+                  checked={question.required}
+                  onChange={(event) => updateQuestion(index, { required: event.currentTarget.checked })}
+                  mt={{ base: 0, xs: 32 }}
+                />
+                <ActionIcon
+                  color="red"
+                  variant="subtle"
+                  size="lg"
+                  mt={{ base: 0, xs: 26 }}
+                  aria-label={`${index + 1}. soruyu sil`}
+                  onClick={() => set('questions', form.questions.filter((_, questionIndex) => questionIndex !== index))}
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
               </Group>
               {question.type === 'choice' && (
-                <TextInput label="Seçenekler" description="Virgülle ayırın" value={question.options.join(', ')} onChange={(event) => updateQuestion(index, { options: event.currentTarget.value.split(',') })} />
+                <TagsInput
+                  label="Seçenekler"
+                  description="Her seçeneği yazıp Enter'a basın (en az iki)"
+                  value={question.options}
+                  onChange={(options) => updateQuestion(index, { options })}
+                  error={question.options.filter((option) => option.trim()).length < 2 ? 'En az iki seçenek girin' : undefined}
+                />
               )}
             </Stack>
           </Card>
         ))}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Vazgeç</Button>
-          <Button onClick={submit} loading={busy}>Taslağı oluştur</Button>
+          <Button onClick={submit} loading={busy} disabled={!!dateError}>{call ? 'Taslağı kaydet' : 'Taslağı oluştur'}</Button>
         </Group>
       </Stack>
     </Modal>
@@ -324,7 +474,7 @@ function ApplicantCard({ application, call }: { application: WithId<RecruitmentA
         )}
         {['pending', 'reviewing', 'waitlisted'].includes(application.status) && (
           <>
-            <Textarea label="Değerlendirme / adaya gösterilecek karar notu" value={note} onChange={(event) => setNote(event.currentTarget.value)} autosize minRows={2} />
+            <Textarea label="Adaya gösterilecek not" description="Aday bu notu kariyer sayfasında görür; iç değerlendirme yazmayın." maxLength={2000} value={note} onChange={(event) => setNote(event.currentTarget.value)} autosize minRows={2} />
             <Group gap="xs">
               <Button size="xs" variant="light" color="yellow" loading={busy} onClick={() => void decide('reviewing')}>İncelemeye al</Button>
               <Button size="xs" variant="light" color="orange" loading={busy} onClick={() => void decide('waitlisted')}>Yedeğe al</Button>

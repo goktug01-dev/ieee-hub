@@ -37,5 +37,6 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0029](0029-herkese-acik-tuzuk-arsivi.md) | Tüzük girişsiz, sürümlü ve değiştirilemez yayımlanır | Kabul Edildi | ✓ | WP-01, WP-10 |
 | [0030](0030-demirbas-zimmet-ve-hareket-defteri.md) | Fiziksel varlıklar zimmet ve hareket geçmişiyle izlenir | Kabul Edildi | ✓ | WP-01, WP-10 |
 | [0031](0031-ayri-kariyer-vitrini-ve-tarihli-birim-basvurulari.md) | Komite başvuruları ayrı kariyer vitrini ve tarihli ilanlarla yürütülür | Kabul Edildi | ✓ | WP-04, WP-11 |
+| [0032](0032-kariyer-kvkk-aydinlatma-ve-kimlik-gizliligi.md) | Kariyer başvurularında KVKK aydınlatması zorunludur ve yönetici kimliği adaya açılmaz | Kabul Edildi | ✓ | WP-04, WP-11 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

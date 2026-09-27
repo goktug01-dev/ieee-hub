@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Anchor,
   Badge,
@@ -19,19 +20,22 @@ import {
   Textarea,
   Title,
   PasswordInput,
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowRight, IconBriefcase2, IconCalendar, IconLogout, IconUsersGroup } from '@tabler/icons-react';
+import { IconArrowRight, IconBriefcase2, IconCalendar, IconLogout, IconMoon, IconSun, IconUsersGroup } from '@tabler/icons-react';
 import { GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { where } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { PolicyLinks } from '../../components/PolicyLinks';
 import { ErrorAlert, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { auth } from '../../firebase';
-import { useCollection } from '../../lib/hooks';
+import { useCollection, useDoc } from '../../lib/hooks';
 import type { RecruitmentApplication, RecruitmentCall, RecruitmentQuestion } from '../../lib/opsTypes';
 import { applyToRecruitmentCall, recruitmentCallIsOpen, withdrawRecruitmentApplication } from '../../lib/recruitment';
-import type { WithId } from '../../lib/types';
+import type { PrivacyNotice, WithId } from '../../lib/types';
 
 const STATUS = {
   pending: { label: 'Başvuru alındı', color: 'blue' },
@@ -47,6 +51,8 @@ const dateTime = (value: RecruitmentCall['closesAt']) =>
 
 export function CareerPage() {
   const { user, publicSettings, signOut } = useAuth();
+  const { setColorScheme } = useMantineColorScheme();
+  const scheme = useComputedColorScheme('light');
   const calls = useCollection<RecruitmentCall>('recruitmentCalls', [where('status', '==', 'open')], 'career-open-calls');
   const mine = useCollection<RecruitmentApplication>(
     user ? 'recruitmentApplications' : null,
@@ -56,6 +62,11 @@ export function CareerPage() {
   const [selected, setSelected] = useState<WithId<RecruitmentCall> | null>(null);
   const [opened, modal] = useDisclosure(false);
   const [authOpened, authModal] = useDisclosure(false);
+  const [noticeOpened, noticeModal] = useDisclosure(false);
+  const noticeId = publicSettings.recruitmentPrivacyNoticeId ?? null;
+  const notice = useDoc<PrivacyNotice>(noticeId ? `privacyNotices/${noticeId}` : null);
+  // Yayımlı aydınlatma metni yoksa kurallar başvuruyu zaten reddeder; arayüz de başvuruyu kapatır.
+  const applicationsClosed = !notice.loading && !notice.data;
   const openCalls = useMemo(
     () => calls.data.filter((call) => recruitmentCallIsOpen(call)).sort((a, b) => a.closesAt.toMillis() - b.closesAt.toMillis()),
     [calls.data],
@@ -73,7 +84,7 @@ export function CareerPage() {
   };
 
   return (
-    <Box mih="100vh" bg="var(--mantine-color-gray-0)" style={{ colorScheme: 'light' }}>
+    <Box mih="100vh" bg="var(--mantine-color-body)">
       <Box bg="linear-gradient(135deg, #00629b 0%, #003b5c 62%, #111827 100%)" c="white" py={{ base: 42, sm: 72 }}>
         <Container size="lg">
           <Group justify="space-between" align="flex-start" mb={48}>
@@ -84,11 +95,22 @@ export function CareerPage() {
                 <Text size="xs" c="rgba(255,255,255,.72)">Kariyer ve gönüllülük</Text>
               </div>
             </Group>
-            {user ? (
-              <Button variant="white" color="dark" size="xs" leftSection={<IconLogout size={15} />} onClick={() => void signOut()}>
-                Çıkış
-              </Button>
-            ) : null}
+            <Group gap="xs">
+              <ActionIcon
+                variant="white"
+                color="dark"
+                size="lg"
+                aria-label={scheme === 'dark' ? 'Açık temaya geç' : 'Koyu temaya geç'}
+                onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')}
+              >
+                {scheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+              </ActionIcon>
+              {user ? (
+                <Button variant="white" color="dark" size="xs" leftSection={<IconLogout size={15} />} onClick={() => void signOut()}>
+                  Çıkış
+                </Button>
+              ) : null}
+            </Group>
           </Group>
           <Stack maw={760} gap="md">
             <Badge variant="light" color="cyan" size="lg" w="fit-content">Birlikte üretelim</Badge>
@@ -101,8 +123,8 @@ export function CareerPage() {
       </Box>
 
       <Container size="lg" py={{ base: 'xl', sm: 44 }}>
-        <Alert color="blue" variant="light" mb="xl" title="Bu portal komite başvuruları içindir">
-          IEEE üyeliği ve standart öğrenci kolu üyelik işlemleri mevcut üyelik sistemi üzerinden yürür. Buradaki hesap ve başvuru, tek başına IEEE üyeliği oluşturmaz.
+        <Alert color="blue" variant="light" mb="xl">
+          Bu sayfa komite ve ekip başvuruları içindir; buradan yapılan başvuru IEEE üyeliği yerine geçmez.
         </Alert>
 
         {user && (
@@ -119,7 +141,7 @@ export function CareerPage() {
             ) : (
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 {mine.data.sort((a, b) => b.submittedAt.toMillis() - a.submittedAt.toMillis()).map((application) => (
-                  <Card key={application.id} bg="gray.0" padding="sm">
+                  <Card key={application.id} bg="var(--mantine-color-default-hover)" padding="sm">
                     <Group justify="space-between" align="flex-start" wrap="nowrap">
                       <div>
                         <Text size="sm" fw={600}>{application.callTitle}</Text>
@@ -151,8 +173,14 @@ export function CareerPage() {
             <Title order={2}>Açık pozisyonlar</Title>
             <Text c="dimmed">Sana uygun ekibi seç, soruları yanıtla ve başvurunu takip et.</Text>
           </div>
-          {!user && <Badge color="gray" variant="light">Başvuru için Google ile giriş gerekir</Badge>}
+          {!user && <Badge color="gray" variant="light">Başvuru için giriş gerekir</Badge>}
         </Group>
+
+        {applicationsClosed && openCalls.length > 0 && (
+          <Alert color="yellow" variant="light" mb="lg">
+            Başvurular kısa bir süre için kapalı. Lütfen daha sonra tekrar deneyin.
+          </Alert>
+        )}
 
         {calls.loading ? <SectionLoader /> : calls.error ? <ErrorAlert error={calls.error} /> : openCalls.length === 0 ? (
           <Card withBorder padding="xl" ta="center">
@@ -173,7 +201,7 @@ export function CareerPage() {
                     </Group>
                     <div>
                       <Title order={3}>{call.title}</Title>
-                      <Text fw={600} c="blue.8" mt={4}>{call.roleTitle}</Text>
+                      <Text fw={600} c="var(--mantine-primary-color-light-color)" mt={4}>{call.roleTitle}</Text>
                     </div>
                     <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>{call.summary}</Text>
                     {call.expectations && <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{call.expectations}</Text>}
@@ -183,7 +211,7 @@ export function CareerPage() {
                       {existing ? (
                         <Badge color={STATUS[existing.status].color}>{STATUS[existing.status].label}</Badge>
                       ) : (
-                        <Button rightSection={<IconArrowRight size={16} />} onClick={() => choose(call)}>
+                        <Button rightSection={<IconArrowRight size={16} />} onClick={() => choose(call)} disabled={!notice.data}>
                           {user ? 'Başvur' : 'Giriş yap ve başvur'}
                         </Button>
                       )}
@@ -198,24 +226,36 @@ export function CareerPage() {
         <Divider my="xl" />
         <Group justify="space-between" gap="xs">
           <Text size="xs" c="dimmed">© {new Date().getFullYear()} {publicSettings.orgName}</Text>
-          <Group gap="md">
+          <Group gap="md" wrap="wrap">
+            <PolicyLinks kinds={['recruitment', 'cookies', 'terms']} />
             <Anchor href={window.location.hostname.includes('ieee-ikcu-kariyer') ? 'https://ieee-hub-techops.web.app/tuzuk' : '/tuzuk'} size="xs">Tüzük</Anchor>
-            <Anchor href={window.location.hostname.includes('ieee-ikcu-kariyer') ? 'https://ieee-hub-techops.web.app' : '/'} size="xs">İç operasyon Hub’ı</Anchor>
           </Group>
         </Group>
       </Container>
 
-      <ApplicationModal call={selected} opened={opened} onClose={modal.close} />
+      <ApplicationModal call={selected} opened={opened} onClose={modal.close} notice={notice.data} onShowNotice={noticeModal.open} />
       <CandidateAuthModal
         opened={authOpened}
         onClose={authModal.close}
         onDone={() => { authModal.close(); modal.open(); }}
+        onShowNotice={notice.data ? noticeModal.open : undefined}
       />
+      <PrivacyNoticeModal notice={notice.data} opened={noticeOpened} onClose={noticeModal.close} />
     </Box>
   );
 }
 
-function CandidateAuthModal({ opened, onClose, onDone }: { opened: boolean; onClose: () => void; onDone: () => void }) {
+function PrivacyNoticeModal({ notice, opened, onClose }: { notice: WithId<PrivacyNotice> | null; opened: boolean; onClose: () => void }) {
+  if (!notice) return null;
+  return (
+    <Modal opened={opened} onClose={onClose} title={notice.title} size="lg" centered>
+      <Text size="xs" c="dimmed" mb="sm">Sürüm {notice.versionLabel} · {dateTime(notice.publishedAt)}</Text>
+      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{notice.body}</Text>
+    </Modal>
+  );
+}
+
+function CandidateAuthModal({ opened, onClose, onDone, onShowNotice }: { opened: boolean; onClose: () => void; onDone: () => void; onShowNotice?: () => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -258,7 +298,14 @@ function CandidateAuthModal({ opened, onClose, onDone }: { opened: boolean; onCl
   return (
     <Modal opened={opened} onClose={onClose} title="Başvuru hesabı" centered>
       <Stack>
-        <Alert color="blue" variant="light">Bu hesap yalnızca başvurunuzu güvenli biçimde sahiplenmeniz ve takip etmeniz içindir; IEEE üyeliği oluşturmaz.</Alert>
+        <Text size="sm" c="dimmed">Başvurunu gönderip durumunu takip edebilmen için giriş yap.</Text>
+        {onShowNotice && (
+          <Text size="xs" c="dimmed">
+            Hesap bilgilerin{' '}
+            <Anchor component="button" type="button" size="xs" onClick={onShowNotice}>KVKK Aydınlatma Metni</Anchor>
+            {' '}kapsamında işlenir.
+          </Text>
+        )}
         <Button variant="default" onClick={() => void google()} loading={busy}>Google ile devam et</Button>
         <Divider label="veya e-posta ile" />
         <form onSubmit={submit}>
@@ -277,7 +324,13 @@ function CandidateAuthModal({ opened, onClose, onDone }: { opened: boolean; onCl
   );
 }
 
-function ApplicationModal({ call, opened, onClose }: { call: WithId<RecruitmentCall> | null; opened: boolean; onClose: () => void }) {
+function ApplicationModal({ call, opened, onClose, notice, onShowNotice }: {
+  call: WithId<RecruitmentCall> | null;
+  opened: boolean;
+  onClose: () => void;
+  notice: WithId<PrivacyNotice> | null;
+  onShowNotice: () => void;
+}) {
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('');
   const [studentNo, setStudentNo] = useState('');
@@ -293,7 +346,10 @@ function ApplicationModal({ call, opened, onClose }: { call: WithId<RecruitmentC
   const submit = async () => {
     setBusy(true);
     try {
-      await applyToRecruitmentCall(call, { phone, department, studentNo, ieeeMemberNo, motivation, availability, answers, privacyConsent: true });
+      if (!notice) throw new Error('KVKK aydınlatma metni yayımlanmadığı için şu anda başvuru alınamıyor.');
+      await applyToRecruitmentCall(call, {
+        phone, department, studentNo, ieeeMemberNo, motivation, availability, answers, privacyConsent: true, privacyNoticeId: notice.id,
+      });
       notifySuccess('Başvurunuz ekibe iletildi. Durumunu bu sayfadan takip edebilirsiniz.', 'Başvuru alındı');
       onClose();
     } catch (error) {
@@ -322,9 +378,23 @@ function ApplicationModal({ call, opened, onClose }: { call: WithId<RecruitmentC
         <Checkbox
           checked={consent}
           onChange={(event) => setConsent(event.currentTarget.checked)}
-          label="Başvuru bilgilerimin ilgili komite/YK yöneticileri tarafından değerlendirme ve gönüllülük süreci amacıyla işlenmesini kabul ediyorum."
+          disabled={!notice}
+          label={
+            <>
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                onClick={(event) => { event.preventDefault(); onShowNotice(); }}
+              >
+                KVKK Aydınlatma Metni
+              </Anchor>
+              ’ni okudum ve anladım.
+            </>
+          }
+          description={notice ? `Sürüm ${notice.versionLabel}` : 'Aydınlatma metni yayımlanmadığı için başvuru alınamıyor.'}
         />
-        <Button onClick={submit} disabled={!consent} loading={busy}>Başvuruyu gönder</Button>
+        <Button onClick={submit} disabled={!consent || !notice} loading={busy}>Başvuruyu gönder</Button>
       </Stack>
     </Modal>
   );
