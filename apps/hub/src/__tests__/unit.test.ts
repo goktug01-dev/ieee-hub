@@ -17,6 +17,8 @@ import { validateTemplateContent } from '../lib/templates';
 import { validateStatuteFile } from '../lib/statutes';
 import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall } from '../lib/recruitment';
 import { POLICIES, RECRUITMENT_PRIVACY_TEMPLATE, fillPlaceholders, privacyPlaceholders, validatePrivacyNotice } from '../lib/privacy';
+import { MANUAL, MANUAL_AUDIENCES, manualFor, type ManualAudience } from '../lib/manual';
+import { buildManualDocx } from '../lib/manualDocx';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -283,5 +285,27 @@ describe('KVKK aydınlatma metni', () => {
     }
     expect(new Set(POLICIES.map((policy) => policy.slug)).size).toBe(POLICIES.length);
     expect(new Set(POLICIES.map((policy) => policy.field)).size).toBe(POLICIES.length);
+  });
+});
+
+describe('kullanma kılavuzu', () => {
+  it('bölüm kimlikleri benzersiz, her kitlenin bölümü ve her bölümün adımı var', () => {
+    expect(new Set(MANUAL.map((section) => section.id)).size).toBe(MANUAL.length);
+    for (const audience of Object.keys(MANUAL_AUDIENCES) as ManualAudience[]) expect(manualFor(audience).length).toBeGreaterThan(3);
+    for (const section of MANUAL) {
+      expect(section.audiences.length).toBeGreaterThan(0);
+      expect(section.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('arama Türkçe büyük/küçük harf duyarsızdır', () => {
+    expect(manualFor('all', 'İADE').some((section) => section.id === 'onaylar')).toBe(true);
+    expect(manualFor('member', 'kvkk metni yayımlanmadan')).toHaveLength(0);
+    expect(manualFor('admin', 'kvkk').some((section) => section.id === 'politikalar')).toBe(true);
+  });
+
+  it('Word belgesi üretilir', async () => {
+    const blob = await buildManualDocx(['member', 'manager', 'admin'], 'IEEE İKÇÜ');
+    expect(blob.size).toBeGreaterThan(5000);
   });
 });

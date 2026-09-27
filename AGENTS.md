@@ -83,4 +83,5 @@ baslat.cmd           Windows: çift tıkla → emülatör + arayüz + demo hesap
 - Bilgisayar ayarını değiştiren işlerden (PowerShell politikası, sistem geneline kurulum) ve dış dünyaya yazan işlerden (GitHub, Firebase deploy) önce onay alın.
 - Yeni mimari karar = yeni ADR (`docs/adr/_sablon.md`); kabul edilmiş ADR düzenlenmez, "Yerini Aldı" ile işaretlenir.
 - Kod ile doküman çelişirse kod esastır; aynı değişiklikte dokümanı düzeltin.
+- Kullanma kılavuzu `apps/hub/src/lib/manual.ts` tek kaynaktır (Yardım › Kullanma kılavuzu ve Word çıktısı buradan üretilir). Menü, sekme veya düğme adı değişen ya da yeni iş akışı eklenen her değişiklikte ilgili bölümü aynı commit'te güncelleyin.
 - Kullanıcıya "bitti" demeden önce ilgili testleri çalıştırın ve sonucu olduğu gibi bildirin; tarayıcıda denenmemiş ekranı "çalışıyor" diye sunmayın.
