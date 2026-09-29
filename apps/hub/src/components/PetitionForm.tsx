@@ -1,4 +1,4 @@
-import { NumberInput, Select, SimpleGrid, Stack, TextInput, Textarea } from '@mantine/core';
+import { Checkbox, NumberInput, Select, SimpleGrid, Stack, TextInput, Textarea } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import type { Member, TemplateField } from '../lib/types';
 
@@ -84,6 +84,15 @@ export function PetitionForm({
         return <TextInput {...common} type="email" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
       case 'phone':
         return <TextInput {...common} type="tel" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
+      case 'checkbox':
+        return (
+          <Checkbox
+            {...common}
+            mt="md"
+            checked={values[f.key] === '☒'}
+            onChange={(e) => set(f.key, e.currentTarget.checked ? '☒' : '')}
+          />
+        );
       default:
         return <TextInput {...common} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
     }

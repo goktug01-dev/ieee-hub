@@ -12,7 +12,7 @@ import { buildMeetingMinutes } from '../lib/meetingDocx';
 import { parseExternalData, stringifyExternalData } from '../lib/externalFirebase';
 import { computeVisibleTo, formatDocumentNo, newVerificationCode, stepRequiredApprovals } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
-import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
+import { DEFAULT_ORG_SETTINGS, applicantFields, responseFieldsForStep } from '../lib/workflow';
 import { validateTemplateContent } from '../lib/templates';
 import { validateStatuteFile } from '../lib/statutes';
 import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall } from '../lib/recruitment';
@@ -43,6 +43,20 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('dilekçe makam alanları', () => {
+  const fields = [
+    { key: 'konu', label: 'Konu', type: 'text' as const, required: true },
+    { key: 'uygundur', label: 'Uygundur', type: 'checkbox' as const, required: false },
+    { key: 'gerekce', label: 'Gerekçe', type: 'textarea' as const, required: false },
+  ];
+  const steps = [{ name: 'Denetleme Kurulu', roleIds: ['dk'], unitMode: 'branch' as const, unitId: null, responseFieldKeys: ['uygundur', 'gerekce'] }];
+
+  it('başvuru sahibi ile karar makamının alanlarını ayırır', () => {
+    expect(applicantFields(fields, steps).map((field) => field.key)).toEqual(['konu']);
+    expect(responseFieldsForStep(fields, steps[0]).map((field) => field.key)).toEqual(['uygundur', 'gerekce']);
   });
 });
 

@@ -405,8 +405,9 @@ export const MANUAL: ManualSection[] = [
     steps: [
       '“Yeni şablon” ile ad, kategori, evrak serisi (2–6 harf) ve kullanabilecek birimleri girin; ya da “Word klasöründen aktar” ile toplu yükleyin.',
       '“1. Belge” sekmesinde Word dosyasını yükleyin veya metni sistemde yazın; doldurulacak yerlere {alan_adi} yazın.',
-      'Alanlar sekmesinde alan türlerini ve zorunlulukları düzenleyin.',
+      'Alanlar sekmesinde alan türlerini ve zorunlulukları düzenleyin. Uygundur/uygun değildir gibi işaretler için “İşaret kutusu” türünü kullanabilirsiniz.',
       'Onay zincirinde her adım için adım adını, onaylayabilecek rolleri, hangi birimdeki yetkilinin onaylayacağını ve onay kuralını (biri, tümü veya nisap) belirleyin.',
+      'Belgede bir makamın dolduracağı {uygundur}, {gerekce}, {ad_soyad_dk} gibi etiketleri ilgili adımın “Bu makamın dolduracağı belge alanları” seçimine ekleyin. Bu alanlar başvuru sahibine gösterilmez; yetkili karar verirken doldurur.',
       '“Yeni sürüm yayımla” deyin ve değişiklik notunu yazın.',
     ],
     tips: ['Yayımlanan sürümdeki değişiklik yalnızca yeni gönderimleri etkiler; önceki dilekçeler kendi sürümleriyle kalır.'],
@@ -481,6 +482,41 @@ export const MANUAL: ManualSection[] = [
     steps: [
       'Her sistem için yöneticileri ve erişim bilgisinin nerede tutulduğunu kaydedin (şifre yazmayın).',
       'Tek yöneticili kritik sistemlere ikinci yönetici ekleyin; bu sistemler işaretli görünür.',
+    ],
+  },
+  {
+    id: 'kurullar',
+    audiences: ['admin', 'manager'],
+    title: 'Kurul oylamaları ve karar defteri',
+    where: 'Organizasyon › Kurullar ve karar defteri',
+    summary: 'YK ve İK oylamaları tüzükteki nisap kurallarıyla yürütülür; sonuçlar ve kesinleşen toplantı kararları numaralı deftere işlenir.',
+    steps: [
+      '“Oylamalar” sekmesinde “Yeni oylama” deyin; kurulu, kabul kuralını, son oy zamanını ve varsa oy kullanamayacak üyeleri seçin. Oylama açılınca oy hakkı listesi dondurulur.',
+      'Kurul üyeleri Kabul, Ret veya Çekimser oyunu verir; kapanana kadar kendi oyunu değiştirebilir. Sonucu yetkili “Oylamayı kapat” ile kesinleştirir.',
+      'Kapanan oylamada “Karar defterine işle” deyip karar tarihini, metnini ve görünürlüğünü kontrol edin. Aynı oylama ikinci kez işlenemez.',
+      '“Kurul toplantıları” sekmesinde YK, İK veya ortak toplantı açın. Katılanları işaretleyince toplantı nisabı görünür; kesinleşen tutanaktaki kararları tek işlemle karar defterine aktarın.',
+      '“Üyeler ve ayarlar” sekmesinde tüzükteki tam sayıları ve YK/İK koltuklarına karşılık gelen görevleri düzenleyin.',
+    ],
+    tips: [
+      'Çevrim içi oylar açıktır. Gizli oy gereken süreç fiziksel yürütülür ve sonucu karar defterine elle kaydedilir.',
+      'YKK yalnız Yönetim Kurulu için üçte iki kabul kuralıyla açılabilir.',
+    ],
+  },
+  {
+    id: 'harici-firebase-puan',
+    audiences: ['admin'],
+    title: 'IEEE Puan ve harici Firebase yönetimi',
+    where: 'Yönetim › Harici Firebase',
+    summary: 'IEEE Puan verisi Hub’a kopyalanmadan, uzak projenin kendi hesabı ve güvenlik kurallarıyla görüntülenir ve yönetilir.',
+    steps: [
+      'Firebase Console’daki web uygulaması değerlerini ve Realtime Database URL’sini bağlantı alanlarına girin; servis hesabı veya özel anahtar kullanmayın.',
+      '“IEEE Puan görünümü ekle” deyin. Varsayılan users, leaderboard_public ve admin_point_audit yollarını uzak projenize göre kontrol edip ayarı kaydedin.',
+      'Uzak projede kendi Google veya e-posta hesabınızla ayrıca oturum açın. Üye arayarak güncel puanı, yaşam boyu kazanılanı ve harcananı gerekçe yazarak düzenleyin.',
+      'Dönemsel sıfırlama için “Tüm güncel puanları sıfırla” deyin, gerekçeyi yazın ve onay ifadesini girin. Yalnız güncel sadakat puanı sıfırlanır; yaşam boyu toplamlar korunur.',
+    ],
+    tips: [
+      'Puan değişikliği, sıralama önbelleği ve denetim kaydı uzak Realtime Database’de tek çok-yollu güncelleme olarak yazılır.',
+      'Hub izni uzak projede yetki vermez; son karar her zaman uzak Firebase Security Rules’undur.',
     ],
   },
   {

@@ -91,6 +91,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'select', label: 'Seçenek listesi' },
   { value: 'email', label: 'E-posta' },
   { value: 'phone', label: 'Telefon' },
+  { value: 'checkbox', label: 'İşaret kutusu' },
 ];
 
 const PREFILL = [
@@ -102,6 +103,7 @@ const PREFILL = [
 ];
 
 function sampleValue(f: TemplateField): string {
+  if (f.type === 'checkbox') return '☒';
   if (f.type === 'date') return new Date().toISOString().slice(0, 10);
   if (f.type === 'number') return '10';
   if (f.type === 'select') return f.options?.[0] ?? `[${f.label}]`;
@@ -194,7 +196,7 @@ export function TemplateEditorPage() {
     }
   }, [draftFile, fields, steps, t, id, publicSettings.orgName, orgSettings, roleName, unitName]);
 
-  const stepErrors = useMemo(() => validateSteps(steps), [steps]);
+  const stepErrors = useMemo(() => validateSteps(steps, fields), [steps, fields]);
   const publishErrors = useMemo(
     () => (draft ? validateTemplateContent({ ...draft, fields, steps }) : ['Önce bir Word belgesi yükleyin.']),
     [draft, fields, steps],
@@ -282,12 +284,17 @@ export function TemplateEditorPage() {
     setDirty((d) => ({ ...d, steps: true }));
   };
   const addStep = () => {
-    setSteps((ss) => [...ss, { name: '', roleIds: [], unitMode: t.scope === 'unit' ? 'petition' : 'branch', unitId: null, approvalMode: 'any', requiredApprovals: null }]);
+    setSteps((ss) => [...ss, { name: '', roleIds: [], unitMode: t.scope === 'unit' ? 'petition' : 'branch', unitId: null, approvalMode: 'any', requiredApprovals: null, responseFieldKeys: [] }]);
     setDirty((d) => ({ ...d, steps: true }));
   };
 
   const rolesFor = (mode: ApprovalStep['unitMode']) =>
     roles.filter((r) => r.active && (mode === 'branch' ? r.scope === 'branch' : r.scope === 'unit')).map((r) => ({ value: r.id, label: r.name }));
+
+  const responseFieldOptions = (stepIndex: number) => {
+    const usedElsewhere = new Set(steps.flatMap((step, index) => index === stepIndex ? [] : (step.responseFieldKeys ?? [])));
+    return fields.filter((field) => !usedElsewhere.has(field.key)).map((field) => ({ value: field.key, label: `{${field.key}} — ${field.label}` }));
+  };
 
   const unsaved = dirty.fields || dirty.steps;
   const hasUnpublished = !!draft && (!versions.data.length || draftKey !== '' && versions.data[0]?.publishedAt?.toMillis() < (t.updatedAt?.toMillis() ?? 0));
@@ -496,7 +503,7 @@ export function TemplateEditorPage() {
           ) : (
             <Stack>
               <Text size="sm" c="dimmed">
-                Her satır belgedeki bir <Code>{'{etiket}'}</Code> için dilekçe formunda sorulacak soruyu tanımlar. Sıra, belgedeki sıradır.
+                Her satır belgedeki bir <Code>{'{etiket}'}</Code> alanını tanımlar. Başvuru sahibi yerine bir makam dolduracaksa alanı Onay zinciri sekmesindeki ilgili adıma bağlayın.
               </Text>
               <Table.ScrollContainer minWidth={980}>
                 <Table verticalSpacing="xs">
@@ -622,6 +629,15 @@ export function TemplateEditorPage() {
                         />
                       )}
                     </Group>
+                    <MultiSelect
+                      label="Bu makamın dolduracağı belge alanları"
+                      description="Seçilen alanlar başvuru sahibine gösterilmez; yetkili karar verirken doldurur ve Word belgesine işlenir."
+                      data={responseFieldOptions(i)}
+                      value={s.responseFieldKeys ?? []}
+                      onChange={(value) => setStep(i, { responseFieldKeys: value })}
+                      searchable
+                      clearable
+                    />
                   </Stack>
                   <Stack gap={4} mt={24}>
                     <ActionIcon variant="subtle" disabled={i === 0} onClick={() => moveStep(i, -1)} aria-label="Yukarı">

@@ -49,6 +49,8 @@ const UnitWorkspacePage = lazy(() => import('./pages/UnitWorkspacePage').then((m
 const SecretaryLedgerPage = lazy(() => import('./pages/SecretaryLedgerPage').then((m) => ({ default: m.SecretaryLedgerPage })));
 const MeetingsPage = lazy(() => import('./pages/meetings/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
 const MeetingDetailPage = lazy(() => import('./pages/meetings/MeetingDetailPage').then((m) => ({ default: m.MeetingDetailPage })));
+const BoardsPage = lazy(() => import('./pages/boards/BoardsPage').then((m) => ({ default: m.BoardsPage })));
+const BoardVotePage = lazy(() => import('./pages/boards/BoardVotePage').then((m) => ({ default: m.BoardVotePage })));
 const ExternalFirebasePage = lazy(() => import('./pages/admin/ExternalFirebasePage').then((m) => ({ default: m.ExternalFirebasePage })));
 const AssetsPage = lazy(() => import('./pages/assets/AssetsPage').then((m) => ({ default: m.AssetsPage })));
 
@@ -125,6 +127,8 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="etkinlikler/:id" element={<EventDetailPage />} />
               <Route path="toplantilar" element={<MeetingsPage />} />
               <Route path="toplantilar/:id" element={<MeetingDetailPage />} />
+              <Route path="kurullar" element={<BoardsPage />} />
+              <Route path="kurullar/oylama/:id" element={<BoardVotePage />} />
               <Route path="iletisim" element={<ContentPage />} />
               <Route path="sponsorluk" element={<SponsorsPage />} />
               <Route path="demirbas" element={<RequireAny perms={['inventory.manage', 'finance.read', 'finance.manage', 'secretary.ledger.manage', 'work.manageAll']}><AssetsPage /></RequireAny>} />

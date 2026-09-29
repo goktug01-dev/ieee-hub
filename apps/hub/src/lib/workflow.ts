@@ -2,7 +2,7 @@
  * Dilekçe akışının küçük, saf yardımcıları. Word kütüphanelerini içe aktarmaz; böylece
  * ana paket küçük kalır (Word motoru yalnızca dilekçe ekranlarında yüklenir).
  */
-import type { ApprovalStep, OrgSettings } from './types';
+import type { ApprovalStep, OrgSettings, TemplateField } from './types';
 import { BRANCH } from './types';
 import { DEFAULT_PETITION_CATEGORIES } from './petitionCategories';
 
@@ -27,6 +27,21 @@ export function stepRequiredApprovals(step: ApprovalStep): number {
     return Math.max(1, Math.min(step.roleIds.length, Math.floor(step.requiredApprovals ?? 1)));
   }
   return 1;
+}
+
+/** Onay makamlarına ayrılmış alan anahtarları. Başvuru sahibi bu alanları görmez veya değiştirmez. */
+export function approvalFieldKeys(steps: ApprovalStep[]): Set<string> {
+  return new Set(steps.flatMap((step) => step.responseFieldKeys ?? []));
+}
+
+export function applicantFields(fields: TemplateField[], steps: ApprovalStep[]): TemplateField[] {
+  const reserved = approvalFieldKeys(steps);
+  return fields.filter((field) => !reserved.has(field.key));
+}
+
+export function responseFieldsForStep(fields: TemplateField[], step: ApprovalStep): TemplateField[] {
+  const keys = new Set(step.responseFieldKeys ?? []);
+  return fields.filter((field) => keys.has(field.key));
 }
 
 /** Dilekçeyi kimlerin görebileceği: sahibi, birim okuyucuları ve zincirdeki tüm roller. */

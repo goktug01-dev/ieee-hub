@@ -561,11 +561,12 @@ service cloud.firestore {
           && existsAfter(docPath('petitionVerifications', np().verificationCode))
           && np().revision == 1
           && np().approvals == []
+          && np().approvalData == {}
           && np().stepApprovalRoleIds == []
           && np().notes == []
           && commonSubmit()
           && onlyKeys(['status', 'steps', 'currentStep', 'counterId', 'documentSeq', 'documentNo',
-                       'verificationCode', 'revision', 'approvals', 'stepApprovalRoleIds', 'notes', 'submittedAt', 'updatedAt',
+                       'verificationCode', 'revision', 'approvals', 'approvalData', 'stepApprovalRoleIds', 'notes', 'submittedAt', 'updatedAt',
                        'visibleTo', 'data', 'title', 'unitId', 'unitName', 'templateVersion', 'templateName']);
       }
 
@@ -576,12 +577,22 @@ service cloud.firestore {
           && np().revision == p().revision + 1
           && np().templateVersion == p().templateVersion
           && np().unitId == p().unitId
+          && np().approvalData == {}
           && np().stepApprovalRoleIds == []
           && commonSubmit()
-          && onlyKeys(['status', 'currentStep', 'stepApprovalRoleIds', 'revision', 'submittedAt', 'updatedAt', 'data', 'title', 'visibleTo']);
+          && onlyKeys(['status', 'currentStep', 'approvalData', 'stepApprovalRoleIds', 'revision', 'submittedAt', 'updatedAt', 'data', 'title', 'visibleTo']);
       }
 
       // --- Onay / ret / iade ---
+
+      function validApprovalData(step) {
+        let before = p().get('approvalData', {});
+        let after = np().get('approvalData', {});
+        let changed = after.diff(before).affectedKeys();
+        return after is map
+          && changed.hasOnly(step.get('responseFieldKeys', []))
+          && !changed.hasAny(before.keys());
+      }
 
       function decide() {
         let n = p().approvals.size();
@@ -613,6 +624,7 @@ service cloud.firestore {
           && a.roleId in step.roleIds
           && !(a.roleId in oldRoles)
           && hasRoleKey(unitKey + '__' + a.roleId)
+          && validApprovalData(step)
           && np().updatedAt == request.time
           && (np().notes.size() == p().notes.size()
               || (np().notes.size() == p().notes.size() + 1
@@ -622,23 +634,23 @@ service cloud.firestore {
                (a.decision == 'approve' && !completesStep
                   && appendsRole
                   && np().status == 'pending' && np().currentStep == p().currentStep
-                  && onlyKeys(['approvals', 'notes', 'status', 'stepApprovalRoleIds', 'updatedAt']))
+                  && onlyKeys(['approvals', 'approvalData', 'notes', 'status', 'stepApprovalRoleIds', 'updatedAt']))
             || (a.decision == 'approve' && completesStep && !isLast
                   && np().stepApprovalRoleIds == []
                   && np().status == 'pending' && np().currentStep == p().currentStep + 1
-                  && onlyKeys(['approvals', 'notes', 'status', 'currentStep', 'stepApprovalRoleIds', 'updatedAt']))
+                  && onlyKeys(['approvals', 'approvalData', 'notes', 'status', 'currentStep', 'stepApprovalRoleIds', 'updatedAt']))
             || (a.decision == 'approve' && completesStep && isLast
                   && appendsRole
                   && np().status == 'approved' && np().completedAt == request.time
-                  && onlyKeys(['approvals', 'notes', 'status', 'stepApprovalRoleIds', 'completedAt', 'updatedAt']))
+                  && onlyKeys(['approvals', 'approvalData', 'notes', 'status', 'stepApprovalRoleIds', 'completedAt', 'updatedAt']))
             || (a.decision == 'reject'
                   && np().status == 'rejected' && np().completedAt == request.time
                   && np().notes.size() == p().notes.size() + 1
-                  && onlyKeys(['approvals', 'notes', 'status', 'completedAt', 'updatedAt']))
+                  && onlyKeys(['approvals', 'approvalData', 'notes', 'status', 'completedAt', 'updatedAt']))
             || (a.decision == 'return'
                   && np().status == 'returned'
                   && np().notes.size() == p().notes.size() + 1
-                  && onlyKeys(['approvals', 'notes', 'status', 'updatedAt']))
+                  && onlyKeys(['approvals', 'approvalData', 'notes', 'status', 'updatedAt']))
           );
       }
 
@@ -1156,9 +1168,11 @@ service cloud.firestore {
           && d.decisions is list;
       }
 
+      // Kurul toplantıları (YK / İK / ortak) kurul üyelerinin listesini visibleUids'de taşır.
       allow read: if isActive()
         && (isMember(resource.data.unitId)
-            || meetingManager(resource.data.unitId));
+            || meetingManager(resource.data.unitId)
+            || me() in resource.data.get('visibleUids', []));
       allow create: if meetingManager(request.resource.data.unitId)
         && request.resource.data.status == 'draft'
         && request.resource.data.createdBy == me()
@@ -1177,6 +1191,136 @@ service cloud.firestore {
             || (request.resource.data.finalizedBy == me()
                 && request.resource.data.finalizedAt == request.time));
       allow delete: if meetingManager(resource.data.unitId) && resource.data.status == 'draft';
+    }
+
+    // ---------- Kurullar: oylama ve karar defteri (ADR-0034) ----------
+    // Oylamayı Genel Sekreter (secretary.ledger.manage) veya organizasyon yöneticisi açar/kapatır.
+    // Oy hakkı, oylama açılırken görevdeki atamalardan çıkarılan listeye (roster) dayanır; oy veren
+    // kişinin listedeki rolü oy anında da geçerli olmalıdır. Sayım istemcide oy pusulalarından yapılır.
+
+    function boardAdmin() {
+      return hasPerm('secretary.ledger.manage') || hasPerm('org.manage');
+    }
+
+    function validBoardVote(d) {
+      return d.keys().hasOnly([
+          'title', 'description', 'scope', 'rule', 'isDecree', 'status', 'closesAt', 'roster',
+          'recusedUids', 'fullSizes', 'chairUid', 'meetingId', 'visibleUids',
+          'createdBy', 'createdByName', 'createdAt', 'updatedAt'
+        ])
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 200
+        && d.description is string && d.description.size() <= 5000
+        && d.scope in ['yk', 'ik', 'joint', 'both']
+        && d.rule in ['majority', 'absolute', 'twoThirds', 'unanimous']
+        && d.isDecree is bool
+        // YKK yalnız YK'nın üçte iki oyuyla çıkar (Md. 40-EK.a).
+        && (d.isDecree == false || (d.scope == 'yk' && d.rule == 'twoThirds'))
+        && d.closesAt is timestamp
+        && d.roster is map && d.roster.size() > 0 && d.roster.size() <= 200
+        && d.recusedUids is list && d.recusedUids.size() <= 20
+        && d.fullSizes is map
+        && d.visibleUids is list
+        && d.visibleUids.hasAll(d.roster.keys());
+    }
+
+    match /boardVotes/{id} {
+      allow read: if isActive() && (me() in resource.data.visibleUids || boardAdmin());
+      allow create: if boardAdmin()
+        && validBoardVote(request.resource.data)
+        && request.resource.data.status == 'open'
+        && request.resource.data.closesAt > request.time
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      // Oylama içeriği ve oy hakkı listesi değişmez; yalnız kapatma/iptal ve karar defterine bağlama.
+      allow update: if boardAdmin()
+        && request.resource.data.updatedAt == request.time
+        && ((resource.data.status == 'open'
+              && request.resource.data.status in ['closed', 'cancelled']
+              && request.resource.data.closedAt == request.time
+              && request.resource.data.closedByName is string
+              && onlyKeys(['status', 'closedAt', 'closedByName', 'result', 'updatedAt']))
+            || (resource.data.status == 'closed'
+              && request.resource.data.status == 'closed'
+              && !('decisionId' in resource.data)
+              && request.resource.data.decisionId is string
+              && onlyKeys(['decisionId', 'updatedAt'])
+              && getAfter(docPath('boardDecisions', request.resource.data.decisionId)).data.source.id == id));
+      allow delete: if false;
+
+      match /ballots/{uid} {
+        function parentVote() {
+          return get(docPath('boardVotes', id)).data;
+        }
+        allow read: if isActive() && (me() in parentVote().visibleUids || boardAdmin());
+        allow create, update: if isActive()
+          && uid == me()
+          && parentVote().status == 'open'
+          && request.time < parentVote().closesAt
+          && me() in parentVote().roster
+          && !(me() in parentVote().recusedUids)
+          && parentVote().roster[me()].roleKey in acc().get('roleKeys', {})
+          && acc().roleKeys[parentVote().roster[me()].roleKey] > request.time
+          && request.resource.data.keys().hasOnly(['choice', 'name', 'at'])
+          && request.resource.data.choice in ['yes', 'no', 'abstain']
+          && request.resource.data.name is string && request.resource.data.name.size() <= 150
+          && request.resource.data.at == request.time;
+        allow delete: if false;
+      }
+    }
+
+    // Karar defteri: numaralı, yalnız eklenir. Numara sayaçla aynı batch'te +1 ilerler (boşluksuz).
+    function validBoardDecision(d) {
+      return d.keys().hasOnly([
+          'board', 'year', 'seq', 'number', 'counterId', 'kind', 'date', 'title', 'text', 'result',
+          'source', 'correctsId', 'visibility', 'visibleUids', 'createdBy', 'createdByName', 'createdAt'
+        ])
+        && d.board in ['yk', 'ik', 'joint']
+        && d.year is int && d.seq is int && d.seq > 0
+        && d.counterId == d.board + '_' + string(d.year)
+        && d.number is string && d.number.size() > 0
+        && d.kind in ['decision', 'decree']
+        && d.date is string && d.date.size() == 10
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 200
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 10000
+        && d.result is string && d.result.size() <= 2000
+        && d.source is map && d.source.type in ['vote', 'meeting', 'manual']
+        && d.visibility in ['members', 'board']
+        && d.visibleUids is list;
+    }
+
+    match /boardDecisions/{id} {
+      allow read: if isActive()
+        && (resource.data.visibility == 'members' || me() in resource.data.visibleUids || boardAdmin());
+      allow create: if boardAdmin()
+        && validBoardDecision(request.resource.data)
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && getAfter(docPath('decisionCounters', request.resource.data.counterId)).data.value == request.resource.data.seq
+        && getAfter(docPath('decisionCounters', request.resource.data.counterId)).data.lastDecisionId == id
+        // Oylamadan gelen karar: oylama kapalı olmalı ve aynı batch'te bu karara bağlanmalı.
+        && (request.resource.data.source.type != 'vote'
+            || (get(docPath('boardVotes', request.resource.data.source.id)).data.status == 'closed'
+                && getAfter(docPath('boardVotes', request.resource.data.source.id)).data.decisionId == id))
+        // Kararname (YKK) yalnız kabul edilmiş YKK oylamasından işlenir.
+        && (request.resource.data.kind == 'decision'
+            || (request.resource.data.source.type == 'vote'
+                && get(docPath('boardVotes', request.resource.data.source.id)).data.isDecree == true
+                && get(docPath('boardVotes', request.resource.data.source.id)).data.result.outcome == 'accepted'));
+      allow update, delete: if false;
+    }
+
+    match /decisionCounters/{cid} {
+      function pairedDecision() {
+        let did = request.resource.data.lastDecisionId;
+        return !exists(docPath('boardDecisions', did))
+          && getAfter(docPath('boardDecisions', did)).data.counterId == cid
+          && getAfter(docPath('boardDecisions', did)).data.seq == request.resource.data.value;
+      }
+      allow read: if isActive();
+      allow create: if boardAdmin() && request.resource.data.value == 1 && pairedDecision();
+      allow update: if boardAdmin() && request.resource.data.value == resource.data.value + 1 && pairedDecision();
+      allow delete: if false;
     }
 
     // Bağlantı ayarı gizli anahtar içermez; yine de yalnızca yetkili TechOps görevlileri görür/değiştirir.

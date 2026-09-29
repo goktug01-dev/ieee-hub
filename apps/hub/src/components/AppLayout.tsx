@@ -31,6 +31,7 @@ import {
   IconSettings,
   IconShieldLock,
   IconSitemap,
+  IconGavel,
   IconSun,
   IconTemplate,
   IconUserCircle,
@@ -122,6 +123,7 @@ export function AppLayout() {
       label: 'Organizasyon',
       items: [
         { to: '/organizasyon', label: 'Organizasyon şeması', icon: <IconSitemap size={18} /> },
+        { to: '/kurullar', label: 'Kurullar ve karar defteri', icon: <IconGavel size={18} /> },
         { to: '/tuzuk', label: 'Tüzük', icon: <IconBook2 size={18} /> },
         { to: '/kariyer', label: 'Açık başvurular', icon: <IconBriefcase2 size={18} /> },
         { to: '/gonulluluk', label: 'Gönüllülük', icon: <IconHeartHandshake size={18} /> },

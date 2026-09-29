@@ -37,7 +37,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { DocxPreview } from '../../components/DocxPreview';
-import { PetitionForm, missingRequired } from '../../components/PetitionForm';
+import { PetitionForm, missingRequired, prefillValues } from '../../components/PetitionForm';
 import { EmptyState, ErrorAlert, SectionLoader, StatusBadge, notifyError, notifySuccess } from '../../components/ui';
 import { downloadBlob } from '../../lib/docx';
 import { DECISION_LABEL, fmtDateTime } from '../../lib/format';
@@ -60,11 +60,12 @@ import {
 } from '../../lib/petitions';
 import type { Decision, Petition, TemplateVersion } from '../../lib/types';
 import { printArea } from '../../lib/print';
+import { applicantFields, responseFieldsForStep } from '../../lib/workflow';
 
 export function PetitionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, access, publicSettings, orgSettings } = useAuth();
+  const { user, member, access, publicSettings, orgSettings } = useAuth();
   const { roleName, unitName } = useOrg();
   const { data: p, loading, error } = useDoc<Petition>(`petitions/${id}`);
   const version = useDoc<TemplateVersion>(p ? `petitionTemplates/${p.templateId}/versions/${p.templateVersion}` : null);
@@ -102,7 +103,8 @@ export function PetitionDetailPage() {
     setEditing(true);
   };
 
-  const fields = version.data?.fields ?? [];
+  const allFields = version.data?.fields ?? [];
+  const fields = applicantFields(allFields, p?.steps ?? version.data?.steps ?? []);
 
   const saveEdit = async (andSubmit: boolean) => {
     if (!p || !id) return;
@@ -287,7 +289,7 @@ export function PetitionDetailPage() {
         <Grid.Col span={{ base: 12, lg: 5 }}>
           <Stack>
             {myRoles.length > 0 && !editing && (
-              <DecisionPanel petitionId={id!} p={p} roleIds={myRoles} roleName={roleName} unitName={unitName} />
+              <DecisionPanel petitionId={id!} p={p} roleIds={myRoles} roleName={roleName} unitName={unitName} fields={allFields} member={member} />
             )}
             <ApprovalTimeline p={p} roleName={roleName} unitName={unitName} />
             {p.verificationCode && vUrl && (
@@ -433,21 +435,27 @@ function DecisionPanel({
   roleIds,
   roleName,
   unitName,
+  fields,
+  member,
 }: {
   petitionId: string;
   p: Petition;
   roleIds: string[];
   roleName: (id: string) => string;
   unitName: (id: string) => string;
+  fields: TemplateVersion['fields'];
+  member: Parameters<typeof prefillValues>[1];
 }) {
   const [roleId, setRoleId] = useState(roleIds[0]);
   const [comment, setComment] = useState('');
+  const [responseData, setResponseData] = useState<Record<string, string>>({});
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState<Decision | null>(null);
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState('');
   const pwResolver = useRef<((v: string | null) => void) | null>(null);
   const step = p.steps![p.currentStep ?? 0];
+  const responseFields = responseFieldsForStep(fields, step);
   const stepUnit = stepUnitId(step, p.unitId);
   const required = stepRequiredApprovals(step);
   const approvedCount = p.stepApprovalRoleIds?.length ?? 0;
@@ -461,10 +469,16 @@ function DecisionPanel({
 
   const roleOptions = useMemo(() => roleIds.map((r) => ({ value: r, label: roleName(r) })), [roleIds, roleName]);
 
+  useEffect(() => {
+    setResponseData(prefillValues(responseFields, member));
+  }, [p.currentStep, fields, member]);
+
   const decide = async (decision: Decision) => {
     if (decision !== 'approve' && !comment.trim()) {
       return notifyError(new Error('İade ve ret için gerekçe yazmanız gerekir.'), 'Gerekçe gerekli');
     }
+    const missing = missingRequired(responseFields, responseData);
+    if (missing.length) return notifyError(new Error(`Belge alanlarını doldurun: ${missing.map((field) => field.label).join(', ')}`), 'Eksik belge alanı');
     setBusy(decision);
     try {
       const ok = await ensureRecentLogin(askPassword);
@@ -476,6 +490,7 @@ function DecisionPanel({
         roleName: roleName(roleId),
         unitName: unitName(stepUnit),
         comment,
+        responseData,
       });
       notifySuccess(
         decision === 'approve' ? 'Onayınız kaydedildi.' : decision === 'reject' ? 'Dilekçe reddedildi.' : 'Dilekçe iade edildi.',
@@ -507,6 +522,12 @@ function DecisionPanel({
               ))}
             </Stack>
           </Radio.Group>
+        )}
+        {responseFields.length > 0 && (
+          <Card withBorder padding="sm">
+            <Text fw={600} size="sm" mb="xs">Bu makamın belgeye işleyeceği alanlar</Text>
+            <PetitionForm fields={responseFields} values={responseData} onChange={setResponseData} showErrors />
+          </Card>
         )}
         <Textarea
           label="Not / gerekçe"

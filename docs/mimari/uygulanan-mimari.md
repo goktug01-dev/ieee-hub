@@ -1,6 +1,6 @@
 # Uygulanan Mimari (Spark planı)
 
-Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı), [ADR-0024](../adr/0024-coklu-makam-onayi-ve-nisap.md) (çoklu makam/nisap), [ADR-0025](../adr/0025-secim-yasam-dongusu-ve-kesinlesmis-sonuc.md) (seçim yaşam döngüsü), [ADR-0026](../adr/0026-word-belgesine-qr-dogrulama-damgasi.md) (Word QR damgası), [ADR-0027](../adr/0027-harici-firebase-ikincil-oturum.md) (harici Firebase), [ADR-0028](../adr/0028-birim-toplantilari-ve-kilitli-tutanak.md) (birim toplantıları) ve [ADR-0031](../adr/0031-ayri-kariyer-vitrini-ve-tarihli-birim-basvurulari.md) (kariyer vitrini ve başvurular).
+Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır. Gerekçeler: [ADR-0017](../adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) (Spark, kurallar), [ADR-0018](../adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) (bölge, üyelik), [ADR-0019](../adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) (düzenlenebilir organizasyon), [ADR-0020](../adr/0020-dilekce-sablonlari-word-tabanli.md) (Word şablonları), [ADR-0021](../adr/0021-belge-ciktisi-tarayicida-docx-ve-dogrulama.md) (belge çıktısı), [ADR-0022](../adr/0022-birim-calisma-alanlari-ve-sekreterlik-defteri.md) (birim alanları ve Sekreterlik Defteri), [ADR-0023](../adr/0023-dilekce-kategori-katalogu-ve-toplu-word-aktarimi.md) (kategori kataloğu ve toplu Word aktarımı), [ADR-0024](../adr/0024-coklu-makam-onayi-ve-nisap.md) (çoklu makam/nisap), [ADR-0025](../adr/0025-secim-yasam-dongusu-ve-kesinlesmis-sonuc.md) (seçim yaşam döngüsü), [ADR-0026](../adr/0026-word-belgesine-qr-dogrulama-damgasi.md) (Word QR damgası), [ADR-0027](../adr/0027-harici-firebase-ikincil-oturum.md) (harici Firebase), [ADR-0028](../adr/0028-birim-toplantilari-ve-kilitli-tutanak.md) (birim toplantıları), [ADR-0031](../adr/0031-ayri-kariyer-vitrini-ve-tarihli-birim-basvurulari.md) (kariyer vitrini ve başvurular), [ADR-0033](../adr/0033-onay-makamlarinin-belge-alanlarini-doldurmasi.md) (makamların belge alanları) ve [ADR-0034](../adr/0034-kurul-oylamalari-ve-numarali-karar-defteri.md) (kurul oylamaları ve numaralı karar defteri).
 
 [Sistem mimarisi](sistem-mimarisi.md) ve [Firestore veri modeli](firestore-veri-modeli.md) dokümanları Blaze/Functions varsayımıyla yazılmıştır; hedef mimari olarak arşivde tutulur. Kod ile bu doküman çelişirse **kod esas alınır** ([dokümantasyon kuralları §2](../dokumantasyon-kurallari.md)).
 
@@ -56,6 +56,10 @@ flowchart LR
 | `events/{id}/syncRuns/{rid}` | HeptaCert aktarım mutabakatı ve veri sözleşmesi sürümü | Etkinlik sorumlusu, birim yöneticisi, rapor okuyucu | Aktarımı yapan yetkili |
 | `secretaryLedger/{id}` | Toplantı, karar, gelen-giden evrak, takip ve not defteri | `secretary.ledger.manage` | `secretary.ledger.manage` |
 | `meetings/{id}` | Birim toplantısı; katılım, gündem, görüşme, karar ve takip maddeleri | Birim üyeleri ve üst yetkililer | Birim toplantı/yönetim yetkilisi; kesinleşen kayıt kilitli |
+| `settings/boards` | YK/İK adları, tüzükteki tam sayılar ve oy hakkı veren görev koltukları | Aktif üye | `org.manage` |
+| `boardVotes/{id}` + `ballots/{uid}` | Dondurulmuş kurul listesiyle açık oylama ve kişiye ait pusula | İlgili kurul üyeleri ve kurul yöneticisi | Kurul yöneticisi; pusulayı yalnız sahibi ve geçerli rolü varken |
+| `boardDecisions/{id}` | Numaralı, kaynak bağlantılı YK/İK/ortak karar defteri | Görünürlük politikasına göre aktif üyeler/kurul | Kurul yöneticisi; yalnız oluşturma |
+| `decisionCounters/{kurul_yıl}` | Kurul ve yıl bazlı boşluksuz karar sayacı | Aktif üye | Kararla aynı işlemde yalnız +1 |
 | `externalIntegrations/firebase` | Harici Firebase web yapılandırması ve izin verilen veri yolları; gizli anahtar içermez | `external.firebase.manage` | `external.firebase.manage` |
 | `statutes/current` | Herkese açık güncel tüzük üstverisi | Herkes | Organizasyon yöneticisi / Genel Sekreter |
 | `statuteVersions/{id}` + `chunks` | Değiştirilemez PDF/Word tüzük sürümü ve dosya parçaları | Herkes | Organizasyon yöneticisi / Genel Sekreter; yalnız oluşturma |
@@ -92,16 +96,18 @@ stateDiagram-v2
     returned --> withdrawn: Sahibi geri çeker
 ```
 
-Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğundadır ve `firebase/tests/rules.test.ts` ile test edilir. Bir onay adımı “rollerden biri”, “tüm makamlar” veya “belirli sayıda makam” politikası kullanabilir. Aynı rol aynı adımda bir kez sayılır; nisap tamamlanmadan sonraki adıma geçilmez.
+Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğundadır ve `firebase/tests/rules.test.ts` ile test edilir. Bir onay adımı “rollerden biri”, “tüm makamlar” veya “belirli sayıda makam” politikası kullanabilir. Aynı rol aynı adımda bir kez sayılır; nisap tamamlanmadan sonraki adıma geçilmez. Şablon alanları bir onay adımına bağlanabilir; bu alanlar başvuru sahibinin `data` haritasından ayrı `approvalData` içinde tutulur ve yalnız etkin makam tarafından bir kez doldurulur (ADR-0033).
 
 ## 5. Word şablon hattı
 
 1. Yönetici Word dosyasını yükler **veya** sistem içi oluşturucuyla .docx üretir.
 2. `{etiket}`'ler algılanır → form alanları (tür, zorunluluk, profilden doldurma düzenlenir).
-3. Onay zinciri tanımlanır → **Yayımla** → değiştirilemez sürüm.
+3. Makamların dolduracağı işaret/gerekçe alanları ilgili onay adımına bağlanır; onay zinciri tanımlanır → **Yayımla** → değiştirilemez sürüm.
 4. Üye şablonu seçer, formu doldurur; sağda belge canlı önizlenir.
 5. Gönderim/onay sonrası belge her açılışta şablon + veri + onaylardan yeniden üretilir; `.docx` indirilir veya tarayıcıdan PDF'e yazdırılır.
 6. Doğrulama kodu bulunan çıktının sonuna durum, evrak no, kod ve herkese açık doğrulama adresini taşıyan gömülü QR damgası eklenir.
+
+Harici IEEE Puan görünümü `users/*/sadakat`, yaşam boyu toplamlar ve `leaderboard_public` önbelleğini uzak RTDB içinde yönetir. Toplu sıfırlama yalnız güncel puanı sıfırlar; değişiklik, sıralama ve `admin_point_audit` kaydı tek çok-yollu RTDB güncellemesidir. Bu kişisel veriler Hub Firestore'una kopyalanmaz.
 
 ## 6. Seçim durum makinesi
 

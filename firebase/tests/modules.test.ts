@@ -528,3 +528,109 @@ describe('devir paketleri', () => {
     await assertFails(getDoc(doc(ctx('csVol'), 'handovers', 'h1')));
   });
 });
+
+describe('kurul oylamaları ve karar defteri', () => {
+  const PAST = Timestamp.fromDate(new Date('2020-01-01T00:00:00Z'));
+  const entry = (roleKey: string, boards: string[]) => ({ name: roleKey, roleKey, roleName: roleKey, unitName: 'x', boards });
+  const roster = {
+    ykBaskan: entry('branch__baskan', ['yk']),
+    ykUye: entry('branch__yk-uyesi', ['yk']),
+    ykEski: entry('branch__yk-uyesi', ['yk']),
+    chair: entry('cs__birim-baskani', ['ik']),
+  };
+  const newVote = (extra: Record<string, unknown> = {}) => ({
+    title: 'Bütçe revizyonu', description: '', scope: 'both', rule: 'majority', isDecree: false, status: 'open',
+    closesAt: FAR, roster, recusedUids: ['ykUye'], fullSizes: { yk: 6, ik: 5 }, chairUid: 'ykBaskan', meetingId: null,
+    visibleUids: [...Object.keys(roster), 'gs'], createdBy: 'gs', createdByName: 'GS',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...extra,
+  });
+  const ballot = (choice = 'yes') => ({ choice, name: 'x', at: serverTimestamp() });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      const people = [['ykBaskan', 'branch__baskan', FAR], ['ykUye', 'branch__yk-uyesi', FAR], ['ykEski', 'branch__yk-uyesi', PAST]] as const;
+      for (const [uid, roleKey, until] of people) {
+        await setDoc(doc(db, 'members', uid), { uid, status: 'active', displayName: uid, createdAt: Timestamp.now() });
+        await setDoc(doc(db, 'access', uid), { ...baseAccess(uid), roleKeys: { [roleKey]: until }, memberOf: { branch: until } });
+      }
+    });
+  });
+
+  it('oylamayı yalnız Genel Sekreter açar; liste görünürlükte olmalı, YKK yalnız YK 2/3 ile açılır', async () => {
+    await assertSucceeds(setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote()));
+    await assertFails(setDoc(doc(ctx('chair'), 'boardVotes', 'v2'), newVote({ createdBy: 'chair' })));
+    await assertFails(setDoc(doc(ctx('gs'), 'boardVotes', 'v3'), newVote({ visibleUids: ['gs'] })));
+    await assertFails(setDoc(doc(ctx('gs'), 'boardVotes', 'v4'), newVote({ isDecree: true })));
+    await assertSucceeds(setDoc(doc(ctx('gs'), 'boardVotes', 'v5'), newVote({ isDecree: true, scope: 'yk', rule: 'twoThirds' })));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'boardVotes', 'v1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'boardVotes', 'v1')));
+  });
+
+  it('herkes yalnız kendi adına, görevi sürerken ve oylama açıkken oy verir', async () => {
+    await setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote());
+    const b = (uid: string, as = uid) => doc(ctx(as), 'boardVotes', 'v1', 'ballots', uid);
+    await assertSucceeds(setDoc(b('ykBaskan'), ballot('yes')));
+    await assertSucceeds(setDoc(b('ykBaskan'), ballot('no')));
+    await assertSucceeds(setDoc(b('chair'), ballot('abstain')));
+    await assertFails(setDoc(b('ykBaskan', 'chair'), ballot('yes')));
+    await assertFails(setDoc(b('stranger'), ballot('yes')));
+    await assertFails(setDoc(b('ykEski'), ballot('yes')));
+    await assertFails(setDoc(b('ykUye'), ballot('yes')));
+    await assertFails(setDoc(b('chair'), ballot('maybe')));
+    await assertFails(deleteDoc(b('ykBaskan')));
+    await assertSucceeds(getDoc(b('ykBaskan', 'chair')));
+    await assertFails(getDoc(b('ykBaskan', 'stranger')));
+  });
+
+  it('oylama içeriği değişmez; kapandıktan sonra oy verilemez; karar defteri numaralı ve değiştirilemez', async () => {
+    await setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote());
+    await setDoc(doc(ctx('ykBaskan'), 'boardVotes', 'v1', 'ballots', 'ykBaskan'), ballot('yes'));
+    const vRef = doc(ctx('gs'), 'boardVotes', 'v1');
+    await assertFails(updateDoc(vRef, { title: 'Değişti', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(vRef, { roster: { gs: entry('x', ['yk']) }, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(ctx('chair'), 'boardVotes', 'v1'), { status: 'closed', closedAt: serverTimestamp(), closedByName: 'x', updatedAt: serverTimestamp() }));
+    const result = { outcome: 'accepted', summary: 'Kabul', counts: { yes: 1, no: 0, abstain: 0 } };
+    await assertSucceeds(updateDoc(vRef, { status: 'closed', closedAt: serverTimestamp(), closedByName: 'GS', result, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(ctx('chair'), 'boardVotes', 'v1', 'ballots', 'chair'), ballot('yes')));
+
+    const manual = { type: 'manual', id: null, label: 'Elle' };
+    const decision = (seq: number, extra: Record<string, unknown> = {}) => ({
+      board: 'yk', year: 2026, seq, number: `YK-2026/00${seq}`, counterId: 'yk_2026', kind: 'decision', date: '2026-09-29',
+      title: 'Bütçe revizyonu', text: 'Kabul edildi.', result: 'Kabul', source: { type: 'vote', id: 'v1', label: 'Oylama' },
+      correctsId: null, visibility: 'board', visibleUids: Object.keys(roster), createdBy: 'gs', createdByName: 'GS', createdAt: serverTimestamp(), ...extra,
+    });
+    const record = (seq: number, id: string, extra: Record<string, unknown> = {}, linkVote = true) => {
+      const db = ctx('gs');
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'decisionCounters', 'yk_2026'), { value: seq, lastDecisionId: id });
+      batch.set(doc(db, 'boardDecisions', id), decision(seq, extra));
+      if (linkVote) batch.update(doc(db, 'boardVotes', 'v1'), { decisionId: id, updatedAt: serverTimestamp() });
+      return batch.commit();
+    };
+    await assertFails(record(2, 'd0')); // numara 1 ile başlar
+    await assertFails(record(1, 'd0', {}, false)); // oylamaya bağlanmadan işlenemez
+    await assertSucceeds(record(1, 'd1'));
+    await assertFails(record(2, 'd2')); // aynı oylama ikinci kez işlenemez
+    await assertFails(record(3, 'd3', { source: manual }, false)); // numara atlanamaz
+    await assertSucceeds(record(2, 'd2', { source: manual, visibility: 'members', visibleUids: [] }, false));
+    await assertFails(updateDoc(doc(ctx('gs'), 'boardDecisions', 'd1'), { text: 'Değişti' }));
+    await assertFails(deleteDoc(doc(ctx('gs'), 'boardDecisions', 'd1')));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'boardDecisions', 'd1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'boardDecisions', 'd1'))); // kurula özel
+    await assertSucceeds(getDoc(doc(ctx('stranger'), 'boardDecisions', 'd2'))); // üyelere açık
+    // Kararname (YKK) yalnız kabul edilmiş YKK oylamasından işlenir.
+    await assertFails(record(3, 'd3', { kind: 'decree', source: manual }, false));
+  });
+
+  it('kurul toplantısını kurul üyesi okur; kurul dışı okuyamaz', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore() as unknown as Firestore, 'meetings', 'ik1'), {
+        unitId: 'branch', unitName: 'İdari Kurul', title: 'İK toplantısı', date: '2026-09-29', status: 'draft',
+        attendeeUids: [], attendeeNames: [], agenda: [], decisions: [], boardId: 'ik', visibleUids: ['chair'],
+      });
+    });
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'meetings', 'ik1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'meetings', 'ik1')));
+  });
+});

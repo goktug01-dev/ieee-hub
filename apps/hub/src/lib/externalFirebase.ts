@@ -9,7 +9,17 @@ import {
   signOut,
   type Auth,
 } from 'firebase/auth';
-import { getDatabase, get as getRealtime, ref, remove as removeRealtime, set as setRealtime, type Database } from 'firebase/database';
+import {
+  getDatabase,
+  get as getRealtime,
+  push as pushRealtime,
+  ref,
+  remove as removeRealtime,
+  serverTimestamp as realtimeServerTimestamp,
+  set as setRealtime,
+  update as updateRealtime,
+  type Database,
+} from 'firebase/database';
 import {
   Timestamp,
   collection,
@@ -27,6 +37,26 @@ import type { ExternalFirebaseConfig, ExternalFirebaseResource } from './opsType
 export interface ExternalRecord {
   id: string;
   data: Record<string, unknown>;
+}
+
+export interface ExternalPointUser {
+  id: string;
+  name: string;
+  surname: string;
+  email: string;
+  department: string;
+  approved: boolean;
+  points: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+  raw: Record<string, unknown>;
+}
+
+export interface ExternalPointChange {
+  id: string;
+  points: number;
+  lifetimeEarned?: number;
+  lifetimeSpent?: number;
 }
 
 interface ExternalServices {
@@ -115,6 +145,96 @@ export async function readExternalResource(config: ExternalFirebaseConfig, resou
     id,
     data: data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : { value: data },
   })).slice(0, 100);
+}
+
+function cleanPath(path: string, fallback: string) {
+  const clean = (path || fallback).replace(/^\/+|\/+$/g, '');
+  if (!clean || clean.split('/').some((part) => !part || part === '.' || part === '..')) throw new Error('Geçersiz Realtime Database yolu.');
+  return clean;
+}
+
+const finiteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+/** IEEE Puan kullanıcılarını canlı RTDB'den okur; veri Hub veritabanına kopyalanmaz. */
+export async function readExternalPointUsers(config: ExternalFirebaseConfig, resource: ExternalFirebaseResource): Promise<ExternalPointUser[]> {
+  const services = externalServices(config);
+  if (!services.auth.currentUser) throw new Error('Önce harici Firebase projesinde oturum açın.');
+  if (!services.realtime) throw new Error('Realtime Database URL yapılandırılmamış.');
+  const usersPath = cleanPath(resource.path, 'users');
+  const value = (await getRealtime(ref(services.realtime, usersPath))).val() as Record<string, unknown> | null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value).flatMap(([id, item]) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const data = item as Record<string, unknown>;
+    return [{
+      id,
+      name: String(data.name ?? ''),
+      surname: String(data.surname ?? ''),
+      email: String(data.email ?? ''),
+      department: String(data.department ?? ''),
+      approved: data.approved === true,
+      points: finiteNumber(data.sadakat),
+      lifetimeEarned: finiteNumber(data.lifetime_earned),
+      lifetimeSpent: finiteNumber(data.lifetime_spent ?? data.lifetime_spend),
+      raw: data,
+    }];
+  }).sort((a, b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`, 'tr'));
+}
+
+/** Puan değişikliklerini, sıralama önbelleğini ve denetim kaydını tek RTDB update'iyle yazar. */
+export async function writeExternalPointChanges(
+  config: ExternalFirebaseConfig,
+  resource: ExternalFirebaseResource,
+  users: ExternalPointUser[],
+  changes: ExternalPointChange[],
+  reason: string,
+) {
+  const services = externalServices(config);
+  const actor = services.auth.currentUser;
+  if (!actor) throw new Error('Harici Firebase oturumu kapalı.');
+  if (!services.realtime) throw new Error('Realtime Database URL yapılandırılmamış.');
+  if (!reason.trim()) throw new Error('İşlem gerekçesi zorunludur.');
+  if (!changes.length) throw new Error('Değiştirilecek kullanıcı yok.');
+
+  const usersPath = cleanPath(resource.path, 'users');
+  const leaderboardPath = cleanPath(resource.leaderboardPath ?? '', 'leaderboard_public');
+  const auditPath = cleanPath(resource.auditPath ?? '', 'admin_point_audit');
+  const byId = new Map(users.map((user) => [user.id, user]));
+  const updates: Record<string, unknown> = {};
+  for (const change of changes) {
+    if (!byId.has(change.id) || change.id.includes('/')) throw new Error('Puan kaydında geçersiz kullanıcı kimliği.');
+    if (![change.points, change.lifetimeEarned, change.lifetimeSpent].filter((value) => value !== undefined).every((value) => Number.isFinite(value) && value! >= 0)) {
+      throw new Error('Puan değerleri sıfır veya pozitif sayı olmalıdır.');
+    }
+    updates[`${usersPath}/${change.id}/sadakat`] = change.points;
+    if (change.lifetimeEarned !== undefined) updates[`${usersPath}/${change.id}/lifetime_earned`] = change.lifetimeEarned;
+    if (change.lifetimeSpent !== undefined) {
+      updates[`${usersPath}/${change.id}/lifetime_spent`] = change.lifetimeSpent;
+      if ('lifetime_spend' in byId.get(change.id)!.raw) updates[`${usersPath}/${change.id}/lifetime_spend`] = null;
+    }
+  }
+
+  const changeMap = new Map(changes.map((change) => [change.id, change]));
+  const ranked = users
+    .filter((user) => user.approved)
+    .map((user) => ({ ...user, points: changeMap.get(user.id)?.points ?? user.points }))
+    .sort((a, b) => b.points - a.points || `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`, 'tr'));
+  ranked.forEach((user, index) => {
+    updates[`${leaderboardPath}/me/${user.id}`] = { rank: index + 1, score: user.points };
+  });
+  updates[`${leaderboardPath}/top10`] = ranked.slice(0, 10).map((user) => ({ name: `${user.name} ${user.surname}`.trim(), score: user.points }));
+  updates[`${leaderboardPath}/updatedAt`] = realtimeServerTimestamp();
+
+  const auditKey = pushRealtime(ref(services.realtime, auditPath)).key;
+  if (!auditKey) throw new Error('Denetim kaydı kimliği üretilemedi.');
+  updates[`${auditPath}/${auditKey}`] = {
+    action: changes.length === users.length ? 'reset_all_current_points' : 'update_points',
+    actorUid: actor.uid,
+    affectedUids: changes.map((change) => change.id),
+    reason: reason.trim(),
+    at: realtimeServerTimestamp(),
+  };
+  await updateRealtime(ref(services.realtime), updates);
 }
 
 export async function writeExternalRecord(config: ExternalFirebaseConfig, resource: ExternalFirebaseResource, id: string, data: Record<string, unknown>) {

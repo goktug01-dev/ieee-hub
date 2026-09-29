@@ -121,6 +121,7 @@ function submitBatch(db: Firestore, opts: { seq?: number; steps?: unknown; code?
     verificationCode: code,
     revision: 1,
     approvals: [],
+    approvalData: {},
     stepApprovalRoleIds: [],
     notes: [],
     submittedAt: serverTimestamp(),
@@ -346,6 +347,27 @@ describe('onay akışı', () => {
       currentStep: 1,
     });
     await assertSucceeds(b.commit());
+  });
+
+  it('yetkili yalnız kendi adımına bağlanan belge alanlarını doldurabilir ve sonradan değiştiremez', async () => {
+    const responseStep = { ...STEPS[0], responseFieldKeys: ['uygundur', 'gerekce'] };
+    await env.withSecurityRulesDisabled(async (c) => {
+      await updateDoc(doc(c.firestore() as unknown as Firestore, 'petitions', 'p1'), { steps: [responseStep, STEPS[1]] });
+    });
+    await assertFails(decisionBatch(ctx('chair'), { approvals: [], notes: [] }, chairApproval, {
+      status: 'pending', currentStep: 1, approvalData: { karar_no: 'yetkisiz' },
+    }).commit());
+    await assertSucceeds(decisionBatch(ctx('chair'), { approvals: [], notes: [] }, chairApproval, {
+      status: 'pending', currentStep: 1, approvalData: { uygundur: '☒' },
+    }).commit());
+    await env.withSecurityRulesDisabled(async (c) => {
+      await updateDoc(doc(c.firestore() as unknown as Firestore, 'petitions', 'p1'), {
+        status: 'pending', currentStep: 0, approvals: [], notes: [], stepApprovalRoleIds: [],
+      });
+    });
+    await assertFails(decisionBatch(ctx('chair'), { approvals: [], notes: [] }, chairApproval, {
+      status: 'pending', currentStep: 1, approvalData: { uygundur: 'değiştirildi' },
+    }).commit());
   });
 
   it('tüm makamlar kuralında farklı roller tamamlanmadan adım ilerlemez', async () => {

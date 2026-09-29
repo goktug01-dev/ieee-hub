@@ -134,7 +134,7 @@ export interface Election {
 
 // ---------- Dilekçe şablonları ----------
 
-export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'email' | 'phone';
+export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'email' | 'phone' | 'checkbox';
 
 export interface TemplateField {
   key: string;
@@ -158,6 +158,8 @@ export interface ApprovalStep {
   /** any: rollerden biri; all: her makam; quorum: requiredApprovals kadar farklı makam. */
   approvalMode?: ApprovalMode;
   requiredApprovals?: number | null;
+  /** Bu adımdaki yetkilinin karar verirken dolduracağı Word alanları. */
+  responseFieldKeys?: string[];
 }
 
 export interface BuilderSpec {
@@ -254,6 +256,8 @@ export interface Petition {
   verificationCode?: string;
   revision?: number;
   approvals?: ApprovalRecord[];
+  /** Başvuru sahibinden ayrı tutulan, yalnız yetkili makamların doldurduğu belge alanları. */
+  approvalData?: Record<string, string>;
   /** Yalnızca etkin adımda onay vermiş farklı makamlar; adım ilerleyince sıfırlanır. */
   stepApprovalRoleIds?: string[];
   notes?: PetitionNote[];

@@ -511,6 +511,12 @@ export interface Meeting {
   finalizedBy?: string;
   finalizedByName?: string;
   finalizedAt?: Timestamp;
+  /** Kurul toplantısı: YK, İK veya İK-YK ortak. Birim toplantılarında yoktur. */
+  boardId?: 'yk' | 'ik' | 'joint';
+  /** Toplantı açılırken görevdeki kurul üyeleri (nisap hesabı için). */
+  boardRoster?: import('./boards').Roster;
+  /** Kurul toplantısını okuyabilecekler (kurul üyeleri + oluşturan). */
+  visibleUids?: string[];
 }
 
 export interface ExternalFirebaseResource {
@@ -520,6 +526,12 @@ export interface ExternalFirebaseResource {
   path: string;
   displayFields: string[];
   readOnly: boolean;
+  /** Hazır yönetim arayüzü; boşsa genel JSON tablosu kullanılır. */
+  preset?: 'points-users';
+  /** Puan görünümünün RTDB sıralama önbelleği yolu. */
+  leaderboardPath?: string;
+  /** Yönetim işlemlerinin uzak RTDB içindeki denetim kaydı yolu. */
+  auditPath?: string;
 }
 
 export interface ExternalFirebaseConfig {
