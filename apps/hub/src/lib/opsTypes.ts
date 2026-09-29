@@ -534,6 +534,38 @@ export interface ExternalFirebaseResource {
   auditPath?: string;
 }
 
+export type EventRestrictionLevel = 'watch' | 'blocked';
+
+/** Dönemlerden bağımsız etkinlik katılım kısıtlaması. Gerekçe yalnız yetkili yöneticilere açıktır. */
+export interface EventRestriction {
+  personName: string;
+  email: string;
+  emailHash: string;
+  level: EventRestrictionLevel;
+  reason: string;
+  sourceEventId: string | null;
+  sourceEventName: string;
+  evidenceLink: string;
+  endsOn: string | null;
+  reviewOn: string | null;
+  active: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  liftedBy?: string;
+  liftedByName?: string;
+  liftedAt?: Timestamp;
+  liftReason?: string;
+}
+
+/** Katılımcı içe aktarımında kullanılan, gerekçe veya kimlik taşımayan koruma indeksi. */
+export interface EventRestrictionIndex {
+  restrictionId: string;
+  level: EventRestrictionLevel;
+  expiresAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface ExternalFirebaseConfig {
   apiKey: string;
   authDomain: string;

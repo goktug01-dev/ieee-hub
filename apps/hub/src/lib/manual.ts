@@ -293,6 +293,7 @@ export const MANUAL: ManualSection[] = [
     steps: [
       '“Etkinlik öner” deyin; ad, düzenleyen birim, tür, tarih, yer, tahmini katılımcı ve sorumluları girip “Öneriyi gönder” deyin.',
       'Onay için etkinlik sayfasındaki “Onaylanmış dilekçenizi bağlayın” alanından aynı birimin onaylı etkinlik izin dilekçesini seçin veya YK kararını bekleyin.',
+      'Etkinlikler sayfasında “Takvim” görünümüne geçin. Tarihi bulunan etkinlik onaylandığı anda takvimde otomatik görünür; “Takvime aktar (.ics)” ile Google, Outlook veya Apple Takvim’e aktarabilirsiniz.',
       '“Görev planı” sekmesinde etkinlik görevlerini, “İletişim” sekmesinde tanıtım taleplerini yönetin.',
       '“vTools hazırlık” sekmesinde IEEE vTools bildirimi için gereken bilgileri tamamlayıp “Hazırlık CSV’si”ni indirin; vTools’a girdikten sonra vTools etkinlik kimliğini kaydedin.',
       '“Katılımcılar (HeptaCert)” sekmesinde HeptaCert’ten indirdiğiniz katılımcı CSV’sini yükleyin; aynı dosyayı tekrar yüklemek çift kayıt oluşturmaz.',
@@ -485,6 +486,23 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'etkinlik-kisitlamalari',
+    audiences: ['admin'],
+    title: 'Dönemler arası etkinlik kısıtlamaları',
+    where: 'Yönetim › Etkinlik kısıtlamaları',
+    summary: 'Etkinliğe alınmaması gereken veya yönetici dikkati gerektiren kişiler gerekçeli, süreli ve denetlenebilir biçimde kaydedilir.',
+    steps: [
+      '“Kısıtlama ekle” deyin; kişinin adını ve katılımcı listelerindeki e-postasını girin.',
+      '“Katılım engeli” kişinin CSV/HeptaCert aktarımını durdurur; “Yönetici dikkat kaydı” yalnız uyarı gösterir ve sorumlu açıkça kabul ederse aktarım sürer.',
+      'Somut olay ve gerekçeyi, varsa kaynak etkinliği ve kanıt bağlantısını girin. Süreli olacaksa bitiş, yeniden değerlendirilecekse inceleme tarihini belirleyin.',
+      'Süresiz kayıtlar dönem değişince de etkin kalır. Artık gerekmiyorsa “Kaldır” deyip kaldırma gerekçesini yazın; geçmiş kayıt silinmez.',
+    ],
+    tips: [
+      'Gerekçeye söylenti veya hakaret değil, doğrulanabilir ve etkinlik güvenliğiyle ilgili somut olay yazın.',
+      'Kısıtlama gerekçelerini yalnız üye yönetimi yetkisi olan kişiler görür; etkinlik sorumlusu yalnız eşleşen kişinin engel/uyarı seviyesini görür.',
+    ],
+  },
+  {
     id: 'kurullar',
     audiences: ['admin', 'manager'],
     title: 'Kurul oylamaları ve karar defteri',
@@ -512,10 +530,12 @@ export const MANUAL: ManualSection[] = [
       'Firebase Console’daki web uygulaması değerlerini ve Realtime Database URL’sini bağlantı alanlarına girin; servis hesabı veya özel anahtar kullanmayın.',
       '“IEEE Puan görünümü ekle” deyin. Varsayılan users, leaderboard_public ve admin_point_audit yollarını uzak projenize göre kontrol edip ayarı kaydedin.',
       'Uzak projede kendi Google veya e-posta hesabınızla ayrıca oturum açın. Üye arayarak güncel puanı, yaşam boyu kazanılanı ve harcananı gerekçe yazarak düzenleyin.',
+      'Onaylı, onaysız, veri uyarılı veya teknik kilitli üyeleri filtreleyin. Tekil ya da toplu seçimle üyelikleri gerekçe yazarak onaylayın veya askıya alın; askıya alınan kayıt silinmez ve sıralamadan çıkarılır.',
+      'Eksik puan/üyelik alanlarını, eski harcama alanını ve KVKK onayı olmayan kayıtları “Veri uyarısı” filtresinden kontrol edin; gerekirse filtrelenen üye listesini CSV olarak indirin.',
       'Dönemsel sıfırlama için “Tüm güncel puanları sıfırla” deyin, gerekçeyi yazın ve onay ifadesini girin. Yalnız güncel sadakat puanı sıfırlanır; yaşam boyu toplamlar korunur.',
     ],
     tips: [
-      'Puan değişikliği, sıralama önbelleği ve denetim kaydı uzak Realtime Database’de tek çok-yollu güncelleme olarak yazılır.',
+      'Puan veya üyelik değişikliği, sıralama önbelleği ve denetim kaydı uzak Realtime Database’de tek çok-yollu güncelleme olarak yazılır.',
       'Hub izni uzak projede yetki vermez; son karar her zaman uzak Firebase Security Rules’undur.',
     ],
   },

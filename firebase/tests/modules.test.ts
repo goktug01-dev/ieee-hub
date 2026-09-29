@@ -62,7 +62,7 @@ async function seed() {
     await setDoc(doc(db, 'access', 'stranger'), baseAccess('stranger'));
     await setDoc(doc(db, 'access', 'gs'), {
       ...baseAccess('gs'),
-      perms: { 'work.manageAll': FAR, 'events.approve': FAR, 'events.manageAll': FAR },
+      perms: { 'work.manageAll': FAR, 'events.approve': FAR, 'events.manageAll': FAR, 'members.manage': FAR },
       roleKeys: { 'branch__genel-sekreter': FAR },
       tokens: ['uid:gs', 'role:branch__genel-sekreter'],
     });
@@ -485,6 +485,47 @@ describe('etkinlikler', () => {
   it('katılımcı listesini yalnızca sorumlu ve yöneticiler görür', async () => {
     await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', 'p1'), { name: 'x' }));
     await assertFails(getDocs(collection(ctx('csVol'), 'events', 'e1', 'participants')));
+  });
+
+  it('dönemler arası kısıtlama gerekçesini gizler ve engelli katılımcı yazımını kurallarda durdurur', async () => {
+    const hash = 'a'.repeat(32);
+    const restriction = {
+      personName: 'Kişi', email: 'kisi@example.org', emailHash: hash, level: 'blocked', reason: 'Etkinlik güvenliğini ihlal eden somut olay.',
+      sourceEventId: 'e1', sourceEventName: 'AI Günü', evidenceLink: '', endsOn: null, reviewOn: null, active: true,
+      createdBy: 'gs', createdByName: 'Genel Sekreter', createdAt: serverTimestamp(),
+    };
+    const coordDb = ctx('coord');
+    const denied = writeBatch(coordDb);
+    denied.set(doc(coordDb, 'eventRestrictions', 'r-denied'), { ...restriction, createdBy: 'coord' });
+    await assertFails(denied.commit());
+
+    const db = ctx('gs');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'eventRestrictions', 'r1'), restriction);
+    batch.set(doc(db, 'eventRestrictionIndex', hash), { restrictionId: 'r1', level: 'blocked', expiresAt: FAR, updatedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+
+    await assertFails(getDoc(doc(ctx('coord'), 'eventRestrictions', 'r1')));
+    await assertSucceeds(getDoc(doc(ctx('coord'), 'eventRestrictionIndex', hash)));
+    await assertFails(getDocs(collection(ctx('coord'), 'eventRestrictionIndex')));
+    await assertFails(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', hash), { name: 'Kişi', email: 'kisi@example.org' }));
+    const lift = writeBatch(db);
+    lift.update(doc(db, 'eventRestrictions', 'r1'), { active: false, liftedBy: 'gs', liftedByName: 'Genel Sekreter', liftedAt: serverTimestamp(), liftReason: 'İnceleme tamamlandı.' });
+    lift.delete(doc(db, 'eventRestrictionIndex', hash));
+    await assertSucceeds(lift.commit());
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', hash), { name: 'Kişi', email: 'kisi@example.org' }));
+  });
+
+  it('dikkat kaydı katılımı engellemez, süresi dolan engel uygulanmaz', async () => {
+    const watchHash = 'b'.repeat(32);
+    const expiredHash = 'c'.repeat(32);
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'eventRestrictionIndex', watchHash), { restrictionId: 'w1', level: 'watch', expiresAt: FAR, updatedAt: Timestamp.now() });
+      await setDoc(doc(db, 'eventRestrictionIndex', expiredHash), { restrictionId: 'x1', level: 'blocked', expiresAt: Timestamp.fromDate(new Date('2020-01-01')), updatedAt: Timestamp.now() });
+    });
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', watchHash), { name: 'Dikkat' }));
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', expiredHash), { name: 'Süresi doldu' }));
   });
 });
 

@@ -25,6 +25,7 @@ import { auditInBatch, logAudit } from './audit';
 import { sha256Hex } from './docx';
 import { slugify } from './format';
 import { HEPTACERT_CSV_CONTRACT_VERSION, type CsvPreview } from './heptacert';
+import { findParticipantRestrictions } from './eventRestrictions';
 export { parseCsv, previewParticipantsCsv, type CsvPreview } from './heptacert';
 import type { HubEvent, Participant, Task, VolunteerApplication } from './opsTypes';
 import type { OrgSettings, Term } from './types';
@@ -166,6 +167,9 @@ export async function approveEventWithPetition(id: string, petitionId: string, p
  */
 export async function importParticipants(eventId: string, fileName: string, preview: CsvPreview) {
   const who = me();
+  const restrictions = await findParticipantRestrictions(preview.rows);
+  const blocked = restrictions.filter((item) => item.level === 'blocked');
+  if (blocked.length) throw new Error(`${blocked.length} kişi etkinlik katılımından engelli. Bu kayıtlar çıkarılmadan aktarım yapılamaz.`);
   const existingSnapshot = await getDocs(collection(db, 'events', eventId, 'participants'));
   const existing = new Map(existingSnapshot.docs.map((d) => [d.id, d.data() as Participant]));
   let added = 0;

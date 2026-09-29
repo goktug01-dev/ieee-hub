@@ -4,12 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { computeAccess } from '../lib/access';
 import { DEFAULT_BUILDER, appendVerificationStamp, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
 import { maskName, slugify } from '../lib/format';
-import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
+import { approvedEventsIcs, isApprovedCalendarEvent, vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
 import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
 import { classifyPetitionFile } from '../lib/petitionCategories';
 import type { HubEvent, Meeting } from '../lib/opsTypes';
 import { buildMeetingMinutes } from '../lib/meetingDocx';
-import { parseExternalData, stringifyExternalData } from '../lib/externalFirebase';
+import { externalPointUserIssues, parseExternalData, stringifyExternalData } from '../lib/externalFirebase';
 import { computeVisibleTo, formatDocumentNo, newVerificationCode, stepRequiredApprovals } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
 import { DEFAULT_ORG_SETTINGS, applicantFields, responseFieldsForStep } from '../lib/workflow';
@@ -19,6 +19,7 @@ import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall }
 import { POLICIES, RECRUITMENT_PRIVACY_TEMPLATE, fillPlaceholders, privacyPlaceholders, validatePrivacyNotice } from '../lib/privacy';
 import { MANUAL, MANUAL_AUDIENCES, manualFor, type ManualAudience } from '../lib/manual';
 import { buildManualDocx } from '../lib/manualDocx';
+import { normalizeRestrictionEmail, restrictionIsCurrent } from '../lib/eventRestrictions';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -43,6 +44,17 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('etkinlik kısıtlamaları', () => {
+  it('e-postayı dönemler arası eşleşme için normalize eder', () => {
+    expect(normalizeRestrictionEmail('  Kisi@Example.ORG ')).toBe('kisi@example.org');
+  });
+
+  it('süresi dolmuş indeksi etkin saymaz', () => {
+    expect(restrictionIsCurrent({ expiresAt: ts('2026-10-01T00:00:00Z') }, Date.parse('2026-09-30T00:00:00Z'))).toBe(true);
+    expect(restrictionIsCurrent({ expiresAt: ts('2026-10-01T00:00:00Z') }, Date.parse('2026-10-02T00:00:00Z'))).toBe(false);
   });
 });
 
@@ -171,6 +183,18 @@ describe('vTools L31 hazırlık paketi', () => {
     const broken = { ...event, vtools: { ...event.vtools!, guestAttendees: 11 } };
     expect(vtoolsMissingFields(broken, settings)).toContain('katılımcı toplamı uyuşmuyor');
   });
+
+  it('yalnız onaylanmış ve tarihli etkinlikleri iCalendar çıktısına alır', () => {
+    const approved = { ...event, id: 'evt-1', status: 'approved' as const };
+    const proposed = { ...event, id: 'evt-2', status: 'proposed' as const, name: 'Taslak' };
+    expect(isApprovedCalendarEvent(approved)).toBe(true);
+    expect(isApprovedCalendarEvent(proposed)).toBe(false);
+    const ics = approvedEventsIcs([approved, proposed], 'https://hub.example');
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('SUMMARY:Yapay Zekâ Günü');
+    expect(ics).toContain('URL:https://hub.example/etkinlikler/evt-1');
+    expect(ics).not.toContain('Taslak');
+  });
 });
 
 describe('erişim özeti', () => {
@@ -278,6 +302,15 @@ describe('toplantı tutanağı ve harici veri', () => {
     const parsed = parseExternalData(stringifyExternalData(original));
     expect(parsed.updatedAt).toBeInstanceOf(Timestamp);
     expect((parsed.updatedAt as Timestamp).toDate().toISOString()).toBe('2026-09-27T12:00:00.000Z');
+  });
+
+  it('harici üyelik kaydındaki eksik ve eski alanları işaretler', () => {
+    const raw = { name: 'Üye', lifetime_spend: 3 };
+    const issues = externalPointUserIssues({
+      id: 'u1', name: 'Üye', surname: '', email: '', phone: '', department: '', approved: false, kvkkConsent: false,
+      technicalLocked: false, eventCount: 0, roleCount: 0, committeeCount: 0, points: 0, lifetimeEarned: 0, lifetimeSpent: 3, raw,
+    });
+    expect(issues).toEqual(expect.arrayContaining(['üyelik durumu eksik', 'güncel puan alanı eksik', 'eski harcama alanı kullanılıyor', 'KVKK onayı yok', 'e-posta eksik']));
   });
 });
 

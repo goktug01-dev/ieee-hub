@@ -1,6 +1,6 @@
 import { ActionIcon, Alert, Badge, Button, Card, Checkbox, Code, Group, Modal, NumberInput, PasswordInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput, Textarea, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { IconEdit, IconPlus, IconRefresh, IconRestore, IconTrash } from '@tabler/icons-react';
+import { IconDownload, IconEdit, IconPlus, IconRefresh, IconRestore, IconTrash, IconUserCheck, IconUserX } from '@tabler/icons-react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
@@ -14,6 +14,7 @@ import {
   disconnectExternal,
   externalServices,
   fieldValue,
+  externalPointUserIssues,
   parseExternalData,
   readExternalPointUsers,
   readExternalResource,
@@ -21,11 +22,13 @@ import {
   stringifyExternalData,
   writeExternalRecord,
   writeExternalPointChanges,
+  writeExternalMembershipChanges,
   type ExternalPointUser,
   type ExternalRecord,
 } from '../../lib/externalFirebase';
 import { useDoc } from '../../lib/hooks';
 import type { ExternalFirebaseConfig, ExternalFirebaseResource } from '../../lib/opsTypes';
+import { downloadText, toCsv } from '../../lib/ops';
 
 type ConfigDraft = Omit<ExternalFirebaseConfig, 'updatedAt' | 'updatedBy'>;
 const emptyConfig = (): ConfigDraft => ({ apiKey: '', authDomain: '', projectId: '', appId: '', databaseURL: '', resources: [] });
@@ -152,7 +155,10 @@ function PointsPanel({ config, resource }: { config: ExternalFirebaseConfig; res
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [search, setSearch] = useState('');
+  const [membershipFilter, setMembershipFilter] = useState('all');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [edit, setEdit] = useState<{ user: ExternalPointUser; points: number; earned: number; spent: number; reason: string } | null>(null);
+  const [membershipAction, setMembershipAction] = useState<{ ids: string[]; approved: boolean; reason: string } | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPhrase, setResetPhrase] = useState('');
   const [resetReason, setResetReason] = useState('');
@@ -168,9 +174,21 @@ function PointsPanel({ config, resource }: { config: ExternalFirebaseConfig; res
 
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase('tr-TR');
-    return q ? users.filter((item) => `${item.name} ${item.surname} ${item.email} ${item.department}`.toLocaleLowerCase('tr-TR').includes(q)) : users;
-  }, [users, search]);
+    return users
+      .filter((item) => !q || `${item.name} ${item.surname} ${item.email} ${item.department}`.toLocaleLowerCase('tr-TR').includes(q))
+      .filter((item) => {
+        if (membershipFilter === 'approved') return item.approved;
+        if (membershipFilter === 'unapproved') return !item.approved;
+        if (membershipFilter === 'issues') return externalPointUserIssues(item).length > 0;
+        if (membershipFilter === 'locked') return item.technicalLocked;
+        return true;
+      });
+  }, [users, search, membershipFilter]);
   const total = users.reduce((sum, item) => sum + item.points, 0);
+  const issueCount = users.filter((item) => externalPointUserIssues(item).length > 0).length;
+  const filteredIds = filtered.map((item) => item.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+  const someFilteredSelected = filteredIds.some((id) => selectedIds.includes(id));
 
   const saveEdit = async () => {
     if (!edit) return;
@@ -187,25 +205,48 @@ function PointsPanel({ config, resource }: { config: ExternalFirebaseConfig; res
       setResetOpen(false); setResetPhrase(''); setResetReason(''); await load(); notifySuccess('Tüm güncel puanlar sıfırlandı; yaşam boyu kazanılan/harcanan değerler korundu.');
     } catch (resetError) { notifyError(resetError); } finally { setBusy(false); }
   };
+  const saveMembership = async () => {
+    if (!membershipAction) return;
+    setBusy(true);
+    try {
+      await writeExternalMembershipChanges(config, resource, users, membershipAction.ids.map((id) => ({ id, approved: membershipAction.approved })), membershipAction.reason);
+      setMembershipAction(null); setSelectedIds([]); await load();
+      notifySuccess(membershipAction.approved ? 'Üyelikler onaylandı ve sıralama güncellendi.' : 'Üyelikler askıya alındı ve sıralamadan çıkarıldı.');
+    } catch (membershipError) { notifyError(membershipError); } finally { setBusy(false); }
+  };
+  const exportMembers = () => downloadText(toCsv([
+    ['Ad', 'Soyad', 'E-posta', 'Telefon', 'Bölüm', 'Üyelik', 'Güncel puan', 'Toplam kazanılan', 'Toplam harcanan', 'Etkinlik', 'Rol', 'Komite', 'KVKK', 'Teknik kilit', 'Veri uyarıları'],
+    ...filtered.map((item) => [item.name, item.surname, item.email, item.phone, item.department, item.approved ? 'Onaylı' : 'Onaysız', item.points, item.lifetimeEarned, item.lifetimeSpent, item.eventCount, item.roleCount, item.committeeCount, item.kvkkConsent ? 'Var' : 'Yok', item.technicalLocked ? 'Kilitli' : 'Açık', externalPointUserIssues(item).join(', ')]),
+  ]), `ieee-uyeler-${new Date().toISOString().slice(0, 10)}.csv`);
 
   if (loading) return <SectionLoader />;
   return <Stack>
     <ErrorAlert error={error} />
-    <Alert color="teal" title="Canlı IEEE Puan yönetimi">Veriler uzak Realtime Database içinde kalır. Her değişiklik sıralamayı aynı işlemde yeniler ve <Code>{resource.auditPath || 'admin_point_audit'}</Code> yoluna gerekçeli denetim kaydı ekler.</Alert>
-    <SimpleGrid cols={{ base: 1, sm: 3 }}>
+    <Alert color="teal" title="Canlı IEEE Puan ve üyelik yönetimi">Veriler uzak Realtime Database içinde kalır. Puan ve üyelik değişiklikleri sıralamayı aynı işlemde yeniler ve <Code>{resource.auditPath || 'admin_point_audit'}</Code> yoluna gerekçeli denetim kaydı ekler.</Alert>
+    <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }}>
       <Card withBorder><Text size="xs" c="dimmed">Kullanıcı</Text><Text fw={700} size="xl">{users.length}</Text></Card>
       <Card withBorder><Text size="xs" c="dimmed">Onaylı kullanıcı</Text><Text fw={700} size="xl">{users.filter((item) => item.approved).length}</Text></Card>
+      <Card withBorder><Text size="xs" c="dimmed">Onay bekleyen / askıda</Text><Text fw={700} size="xl">{users.filter((item) => !item.approved).length}</Text></Card>
       <Card withBorder><Text size="xs" c="dimmed">Toplam güncel puan</Text><Text fw={700} size="xl">{total.toLocaleString('tr-TR')}</Text></Card>
+      <Card withBorder><Text size="xs" c="dimmed">Veri uyarısı</Text><Text fw={700} size="xl" c={issueCount ? 'orange' : undefined}>{issueCount}</Text></Card>
     </SimpleGrid>
     <Card withBorder>
-      <Group justify="space-between" align="end" wrap="wrap">
-        <TextInput label="Üye ara" placeholder="Ad, e-posta veya bölüm" value={search} onChange={(event) => setSearch(event.currentTarget.value)} style={{ flex: '1 1 300px' }} />
-        <Group><Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load}>Yenile</Button>{!resource.readOnly && <Button color="red" variant="light" leftSection={<IconRestore size={16} />} onClick={() => setResetOpen(true)}>Tüm güncel puanları sıfırla</Button>}</Group>
-      </Group>
+      <Stack gap="sm">
+        <Group justify="space-between" align="end" wrap="wrap">
+          <TextInput label="Üye ara" placeholder="Ad, e-posta veya bölüm" value={search} onChange={(event) => setSearch(event.currentTarget.value)} style={{ flex: '1 1 300px' }} />
+          <Group><Button variant="default" leftSection={<IconDownload size={16} />} onClick={exportMembers}>CSV indir</Button><Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load}>Yenile</Button>{!resource.readOnly && <Button color="red" variant="light" leftSection={<IconRestore size={16} />} onClick={() => setResetOpen(true)}>Tüm güncel puanları sıfırla</Button>}</Group>
+        </Group>
+        <Group justify="space-between" wrap="wrap">
+          <SegmentedControl value={membershipFilter} onChange={setMembershipFilter} data={[{ value: 'all', label: 'Tümü' }, { value: 'approved', label: 'Onaylı' }, { value: 'unapproved', label: 'Onaysız' }, { value: 'issues', label: 'Veri uyarısı' }, { value: 'locked', label: 'Teknik kilitli' }]} />
+          {!resource.readOnly && selectedIds.length > 0 && <Group gap="xs"><Text size="sm" c="dimmed">{selectedIds.length} üye seçildi</Text><Button size="xs" color="green" leftSection={<IconUserCheck size={14} />} onClick={() => setMembershipAction({ ids: selectedIds, approved: true, reason: '' })}>Onayla</Button><Button size="xs" color="orange" variant="light" leftSection={<IconUserX size={14} />} onClick={() => setMembershipAction({ ids: selectedIds, approved: false, reason: '' })}>Askıya al</Button></Group>}
+        </Group>
+      </Stack>
     </Card>
-    {users.length === 0 && !error ? <EmptyState title="Kullanıcı bulunamadı" description="users yolu boş olabilir veya uzak güvenlik kuralları okumaya izin vermiyor olabilir." /> : <Table.ScrollContainer minWidth={900}><Table striped highlightOnHover stickyHeader><Table.Thead><Table.Tr><Table.Th>Üye</Table.Th><Table.Th>Bölüm</Table.Th><Table.Th>Güncel</Table.Th><Table.Th>Toplam kazanılan</Table.Th><Table.Th>Toplam harcanan</Table.Th><Table.Th>Durum</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>{filtered.map((item) => <Table.Tr key={item.id}><Table.Td><Text fw={600}>{item.name} {item.surname}</Text><Text size="xs" c="dimmed">{item.email}</Text></Table.Td><Table.Td>{item.department || '—'}</Table.Td><Table.Td><Text fw={700}>{item.points.toLocaleString('tr-TR')}</Text></Table.Td><Table.Td>{item.lifetimeEarned.toLocaleString('tr-TR')}</Table.Td><Table.Td>{item.lifetimeSpent.toLocaleString('tr-TR')}</Table.Td><Table.Td><Badge color={item.approved ? 'green' : 'gray'}>{item.approved ? 'Onaylı' : 'Onaysız'}</Badge></Table.Td><Table.Td>{!resource.readOnly && <ActionIcon variant="subtle" aria-label="Puanı düzenle" onClick={() => setEdit({ user: item, points: item.points, earned: item.lifetimeEarned, spent: item.lifetimeSpent, reason: '' })}><IconEdit size={16} /></ActionIcon>}</Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
+    {users.length === 0 && !error ? <EmptyState title="Kullanıcı bulunamadı" description="users yolu boş olabilir veya uzak güvenlik kuralları okumaya izin vermiyor olabilir." /> : filtered.length === 0 ? <EmptyState title="Filtreye uyan üye yok" /> : <Table.ScrollContainer minWidth={1250}><Table striped highlightOnHover stickyHeader><Table.Thead><Table.Tr><Table.Th><Checkbox aria-label="Filtrelenen üyelerin tümünü seç" checked={allFilteredSelected} indeterminate={someFilteredSelected && !allFilteredSelected} onChange={() => setSelectedIds(allFilteredSelected ? selectedIds.filter((id) => !filteredIds.includes(id)) : [...new Set([...selectedIds, ...filteredIds])])} /></Table.Th><Table.Th>Üye</Table.Th><Table.Th>Bölüm</Table.Th><Table.Th>Güncel</Table.Th><Table.Th>Toplam kazanılan</Table.Th><Table.Th>Toplam harcanan</Table.Th><Table.Th>Katılım</Table.Th><Table.Th>Durum</Table.Th><Table.Th>Veri kontrolü</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>{filtered.map((item) => { const issues = externalPointUserIssues(item); return <Table.Tr key={item.id}><Table.Td><Checkbox aria-label={`${item.name} ${item.surname} seç`} checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} /></Table.Td><Table.Td><Text fw={600}>{item.name} {item.surname}</Text><Text size="xs" c="dimmed">{item.email}</Text></Table.Td><Table.Td>{item.department || '—'}</Table.Td><Table.Td><Text fw={700}>{item.points.toLocaleString('tr-TR')}</Text></Table.Td><Table.Td>{item.lifetimeEarned.toLocaleString('tr-TR')}</Table.Td><Table.Td>{item.lifetimeSpent.toLocaleString('tr-TR')}</Table.Td><Table.Td><Text size="sm">{item.eventCount} etkinlik</Text><Text size="xs" c="dimmed">{item.roleCount} rol · {item.committeeCount} komite</Text></Table.Td><Table.Td><Stack gap={3}><Badge color={item.approved ? 'green' : 'gray'}>{item.approved ? 'Onaylı' : 'Onaysız'}</Badge>{item.technicalLocked && <Badge color="red" variant="light">Teknik kilitli</Badge>}</Stack></Table.Td><Table.Td>{issues.length ? <Text size="xs" c="orange">{issues.join(' · ')}</Text> : <Badge color="teal" variant="light">Temiz</Badge>}</Table.Td><Table.Td>{!resource.readOnly && <Group gap={2} wrap="nowrap"><ActionIcon variant="subtle" aria-label="Puanı düzenle" onClick={() => setEdit({ user: item, points: item.points, earned: item.lifetimeEarned, spent: item.lifetimeSpent, reason: '' })}><IconEdit size={16} /></ActionIcon><ActionIcon variant="subtle" color={item.approved ? 'orange' : 'green'} aria-label={item.approved ? 'Üyeliği askıya al' : 'Üyeliği onayla'} onClick={() => setMembershipAction({ ids: [item.id], approved: !item.approved, reason: '' })}>{item.approved ? <IconUserX size={16} /> : <IconUserCheck size={16} />}</ActionIcon></Group>}</Table.Td></Table.Tr>; })}</Table.Tbody></Table></Table.ScrollContainer>}
 
     <Modal opened={!!edit} onClose={() => setEdit(null)} title="Üye puanını düzenle">{edit && <Stack><Text fw={600}>{edit.user.name} {edit.user.surname}</Text><NumberInput label="Güncel kullanılabilir puan" min={0} value={edit.points} onChange={(value) => setEdit({ ...edit, points: Number(value) || 0 })} /><NumberInput label="Yaşam boyu kazanılan" min={0} value={edit.earned} onChange={(value) => setEdit({ ...edit, earned: Number(value) || 0 })} /><NumberInput label="Yaşam boyu harcanan" min={0} value={edit.spent} onChange={(value) => setEdit({ ...edit, spent: Number(value) || 0 })} /><Textarea label="İşlem gerekçesi" required value={edit.reason} onChange={(event) => setEdit({ ...edit, reason: event.currentTarget.value })} /><Group justify="flex-end"><Button variant="default" onClick={() => setEdit(null)}>Vazgeç</Button><Button onClick={saveEdit} loading={busy} disabled={!edit.reason.trim()}>Uzak veritabanına kaydet</Button></Group></Stack>}</Modal>
+
+    <Modal opened={!!membershipAction} onClose={() => setMembershipAction(null)} title={membershipAction?.approved ? 'Üyelikleri onayla' : 'Üyelikleri askıya al'}>{membershipAction && <Stack><Alert color={membershipAction.approved ? 'green' : 'orange'}>{membershipAction.ids.length} üyenin durumu değiştirilecek. {membershipAction.approved ? 'Üyeler puan sıralamasına dahil edilir.' : 'Üyeler silinmez; giriş onayı kaldırılır ve puan sıralamasından çıkarılır.'}</Alert><Textarea label="İşlem gerekçesi" required value={membershipAction.reason} onChange={(event) => setMembershipAction({ ...membershipAction, reason: event.currentTarget.value })} /><Group justify="flex-end"><Button variant="default" onClick={() => setMembershipAction(null)}>Vazgeç</Button><Button color={membershipAction.approved ? 'green' : 'orange'} onClick={saveMembership} loading={busy} disabled={!membershipAction.reason.trim()}>{membershipAction.approved ? 'Üyelikleri onayla' : 'Üyelikleri askıya al'}</Button></Group></Stack>}</Modal>
 
     <Modal opened={resetOpen} onClose={() => setResetOpen(false)} title="Tüm güncel puanları sıfırla"><Stack><Alert color="red">Bu işlem {users.length} kullanıcının <Code>sadakat</Code> değerini sıfırlar. Yaşam boyu kazanılan ve harcanan puanlar korunur. İşlem uzak veritabanında uygulanır.</Alert><Textarea label="İşlem gerekçesi" required value={resetReason} onChange={(event) => setResetReason(event.currentTarget.value)} /><TextInput label={<span>Onaylamak için <Code>PUANLARI SIFIRLA</Code> yazın</span>} value={resetPhrase} onChange={(event) => setResetPhrase(event.currentTarget.value)} /><Group justify="flex-end"><Button variant="default" onClick={() => setResetOpen(false)}>Vazgeç</Button><Button color="red" onClick={resetAll} loading={busy} disabled={resetPhrase !== 'PUANLARI SIFIRLA' || !resetReason.trim() || users.length === 0}>Puanları sıfırla</Button></Group></Stack></Modal>
   </Stack>;

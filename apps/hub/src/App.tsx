@@ -15,6 +15,7 @@ const AuditPage = lazy(() => import('./pages/admin/AuditPage').then((m) => ({ de
 const ElectionDetailPage = lazy(() => import('./pages/admin/ElectionDetailPage').then((m) => ({ default: m.ElectionDetailPage })));
 const ElectionsPage = lazy(() => import('./pages/admin/ElectionsPage').then((m) => ({ default: m.ElectionsPage })));
 const MembersPage = lazy(() => import('./pages/admin/MembersPage').then((m) => ({ default: m.MembersPage })));
+const EventRestrictionsPage = lazy(() => import('./pages/admin/EventRestrictionsPage').then((m) => ({ default: m.EventRestrictionsPage })));
 const RolesPage = lazy(() => import('./pages/admin/RolesPage').then((m) => ({ default: m.RolesPage })));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const TemplateEditorPage = lazy(() => import('./pages/admin/TemplateEditorPage').then((m) => ({ default: m.TemplateEditorPage })));
@@ -141,6 +142,7 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="yonetim/envanter" element={<RequirePerm perm="inventory.manage"><InventoryPage /></RequirePerm>} />
               <Route path="yonetim/harici-firebase" element={<RequirePerm perm="external.firebase.manage"><ExternalFirebasePage /></RequirePerm>} />
               <Route path="yonetim/uyeler" element={<RequirePerm perm="members.manage"><MembersPage /></RequirePerm>} />
+              <Route path="yonetim/etkinlik-kisitlamalari" element={<RequirePerm perm="members.manage"><EventRestrictionsPage /></RequirePerm>} />
               <Route path="yonetim/atamalar" element={<RequirePerm perm="assignments.manage"><AssignmentsPage /></RequirePerm>} />
               <Route path="yonetim/secimler" element={<RequirePerm perm="elections.manage"><ElectionsPage /></RequirePerm>} />
               <Route path="yonetim/secimler/:id" element={<RequirePerm perm="elections.manage"><ElectionDetailPage /></RequirePerm>} />

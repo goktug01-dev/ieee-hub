@@ -1,7 +1,7 @@
-import { Badge, Button, Card, Group, Modal, MultiSelect, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { ActionIcon, Badge, Button, Card, Group, Modal, MultiSelect, NumberInput, Paper, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { modals } from '@mantine/modals';
-import { IconCalendarPlus, IconCheck, IconMapPin, IconX } from '@tabler/icons-react';
+import { IconCalendarPlus, IconCheck, IconChevronLeft, IconChevronRight, IconDownload, IconMapPin, IconX } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import { orderBy } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
@@ -12,11 +12,12 @@ import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } fro
 import { hasPermission, hasUnitPermission } from '../../lib/access';
 import { useCollection } from '../../lib/hooks';
 import { useActiveMembers } from '../../lib/members';
-import { decideEvent, proposeEvent } from '../../lib/ops';
+import { downloadText, decideEvent, proposeEvent } from '../../lib/ops';
 import { EVENT_STATUS, EVENT_TYPES } from '../../lib/opsLabels';
 import type { HubEvent } from '../../lib/opsTypes';
 import { useOrg } from '../../lib/org';
 import type { WithId } from '../../lib/types';
+import { approvedEventsIcs, isApprovedCalendarEvent } from '../../lib/eventExports';
 
 export function fmtEventDate(s: string | null) {
   return s ? dayjs(s).format('DD MMM YYYY, HH:mm') : 'Tarih belirlenmedi';
@@ -51,6 +52,7 @@ export function EventsPage() {
   }, [events.data, unit, view, now]);
 
   const pending = events.data.filter((e) => e.status === 'proposed');
+  const calendarEvents = events.data.filter((event) => (!unit || event.unitId === unit) && isApprovedCalendarEvent(event));
 
   const decide = (e: WithId<HubEvent>, approve: boolean) => {
     let note = '';
@@ -113,15 +115,19 @@ export function EventsPage() {
           onChange={setView}
           data={[
             { value: 'upcoming', label: 'Yaklaşan ve süreçteki' },
+            { value: 'calendar', label: 'Takvim' },
             { value: 'past', label: 'Geçmiş' },
             { value: 'all', label: 'Tümü' },
           ]}
         />
         <Select placeholder="Birim" data={unitOptions({ onlyActive: false })} value={unit} onChange={(value) => { setUnit(value); const next = new URLSearchParams(params); value ? next.set('birim', value) : next.delete('birim'); setParams(next, { replace: true }); }} clearable allowDeselect searchable w={240} />
+        {view === 'calendar' && calendarEvents.length > 0 && <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => downloadText(approvedEventsIcs(calendarEvents, window.location.origin), 'ieee-ikcu-onayli-etkinlikler.ics', 'text/calendar;charset=utf-8')}>Takvime aktar (.ics)</Button>}
       </Group>
 
       {events.loading ? (
         <SectionLoader />
+      ) : view === 'calendar' ? (
+        <EventCalendar events={calendarEvents} />
       ) : list.length === 0 ? (
         <EmptyState title="Etkinlik yok" />
       ) : (
@@ -158,6 +164,34 @@ export function EventsPage() {
       <ProposeModal opened={open} onClose={() => setOpen(false)} unitChoices={proposeUnits.map((u) => ({ value: u.id, label: u.name }))} presetUnitId={unit} onCreated={(id) => navigate(`/etkinlikler/${id}`)} />
     </Stack>
   );
+}
+
+function EventCalendar({ events }: { events: WithId<HubEvent>[] }) {
+  const [month, setMonth] = useState(dayjs().startOf('month'));
+  const start = month.startOf('month').subtract((month.startOf('month').day() + 6) % 7, 'day');
+  const days = Array.from({ length: 42 }, (_, index) => start.add(index, 'day'));
+  return <Stack>
+    <Card withBorder>
+      <Group justify="space-between">
+        <ActionIcon variant="default" onClick={() => setMonth(month.subtract(1, 'month'))} aria-label="Önceki ay"><IconChevronLeft size={16} /></ActionIcon>
+        <div><Text fw={700} ta="center">{month.format('MMMM YYYY')}</Text><Text size="xs" c="dimmed" ta="center">Onaylanan etkinlikler bu takvime otomatik düşer.</Text></div>
+        <ActionIcon variant="default" onClick={() => setMonth(month.add(1, 'month'))} aria-label="Sonraki ay"><IconChevronRight size={16} /></ActionIcon>
+      </Group>
+    </Card>
+    <ScrollArea type="auto">
+      <SimpleGrid cols={7} spacing={4} miw={760}>
+        {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((label) => <Text key={label} size="xs" c="dimmed" ta="center" fw={600}>{label}</Text>)}
+        {days.map((day) => {
+          const dayEvents = events.filter((event) => dayjs(event.startsAt).isSame(day, 'day')).sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? ''));
+          return <Paper key={day.toString()} withBorder p={5} mih={112} opacity={day.month() === month.month() ? 1 : 0.42}>
+            <Text size="xs" fw={day.isSame(dayjs(), 'day') ? 700 : 400} c={day.isSame(dayjs(), 'day') ? 'blue' : undefined}>{day.date()}</Text>
+            <Stack gap={3} mt={3}>{dayEvents.map((event) => <Card key={event.id} component={Link} to={`/etkinlikler/${event.id}`} p={5} withBorder style={{ textDecoration: 'none' }}><Text size="xs" fw={600} lineClamp={2}>{dayjs(event.startsAt).format('HH:mm')} · {event.name}</Text><Text size="xs" c="dimmed" lineClamp={1}>{event.unitName}</Text></Card>)}</Stack>
+          </Paper>;
+        })}
+      </SimpleGrid>
+    </ScrollArea>
+    {events.length === 0 && <EmptyState title="Takvimde onaylanmış etkinlik yok" description="Tarihi bulunan bir etkinlik onaylandığında burada otomatik görünür." />}
+  </Stack>;
 }
 
 function ProposeModal({

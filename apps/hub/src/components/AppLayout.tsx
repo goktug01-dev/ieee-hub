@@ -53,6 +53,7 @@ import {
   IconDatabaseCog,
   IconBook2,
   IconPackage,
+  IconBan,
   IconBriefcase2,
 } from '@tabler/icons-react';
 import { Suspense, type ReactNode } from 'react';
@@ -136,6 +137,7 @@ export function AppLayout() {
       items: (
         [
           { to: '/yonetim/uyeler', label: 'Üyeler', icon: <IconUsers size={18} />, perm: 'members.manage' },
+          { to: '/yonetim/etkinlik-kisitlamalari', label: 'Etkinlik kısıtlamaları', icon: <IconBan size={18} />, perm: 'members.manage' },
           { to: '/yonetim/atamalar', label: 'Görev atamaları', icon: <IconUserShield size={18} />, perm: 'assignments.manage' },
           { to: '/yonetim/secimler', label: 'Seçimler', icon: <IconBallpen size={18} />, perm: 'elections.manage' },
           { to: '/yonetim/birimler', label: 'Komiteler ve birimler', icon: <IconBuildingCommunity size={18} />, perm: 'org.manage' },

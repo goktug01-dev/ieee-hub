@@ -124,3 +124,34 @@ export function vtoolsPreparationRow(event: HubEvent, settings: OrgSettings): (s
 export function vtoolsPreparationRows(events: HubEvent[], settings: OrgSettings) {
   return [VTOOLS_PREPARATION_HEADERS.slice(), ...events.map((event) => vtoolsPreparationRow(event, settings))];
 }
+
+export function isApprovedCalendarEvent(event: HubEvent) {
+  return !!event.startsAt && !['proposed', 'rejected', 'cancelled'].includes(event.status);
+}
+
+const icsEscape = (value: string) => value.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+const icsDate = (value: string | Date) => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+
+/** Onaylanmış etkinlikleri Google, Outlook ve Apple Takvim'in okuyabildiği iCalendar biçimine çevirir. */
+export function approvedEventsIcs(events: Array<HubEvent & { id?: string }>, hubBaseUrl = '') {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//IEEE IKCU//Hub Etkinlikleri//TR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const event of events.filter(isApprovedCalendarEvent)) {
+    const start = new Date(event.startsAt!);
+    const end = event.endsAt ? new Date(event.endsAt) : new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${icsEscape(`${event.id ?? event.code}@ieee-ikcu-hub`)}`,
+      `DTSTAMP:${icsDate(new Date())}`,
+      `DTSTART:${icsDate(start)}`,
+      `DTEND:${icsDate(end)}`,
+      `SUMMARY:${icsEscape(event.name)}`,
+      `DESCRIPTION:${icsEscape([event.unitName, event.description].filter(Boolean).join(' — '))}`,
+      `LOCATION:${icsEscape(event.location)}`,
+      ...(hubBaseUrl && event.id ? [`URL:${hubBaseUrl.replace(/\/$/, '')}/etkinlikler/${encodeURIComponent(event.id)}`] : []),
+      `CATEGORIES:${icsEscape(event.type)}`,
+      'END:VEVENT',
+    );
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}

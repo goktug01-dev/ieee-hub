@@ -955,6 +955,60 @@ service cloud.firestore {
       allow delete: if isActive() && (unitManager(resource.data.unitId) || hasPerm('work.manageAll'));
     }
 
+    // ---------- Dönemler arası etkinlik kısıtlamaları ----------
+
+    match /eventRestrictions/{id} {
+      function r() { return resource.data; }
+      function nr() { return request.resource.data; }
+
+      // Kimlik ve gerekçe yalnız üye yöneticilerince görülür; kayıtlar silinmez.
+      allow read: if hasPerm('members.manage');
+      allow create: if hasPerm('members.manage')
+        && nr().keys().hasOnly(['personName', 'email', 'emailHash', 'level', 'reason', 'sourceEventId', 'sourceEventName', 'evidenceLink', 'endsOn', 'reviewOn', 'active', 'createdBy', 'createdByName', 'createdAt'])
+        && nr().personName is string && nr().personName.size() > 0 && nr().personName.size() <= 160
+        && nr().email is string && nr().email.size() > 3 && nr().email.size() <= 254
+        && nr().emailHash is string && nr().emailHash.size() == 32
+        && nr().level in ['watch', 'blocked']
+        && nr().reason is string && nr().reason.size() >= 10 && nr().reason.size() <= 5000
+        && (nr().sourceEventId == null || nr().sourceEventId is string)
+        && nr().sourceEventName is string && nr().sourceEventName.size() <= 200
+        && nr().evidenceLink is string && nr().evidenceLink.size() <= 1000
+        && (nr().endsOn == null || nr().endsOn is string)
+        && (nr().reviewOn == null || nr().reviewOn is string)
+        && nr().active == true
+        && nr().createdBy == me() && nr().createdByName is string
+        && nr().createdAt == request.time;
+      allow update: if hasPerm('members.manage')
+        && r().active == true && nr().active == false
+        && nr().liftedBy == me() && nr().liftedByName is string
+        && nr().liftedAt == request.time
+        && nr().liftReason is string && nr().liftReason.size() >= 5
+        && onlyKeys(['active', 'liftedBy', 'liftedByName', 'liftedAt', 'liftReason']);
+      allow delete: if false;
+    }
+
+    match /eventRestrictionIndex/{emailHash} {
+      function idx() { return request.resource.data; }
+      function indexedRestriction() { return getAfter(docPath('eventRestrictions', idx().restrictionId)).data; }
+      function validIndex() {
+        let restriction = indexedRestriction();
+        return emailHash.size() == 32
+          && idx().keys().hasOnly(['restrictionId', 'level', 'expiresAt', 'updatedAt'])
+          && idx().restrictionId is string && idx().restrictionId.size() > 0
+          && idx().level in ['watch', 'blocked']
+          && idx().expiresAt is timestamp && idx().updatedAt == request.time
+          && restriction.active == true
+          && restriction.emailHash == emailHash
+          && restriction.level == idx().level;
+      }
+
+      // Etkinlik sorumluları yalnız bildikleri e-posta özetini tekil sorgulayabilir; listeleyemez.
+      allow get: if isActive();
+      allow list: if hasPerm('members.manage');
+      allow create, update: if hasPerm('members.manage') && validIndex();
+      allow delete: if hasPerm('members.manage');
+    }
+
     // ---------- Etkinlikler (WP-06) ----------
 
     function eventManager(u) {
@@ -1015,9 +1069,17 @@ service cloud.firestore {
         return isActive() && (isEventOwner(parentEvent()) || eventManager(parentEvent().unitId));
       }
 
+      function participantMayEnter(pid) {
+        let path = docPath('eventRestrictionIndex', pid);
+        return !exists(path)
+          || get(path).data.level != 'blocked'
+          || get(path).data.expiresAt <= request.time;
+      }
+
       // Katılımcı listesi kişisel veridir: yalnızca etkinlik sorumluları ve birim yöneticileri.
       match /participants/{pid} {
-        allow read, write: if canHandleParticipants();
+        allow read, delete: if canHandleParticipants();
+        allow create, update: if canHandleParticipants() && participantMayEnter(pid);
       }
 
       match /syncRuns/{rid} {

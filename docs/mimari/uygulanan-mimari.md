@@ -54,6 +54,8 @@ flowchart LR
 | `events/{id}` | Etkinlik yaşam döngüsü, kapanış raporu, HeptaCert/vTools hazırlığı | Aktif üye | Etkinlik sorumlusu, birim yöneticisi; onaylarda ayrı izin |
 | `events/{id}/participants/{pid}` | HeptaCert kurumsal katılımcı kopyası | Etkinlik sorumlusu / birim yöneticisi | Aynı kapsam |
 | `events/{id}/syncRuns/{rid}` | HeptaCert aktarım mutabakatı ve veri sözleşmesi sürümü | Etkinlik sorumlusu, birim yöneticisi, rapor okuyucu | Aktarımı yapan yetkili |
+| `eventRestrictions/{id}` | Dönemler arası katılım engeli/dikkat kaydı; gerekçe ve değişmez geçmiş | `members.manage` | `members.manage`; silinmez, gerekçeyle pasifleştirilir |
+| `eventRestrictionIndex/{emailHash}` | Açık kimlik ve gerekçe taşımayan katılımcı koruma indeksi | Aktif üye tekil `get`; yalnız `members.manage` liste | `members.manage`; tam kayıtla aynı işlemde |
 | `secretaryLedger/{id}` | Toplantı, karar, gelen-giden evrak, takip ve not defteri | `secretary.ledger.manage` | `secretary.ledger.manage` |
 | `meetings/{id}` | Birim toplantısı; katılım, gündem, görüşme, karar ve takip maddeleri | Birim üyeleri ve üst yetkililer | Birim toplantı/yönetim yetkilisi; kesinleşen kayıt kilitli |
 | `settings/boards` | YK/İK adları, tüzükteki tam sayılar ve oy hakkı veren görev koltukları | Aktif üye | `org.manage` |
@@ -107,7 +109,9 @@ Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğunda
 5. Gönderim/onay sonrası belge her açılışta şablon + veri + onaylardan yeniden üretilir; `.docx` indirilir veya tarayıcıdan PDF'e yazdırılır.
 6. Doğrulama kodu bulunan çıktının sonuna durum, evrak no, kod ve herkese açık doğrulama adresini taşıyan gömülü QR damgası eklenir.
 
-Harici IEEE Puan görünümü `users/*/sadakat`, yaşam boyu toplamlar ve `leaderboard_public` önbelleğini uzak RTDB içinde yönetir. Toplu sıfırlama yalnız güncel puanı sıfırlar; değişiklik, sıralama ve `admin_point_audit` kaydı tek çok-yollu RTDB güncellemesidir. Bu kişisel veriler Hub Firestore'una kopyalanmaz.
+Harici IEEE Puan görünümü `users/*/sadakat`, üyelik onayı, yaşam boyu toplamlar ve `leaderboard_public` önbelleğini uzak RTDB içinde yönetir. Toplu sıfırlama yalnız güncel puanı sıfırlar; puan veya üyelik değişikliği, sıralama ve `admin_point_audit` kaydı tek çok-yollu RTDB güncellemesidir. Bu kişisel veriler Hub Firestore'una kopyalanmaz (ADR-0035).
+
+Etkinlik takvimi ayrı bir koleksiyona kopya yazmaz. Tarihi bulunan onaylı/süreçteki `events` kayıtlarını canlı sorgudan gösterir; onaylanan etkinlik bu nedenle otomatik görünür. Aynı görünüm standart iCalendar (`.ics`) dışa aktarımı üretir (ADR-0036).
 
 ## 6. Seçim durum makinesi
 

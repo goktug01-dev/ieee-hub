@@ -45,7 +45,13 @@ export interface ExternalPointUser {
   surname: string;
   email: string;
   department: string;
+  phone: string;
   approved: boolean;
+  kvkkConsent: boolean;
+  technicalLocked: boolean;
+  eventCount: number;
+  roleCount: number;
+  committeeCount: number;
   points: number;
   lifetimeEarned: number;
   lifetimeSpent: number;
@@ -57,6 +63,11 @@ export interface ExternalPointChange {
   points: number;
   lifetimeEarned?: number;
   lifetimeSpent?: number;
+}
+
+export interface ExternalMembershipChange {
+  id: string;
+  approved: boolean;
 }
 
 interface ExternalServices {
@@ -154,6 +165,19 @@ function cleanPath(path: string, fallback: string) {
 }
 
 const finiteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+const childCount = (value: unknown) => Array.isArray(value)
+  ? value.filter(Boolean).length
+  : value && typeof value === 'object' ? Object.keys(value).length : 0;
+
+export function externalPointUserIssues(user: ExternalPointUser): string[] {
+  const issues: string[] = [];
+  if (!('approved' in user.raw)) issues.push('üyelik durumu eksik');
+  if (!('sadakat' in user.raw)) issues.push('güncel puan alanı eksik');
+  if ('lifetime_spend' in user.raw) issues.push('eski harcama alanı kullanılıyor');
+  if (!user.kvkkConsent) issues.push('KVKK onayı yok');
+  if (!user.email.trim()) issues.push('e-posta eksik');
+  return issues;
+}
 
 /** IEEE Puan kullanıcılarını canlı RTDB'den okur; veri Hub veritabanına kopyalanmaz. */
 export async function readExternalPointUsers(config: ExternalFirebaseConfig, resource: ExternalFirebaseResource): Promise<ExternalPointUser[]> {
@@ -172,13 +196,28 @@ export async function readExternalPointUsers(config: ExternalFirebaseConfig, res
       surname: String(data.surname ?? ''),
       email: String(data.email ?? ''),
       department: String(data.department ?? ''),
+      phone: String(data.phone ?? ''),
       approved: data.approved === true,
+      kvkkConsent: data.kvkkConsent === true,
+      technicalLocked: data.technical_locked === true,
+      eventCount: childCount(data.events),
+      roleCount: childCount(data.roles),
+      committeeCount: childCount(data.committees),
       points: finiteNumber(data.sadakat),
       lifetimeEarned: finiteNumber(data.lifetime_earned),
       lifetimeSpent: finiteNumber(data.lifetime_spent ?? data.lifetime_spend),
       raw: data,
     }];
   }).sort((a, b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`, 'tr'));
+}
+
+function addLeaderboardUpdates(updates: Record<string, unknown>, leaderboardPath: string, users: ExternalPointUser[]) {
+  const ranked = users
+    .filter((user) => user.approved)
+    .sort((a, b) => b.points - a.points || `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`, 'tr'));
+  updates[`${leaderboardPath}/me`] = Object.fromEntries(ranked.map((user, index) => [user.id, { rank: index + 1, score: user.points }]));
+  updates[`${leaderboardPath}/top10`] = ranked.slice(0, 10).map((user) => ({ name: `${user.name} ${user.surname}`.trim(), score: user.points }));
+  updates[`${leaderboardPath}/updatedAt`] = realtimeServerTimestamp();
 }
 
 /** Puan değişikliklerini, sıralama önbelleğini ve denetim kaydını tek RTDB update'iyle yazar. */
@@ -215,20 +254,52 @@ export async function writeExternalPointChanges(
   }
 
   const changeMap = new Map(changes.map((change) => [change.id, change]));
-  const ranked = users
-    .filter((user) => user.approved)
-    .map((user) => ({ ...user, points: changeMap.get(user.id)?.points ?? user.points }))
-    .sort((a, b) => b.points - a.points || `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`, 'tr'));
-  ranked.forEach((user, index) => {
-    updates[`${leaderboardPath}/me/${user.id}`] = { rank: index + 1, score: user.points };
-  });
-  updates[`${leaderboardPath}/top10`] = ranked.slice(0, 10).map((user) => ({ name: `${user.name} ${user.surname}`.trim(), score: user.points }));
-  updates[`${leaderboardPath}/updatedAt`] = realtimeServerTimestamp();
+  addLeaderboardUpdates(updates, leaderboardPath, users.map((user) => ({ ...user, points: changeMap.get(user.id)?.points ?? user.points })));
 
   const auditKey = pushRealtime(ref(services.realtime, auditPath)).key;
   if (!auditKey) throw new Error('Denetim kaydı kimliği üretilemedi.');
   updates[`${auditPath}/${auditKey}`] = {
     action: changes.length === users.length ? 'reset_all_current_points' : 'update_points',
+    actorUid: actor.uid,
+    affectedUids: changes.map((change) => change.id),
+    reason: reason.trim(),
+    at: realtimeServerTimestamp(),
+  };
+  await updateRealtime(ref(services.realtime), updates);
+}
+
+/** Üyelik onayını ve herkese açık sıralamayı aynı atomik RTDB güncellemesinde değiştirir. */
+export async function writeExternalMembershipChanges(
+  config: ExternalFirebaseConfig,
+  resource: ExternalFirebaseResource,
+  users: ExternalPointUser[],
+  changes: ExternalMembershipChange[],
+  reason: string,
+) {
+  const services = externalServices(config);
+  const actor = services.auth.currentUser;
+  if (!actor) throw new Error('Harici Firebase oturumu kapalı.');
+  if (!services.realtime) throw new Error('Realtime Database URL yapılandırılmamış.');
+  if (!reason.trim()) throw new Error('İşlem gerekçesi zorunludur.');
+  if (!changes.length) throw new Error('Değiştirilecek üye yok.');
+
+  const usersPath = cleanPath(resource.path, 'users');
+  const leaderboardPath = cleanPath(resource.leaderboardPath ?? '', 'leaderboard_public');
+  const auditPath = cleanPath(resource.auditPath ?? '', 'admin_point_audit');
+  const byId = new Map(users.map((user) => [user.id, user]));
+  const updates: Record<string, unknown> = {};
+  for (const change of changes) {
+    if (!byId.has(change.id) || change.id.includes('/')) throw new Error('Üyelik kaydında geçersiz kullanıcı kimliği.');
+    updates[`${usersPath}/${change.id}/approved`] = change.approved;
+  }
+
+  const changeMap = new Map(changes.map((change) => [change.id, change.approved]));
+  addLeaderboardUpdates(updates, leaderboardPath, users.map((user) => ({ ...user, approved: changeMap.get(user.id) ?? user.approved })));
+
+  const auditKey = pushRealtime(ref(services.realtime, auditPath)).key;
+  if (!auditKey) throw new Error('Denetim kaydı kimliği üretilemedi.');
+  updates[`${auditPath}/${auditKey}`] = {
+    action: changes.every((change) => change.approved) ? 'approve_members' : changes.every((change) => !change.approved) ? 'suspend_members' : 'update_memberships',
     actorUid: actor.uid,
     affectedUids: changes.map((change) => change.id),
     reason: reason.trim(),

@@ -51,6 +51,7 @@ import type { ContentRequest, HubEvent, Participant, SyncRun, Task, VToolsEventD
 import type { Petition } from '../../lib/types';
 import { fmtEventDate } from './EventsPage';
 import { printArea } from '../../lib/print';
+import { findParticipantRestrictions, type RestrictionMatch } from '../../lib/eventRestrictions';
 
 export function EventDetailPage() {
   const { id } = useParams();
@@ -471,15 +472,26 @@ function EventTasks({ e, id }: { e: HubEvent; id: string }) {
 }
 
 function Participants({ e, id }: { e: HubEvent; id: string }) {
+  const { access } = useAuth();
+  const canRestrict = hasPermission(access, 'members.manage');
   const participants = useCollection<Participant>(`events/${id}/participants`, [], `pp-${id}`);
   const runs = useCollection<SyncRun>(`events/${id}/syncRuns`, [orderBy('at', 'desc')], `sr-${id}`);
   const [preview, setPreview] = useState<{ file: string; data: CsvPreview } | null>(null);
+  const [restrictionMatches, setRestrictionMatches] = useState<RestrictionMatch[]>([]);
+  const [restrictionLoading, setRestrictionLoading] = useState(false);
+  const [watchAcknowledged, setWatchAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const onDrop = async (files: File[]) => {
     const f = files[0];
     const text = await f.text();
-    setPreview({ file: f.name, data: previewParticipantsCsv(text) });
+    const data = previewParticipantsCsv(text);
+    setPreview({ file: f.name, data });
+    setWatchAcknowledged(false);
+    setRestrictionLoading(true);
+    try { setRestrictionMatches(await findParticipantRestrictions(data.rows)); }
+    catch (error) { setRestrictionMatches([]); notifyError(error, 'Kısıtlama kontrolü yapılamadı'); }
+    finally { setRestrictionLoading(false); }
   };
 
   const doImport = async () => {
@@ -488,7 +500,7 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
     try {
       const r = await importParticipants(id, preview.file, preview.data);
       notifySuccess(`${r.added} yeni, ${r.updated} güncellenen, ${r.duplicates} tekrar, ${r.errors} hatalı satır.`, 'Aktarım tamamlandı');
-      setPreview(null);
+      setPreview(null); setRestrictionMatches([]); setWatchAcknowledged(false);
     } catch (err) {
       notifyError(err);
     } finally {
@@ -503,6 +515,8 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
     );
 
   const attended = participants.data.filter((p) => p.attended).length;
+  const blockedMatches = restrictionMatches.filter((item) => item.level === 'blocked');
+  const watchMatches = restrictionMatches.filter((item) => item.level === 'watch');
 
   return (
     <Stack>
@@ -554,6 +568,9 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
                 {preview.data.warnings.map((x) => <div key={x}>{x}</div>)}
               </Alert>
             )}
+            {restrictionLoading && <Text size="sm" c="dimmed">Dönemler arası etkinlik kısıtlamaları kontrol ediliyor…</Text>}
+            {blockedMatches.length > 0 && <Alert color="red" title="Aktarım engellendi">{blockedMatches.map((item) => <div key={item.id}>{item.name} · {item.email}</div>)}<Text size="xs" mt={6}>Bu kişiler dosyadan çıkarılmadan aktarım yapılamaz. Ayrıntılı gerekçe yalnız Üyeler › Etkinlik kısıtlamaları ekranındaki yetkili yöneticilerce görülür.</Text></Alert>}
+            {watchMatches.length > 0 && <Alert color="yellow" title="Yönetici dikkat kaydı">{watchMatches.map((item) => <div key={item.id}>{item.name} · {item.email}</div>)}<Checkbox mt="sm" label="Uyarıyı gördüm; katılım kaydını sorumluluğumda aktarıyorum." checked={watchAcknowledged} onChange={(event) => setWatchAcknowledged(event.currentTarget.checked)} /></Alert>}
             <Table fz="sm">
               <Table.Tbody>
                 {preview.data.rows.slice(0, 5).map((r) => (
@@ -567,10 +584,10 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
               </Table.Tbody>
             </Table>
             <Group justify="flex-end">
-              <Button variant="default" onClick={() => setPreview(null)}>
+              <Button variant="default" onClick={() => { setPreview(null); setRestrictionMatches([]); setWatchAcknowledged(false); }}>
                 Vazgeç
               </Button>
-              <Button onClick={doImport} loading={busy} disabled={!preview.data.rows.length}>
+              <Button onClick={doImport} loading={busy || restrictionLoading} disabled={!preview.data.rows.length || blockedMatches.length > 0 || (watchMatches.length > 0 && !watchAcknowledged)}>
                 {preview.data.rows.length} kaydı aktar
               </Button>
             </Group>
@@ -595,6 +612,7 @@ function Participants({ e, id }: { e: HubEvent; id: string }) {
                   <Table.Td>{p.email}</Table.Td>
                   <Table.Td>{p.attended ? <Badge color="green">Katıldı</Badge> : <Badge color="gray">Kayıtlı</Badge>}</Table.Td>
                   <Table.Td>{p.certificate}</Table.Td>
+                  {canRestrict && <Table.Td><Button component={Link} to={`/yonetim/etkinlik-kisitlamalari?ad=${encodeURIComponent(p.name)}&eposta=${encodeURIComponent(p.email)}&etkinlik=${encodeURIComponent(id)}`} size="xs" variant="subtle" color="orange">Kısıtlama ekle</Button></Table.Td>}
                 </Table.Tr>
               ))}
             </Table.Tbody>
