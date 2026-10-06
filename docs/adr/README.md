@@ -43,5 +43,6 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0035](0035-harici-puan-sisteminde-uyelik-yonetimi.md) | Harici puan sisteminin üyelik durumu Hub'dan yönetilir | Kabul Edildi | ✓ | WP-01, WP-04, WP-11 |
 | [0036](0036-onaylanan-etkinliklerin-takvim-gorunumu.md) | Onaylanan etkinlikler canlı takvim görünümüne otomatik yansır | Kabul Edildi | ✓ | WP-06, WP-11 |
 | [0037](0037-donemler-arasi-etkinlik-kisitlamalari.md) | Etkinlik kısıtlamaları dönemlerden bağımsız ve denetlenebilir tutulur | Kabul Edildi | ✓ | WP-04, WP-06, WP-11 |
+| [0038](0038-oda-rezervasyonu-dilim-belgeleriyle-cakismasiz.md) | Oda rezervasyonu yarım saatlik dilim belgeleriyle çakışmasız tutulur | Kabul Edildi | ✓ | WP-05, WP-11 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

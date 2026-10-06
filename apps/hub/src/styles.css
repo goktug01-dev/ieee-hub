@@ -63,3 +63,9 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Oda rezervasyonu takvimi: boş dilim üzerine gelince vurgulanır */
+.room-free-slot:hover,
+.room-free-slot:focus-visible {
+  background: var(--mantine-color-blue-light);
+}

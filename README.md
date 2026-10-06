@@ -11,6 +11,7 @@ IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portal
 - **Evrak numarası ve doğrulama:** Numaralar boşluksuz ve seri bazlıdır (`IEEEIKCU-2026-ETK-0007`). Belge Word olarak indirilebilir ya da tarayıcıdan PDF'e yazdırılabilir. Herkese açık `/dogrula/{kod}` sayfası belgenin gerçek olup olmadığını gösterir.
 - **Arayüzden düzenlenen organizasyon:** Komiteler ve birimler, roller ve yetkileri, dönemler, görev atamaları, **seçimler** (sonuçlar tek tıkla göreve işlenir), üye onayı, kurum ayarları ve denetim kaydı.
 - **Komite toplantıları:** Birimler gündem, katılım, görüşme, karar, sorumlu ve son tarihleri kaydeder; kesinleşen tutanak kilitlenir ve Word olarak indirilir.
+- **Oda rezervasyonu:** Komite başkanları kulüp odasını mülakat, toplantı ve benzeri işler için yarım saatlik dilimlerle ayırır; dolu saat ikinci kez alınamaz, takvimi herkes görür.
 - **Harici Firebase paneli:** TechOps, IEEE Puan gibi ayrı Firestore/Realtime Database yollarına uzak projedeki kendi hesabıyla bağlanır; servis hesabı veya ortak şifre Hub'da tutulmaz.
 - **Herkese açık tüzük:** Güncel PDF/Word tüzük `/tuzuk` adresinde girişsiz okunur ve indirilir; önceki sürümler değiştirilemez arşivde kalır.
 - **Demirbaş ve zimmet:** Fiziksel varlık, seri no, konum, kondisyon, zimmet, bakım/kayıp/hurda durumu, değiştirilemez hareket geçmişi, CSV ve QR etiketi.

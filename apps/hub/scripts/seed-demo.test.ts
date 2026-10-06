@@ -12,6 +12,7 @@ import { createAssignments } from '../src/lib/assignments';
 import { approveEventWithPetition, createTask, importParticipants, previewParticipantsCsv, proposeEvent, updateEvent } from '../src/lib/ops';
 import { createDraft, decidePetition, submitPetition } from '../src/lib/petitions';
 import { POLICIES, fillPlaceholders, publishPolicy } from '../src/lib/privacy';
+import { addDays, createBooking, roomNow, type Room } from '../src/lib/rooms';
 import { claimFounder, markSetupDone, seedOrganization } from '../src/lib/setup';
 import type { PetitionTemplate } from '../src/lib/types';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../src/lib/demo';
@@ -315,6 +316,18 @@ it('demo verisi', async () => {
     authorUid: uid.cs, authorName: name('cs'), roleId: 'birim-baskani', roleName: 'Başkan', unitId: 'cs', unitName: 'Computer Society', termId: term,
     sections: { ongoing: 'Yapay Zekâ Günü (EVT) planlamada; Arduino atölyesi YK onayında.', lessons: 'Salon rezervasyonunu en az 3 hafta önce yapın.' },
     status: 'draft', visibleTo: [`uid:${uid.cs}`, 'role:cs__birim-baskani'], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+
+  // Oda rezervasyonu: CS mülakat ve toplantı (komite başkanı), RAS atölye hazırlığı (kurucu yönetici)
+  const room = { id: 'kulup-odasi', ...((await getDoc(doc(db, 'rooms', 'kulup-odasi'))).data() as Room) };
+  const today = roomNow().date;
+  const cs = { room, unitId: 'cs', unitName: 'Computer Society', byName: name('cs') };
+  await createBooking({ ...cs, date: addDays(today, 1), startSlot: 26, endSlot: 32, kind: 'interview', title: 'Yeni dönem gönüllü mülakatları', note: 'Adaylar 20 dakika arayla çağrılacak.' });
+  await createBooking({ ...cs, date: addDays(today, 3), startSlot: 36, endSlot: 39, kind: 'meeting', title: 'Haftalık komite toplantısı', note: '' });
+  await as('baskan');
+  await createBooking({
+    room, unitId: 'ras', unitName: 'Robotics and Automation Society', byName: name('baskan'),
+    date: addDays(today, 1), startSlot: 20, endSlot: 24, kind: 'event', title: 'Arduino atölyesi hazırlığı', note: '',
   });
 
   await signOut(auth);

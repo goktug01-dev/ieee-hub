@@ -18,13 +18,13 @@ mkdirSync(OUT, { recursive: true });
 const ROUTES = {
   baskan: [
     '/', '/onaylar', '/gorevler', '/gorevler?sekme=pano', '/gorevler?sekme=projeler', '/dilekceler', '/dilekceler/yeni',
-    '/etkinlikler', '/toplantilar', '/iletisim', '/sponsorluk', '/demirbas', '/butceler', '/raporlar', '/organizasyon', '/tuzuk', '/gonulluluk', '/basvuru-yonetimi', '/devir', '/yardim', '/profil',
+    '/etkinlikler', '/toplantilar', '/oda-rezervasyonu', '/iletisim', '/sponsorluk', '/demirbas', '/butceler', '/raporlar', '/organizasyon', '/tuzuk', '/gonulluluk', '/basvuru-yonetimi', '/devir', '/yardim', '/profil',
     '/birimler/cs', '/sekreterlik-defteri',
     '/yonetim/uyeler', '/yonetim/atamalar', '/yonetim/secimler', '/yonetim/birimler', '/yonetim/roller', '/yonetim/donemler',
     '/yonetim/sablonlar', '/yonetim/sablonlar/etkinlik-izin', '/yonetim/envanter', '/yonetim/harici-firebase', '/yonetim/ayarlar', '/yonetim/denetim',
   ],
-  cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/basvuru-yonetimi', '/etkinlikler?birim=cs', '/toplantilar', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
-  uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/sponsorluk', '/iletisim'],
+  cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/basvuru-yonetimi', '/etkinlikler?birim=cs', '/toplantilar', '/oda-rezervasyonu', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
+  uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/oda-rezervasyonu', '/sponsorluk', '/iletisim'],
   gonullu: ['/', '/gorevler', '/gonulluluk', '/sponsorluk'],
   yeni: ['/'],
 };
@@ -134,6 +134,47 @@ try {
         problems.push({ account, route: '/etkinlikler', crashed: false, errors: ['Demo verisinde etkinlik detayı bulunamadı.'] });
       }
     }
+
+    if (account === 'cs') {
+      // Oda rezervasyonu: boş saati al, aynı saati ikinci kez almayı dene (uyarı), iptal et.
+      errors.length = 0;
+      const target = new Date(Date.now() + 3 * 3600e3 + 14 * 86400e3);
+      const dayLabel = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(target);
+      await page.goto(BASE + '/oda-rezervasyonu');
+      await page.getByRole('button', { name: 'Sonraki hafta' }).click();
+      await page.getByRole('button', { name: 'Sonraki hafta' }).click();
+      await page.getByRole('button', { name: `${dayLabel} 09:00 için rezervasyon yap` }).click();
+      await page.getByLabel('Başlık').fill('Duman testi mülakatı');
+      await page.getByRole('button', { name: 'Odayı ayır' }).click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 15000 });
+      await page.getByRole('cell', { name: /Duman testi mülakatı/ }).waitFor({ timeout: 15000 });
+      await page.screenshot({ path: OUT + 'cs_oda_rezervasyonu_kayitli.png', fullPage: false });
+      pages++;
+
+      await page.getByRole('button', { name: `${dayLabel} 10:00 için rezervasyon yap` }).click();
+      await page.getByRole('dialog').getByLabel('Başlangıç', { exact: true }).first().click();
+      await page.getByRole('option', { name: '09:30', exact: true }).click();
+      await page.getByText('Bu saatlerde oda dolu').waitFor({ timeout: 15000 });
+      if (!(await page.getByRole('button', { name: 'Odayı ayır' }).isDisabled())) {
+        problems.push({ account, route: '/oda-rezervasyonu (çakışma)', crashed: false, errors: ['Dolu saatte "Odayı ayır" düğmesi etkin kaldı.'] });
+      }
+      await page.screenshot({ path: OUT + 'cs_oda_rezervasyonu_cakisma.png', fullPage: false });
+      pages++;
+      await page.getByRole('button', { name: 'Vazgeç' }).click();
+
+      await page.getByRole('row', { name: /Duman testi mülakatı/ }).getByRole('button', { name: 'İptal et' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'İptal et' }).click();
+      await page.getByRole('cell', { name: /Duman testi mülakatı/ }).waitFor({ state: 'detached', timeout: 15000 });
+      if (errors.length) problems.push({ account, route: '/oda-rezervasyonu (rezervasyon)', crashed: false, errors: [...errors] });
+    }
+
+    if (account === 'uye') {
+      await page.goto(BASE + '/oda-rezervasyonu');
+      await page.getByText('Rezervasyonu yalnızca komite başkanları yapar.').waitFor({ timeout: 15000 });
+      if (await page.getByRole('button', { name: 'Rezervasyon yap', exact: true }).count()) {
+        problems.push({ account, route: '/oda-rezervasyonu', crashed: false, errors: ['Yetkisiz üyede "Rezervasyon yap" düğmesi görünüyor.'] });
+      }
+    }
     await ctx.close();
   }
 
@@ -145,7 +186,7 @@ try {
   await mp.screenshot({ path: OUT + 'mobile_login.png' });
   await mp.getByText(/^Can/).first().click();
   await mp.waitForTimeout(2500);
-  for (const r of ['/', '/gorevler', '/dilekceler/yeni']) {
+  for (const r of ['/', '/gorevler', '/dilekceler/yeni', '/oda-rezervasyonu']) {
     await mp.goto(BASE + r);
     await mp.waitForTimeout(2000);
     await mp.screenshot({ path: OUT + `mobile${r.replace(/\//g, '_')}.png` });

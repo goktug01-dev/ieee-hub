@@ -8,6 +8,7 @@ import { rebuildAccess } from './access';
 import { DEFAULT_BUILDER } from './docx';
 import { PERMISSIONS } from './permissions';
 import { DEFAULT_ORG_SETTINGS } from './petitions';
+import { DEFAULT_ROOM, roomDocData } from './rooms';
 import { createTemplate, publishTemplate, saveBuilderDraft, saveDraftContent } from './templates';
 import type { ApprovalStep, Role, TemplateContent, Unit } from './types';
 import { BRANCH } from './types';
@@ -111,7 +112,7 @@ export const DEFAULT_ROLES: Record<string, Role> = {
     name: 'Başkan',
     scope: 'unit',
     description: 'Komite / başkanlık başkanı. Birim dilekçelerinin ilk onay makamı, birimin görev ve etkinliklerini yönetir.',
-    permissions: ['unit.manage', 'unit.tasks.manage', 'unit.events.propose', 'unit.meetings.manage', 'unit.petitions.read'],
+    permissions: ['unit.manage', 'unit.tasks.manage', 'unit.events.propose', 'unit.meetings.manage', 'unit.room.reserve', 'unit.petitions.read'],
     active: true,
     order: 20,
   },
@@ -210,6 +211,7 @@ export async function seedOrganization(opts: SeedOptions, onProgress: (msg: stri
   for (const [id, role] of Object.entries(DEFAULT_ROLES)) batch.set(doc(db, 'roles', id), role);
   if (opts.includeSampleUnits) {
     for (const [id, unit] of Object.entries(SAMPLE_UNITS)) batch.set(doc(db, 'units', id), unit);
+    batch.set(doc(db, 'rooms', 'kulup-odasi'), { ...roomDocData(DEFAULT_ROOM), createdAt: serverTimestamp() });
   }
   batch.set(doc(db, 'terms', term.id), {
     name: term.name,
