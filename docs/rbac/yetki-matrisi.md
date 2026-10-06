@@ -111,6 +111,7 @@ Finansal kayıtların ana kaynağı Google Sheets ve Drive'dır (Bildirge §7). 
 | `vtools.package.manage` | vTools paketi hazırlama, durum güncelleme | vTools (B), GS (B) |
 | `secretary.ledger.manage` | Toplantı, karar, gelen-giden evrak ve takip defterini yönetme | GS (B), Başkan (B) |
 | `unit.meetings.manage` | Kendi biriminde toplantı ve tutanak oluşturma, taslağı kesinleştirme | B.Bşk. (U), B.Yrd. (U) |
+| `unit.room.reserve` | Birimi adına kulüp odası rezervasyonu yapma, birimin rezervasyonlarını iptal etme (takvimi her aktif üye görür) | B.Bşk. (U) |
 | `dataquality.read` | Veri kalitesi uyarıları | YK (B), B.Bşk. (U), SysAdm (B: yalnızca teknik uyarılar) |
 
 ## 9. E-Dilekçe

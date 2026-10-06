@@ -53,6 +53,7 @@ const MeetingDetailPage = lazy(() => import('./pages/meetings/MeetingDetailPage'
 const BoardsPage = lazy(() => import('./pages/boards/BoardsPage').then((m) => ({ default: m.BoardsPage })));
 const BoardVotePage = lazy(() => import('./pages/boards/BoardVotePage').then((m) => ({ default: m.BoardVotePage })));
 const ExternalFirebasePage = lazy(() => import('./pages/admin/ExternalFirebasePage').then((m) => ({ default: m.ExternalFirebasePage })));
+const RoomsPage = lazy(() => import('./pages/rooms/RoomsPage').then((m) => ({ default: m.RoomsPage })));
 const AssetsPage = lazy(() => import('./pages/assets/AssetsPage').then((m) => ({ default: m.AssetsPage })));
 
 function RequirePerm({ perm, children }: { perm: PermissionId; children: React.ReactElement }) {
@@ -128,6 +129,7 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="etkinlikler/:id" element={<EventDetailPage />} />
               <Route path="toplantilar" element={<MeetingsPage />} />
               <Route path="toplantilar/:id" element={<MeetingDetailPage />} />
+              <Route path="oda-rezervasyonu" element={<RoomsPage />} />
               <Route path="kurullar" element={<BoardsPage />} />
               <Route path="kurullar/oylama/:id" element={<BoardVotePage />} />
               <Route path="iletisim" element={<ContentPage />} />

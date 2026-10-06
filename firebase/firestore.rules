@@ -1439,6 +1439,78 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- Oda rezervasyonu (ADR-0038) ----------
+    // Çakışma belge kimliğiyle önlenir: her yarım saatlik dilim tek bir belgedir
+    // (roomSlots/{oda}_{tarih}_{dilim}). Dolu dilim yeniden oluşturulamaz ve güncellenemez;
+    // bir rezervasyonun dilimleri tek batch'te yazıldığı için biri doluysa hiçbiri yazılmaz.
+    // Tarih ve dilimler oda saatidir (Türkiye, UTC+3 sabit).
+
+    function roomSlotDay(d) {
+      return timestamp.date(int(d.date[0:4]), int(d.date[5:7]), int(d.date[8:10]));
+    }
+
+    // Dilim henüz bitmedi mi?
+    function roomSlotNotEnded(d) {
+      return roomSlotDay(d) + duration.value(d.slot * 30 + 30, 'm') > request.time + duration.value(3, 'h');
+    }
+
+    match /rooms/{id} {
+      function validRoom(d) {
+        return d.keys().hasOnly(['name', 'location', 'note', 'openSlot', 'closeSlot', 'maxDaysAhead', 'active', 'createdAt', 'updatedAt', 'updatedBy'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+          && d.location is string && d.location.size() <= 160
+          && d.note is string && d.note.size() <= 500
+          && d.openSlot is int && d.closeSlot is int
+          && d.openSlot >= 0 && d.closeSlot <= 48 && d.openSlot < d.closeSlot
+          && d.maxDaysAhead is int && d.maxDaysAhead >= 1 && d.maxDaysAhead <= 365
+          && d.active is bool
+          && d.updatedAt == request.time
+          && d.updatedBy == me();
+      }
+
+      allow read: if isActive();
+      allow create: if hasPerm('org.manage')
+        && validRoom(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if hasPerm('org.manage')
+        && validRoom(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      // Oda silinmez, pasife alınır; geçmiş rezervasyonlar sahipsiz kalmaz.
+      allow delete: if false;
+    }
+
+    match /roomSlots/{id} {
+      function s() { return request.resource.data; }
+      function room() { return get(docPath('rooms', s().roomId)).data; }
+
+      allow read: if isActive();
+      // Yalnızca ilgili birimde 'unit.room.reserve' izni olan (varsayılan: komite başkanı) rezervasyon yapar.
+      allow create: if hasUnitPerm(s().unitId, 'unit.room.reserve')
+        && s().keys().hasOnly(['roomId', 'date', 'slot', 'groupId', 'unitId', 'unitName', 'kind', 'title', 'note', 'byUid', 'byName', 'createdAt'])
+        && s().roomId is string && s().roomId.size() > 0
+        && s().date is string && s().date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && s().slot is int && s().slot >= 0 && s().slot < 48
+        && id == s().roomId + '_' + s().date + '_' + (s().slot < 10 ? '0' : '') + string(s().slot)
+        && room().active == true
+        && s().slot >= room().openSlot && s().slot < room().closeSlot
+        && roomSlotNotEnded(s())
+        && roomSlotDay(s()) < request.time + duration.value(room().maxDaysAhead, 'd')
+        && s().groupId is string && s().groupId.size() > 0 && s().groupId.size() <= 40
+        && s().unitId is string && s().unitName is string && s().unitName.size() <= 160
+        && s().kind in ['interview', 'meeting', 'event', 'other']
+        && s().title is string && s().title.size() > 0 && s().title.size() <= 120
+        && s().note is string && s().note.size() <= 500
+        && s().byUid == me()
+        && s().byName is string && s().byName.size() <= 160
+        && s().createdAt == request.time;
+      allow update: if false;
+      // İptal = dilimi boşaltmak. Bitmiş dilimler kullanım geçmişi olarak kalır; yalnız organizasyon yöneticisi siler.
+      allow delete: if hasPerm('org.manage')
+        || (isActive()
+            && roomSlotNotEnded(resource.data)
+            && (resource.data.byUid == me() || hasUnitPerm(resource.data.unitId, 'unit.room.reserve')));
+    }
+
     // ---------- Raporlar (WP-09) ----------
 
     match /reports/{id} {

@@ -31,7 +31,8 @@ export type PermissionId =
   | 'unit.manage'
   | 'unit.tasks.manage'
   | 'unit.events.propose'
-  | 'unit.meetings.manage';
+  | 'unit.meetings.manage'
+  | 'unit.room.reserve';
 
 export type PermissionGroup = 'Organizasyon' | 'Dilekçe' | 'Görev ve etkinlik' | 'İletişim' | 'Sponsorluk ve finans' | 'Raporlama ve denetim' | 'Birim içi';
 
@@ -77,6 +78,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'unit.tasks.manage', group: 'Birim içi', scope: 'unit', label: 'Birimde görev oluştur', description: 'Birimde görev ve proje oluşturur, atar, düzenler.' },
   { id: 'unit.events.propose', group: 'Birim içi', scope: 'unit', label: 'Etkinlik öner ve içerik talep et', description: 'Birim adına etkinlik önerir ve iletişim birimine içerik talebi açar.' },
   { id: 'unit.meetings.manage', group: 'Birim içi', scope: 'unit', label: 'Birim toplantılarını yönet', description: 'Birim adına toplantı, gündem, katılım, karar ve tutanak kaydı oluşturur.' },
+  { id: 'unit.room.reserve', group: 'Birim içi', scope: 'unit', label: 'Oda rezervasyonu yap', description: 'Birim adına kulüp odası için mülakat, toplantı ve benzeri kullanım saati ayırır; birimin rezervasyonlarını iptal eder.' },
   { id: 'unit.petitions.read', group: 'Birim içi', scope: 'unit', label: 'Birimin dilekçelerini gör', description: 'Birimin ve alt birimlerinin dilekçelerini görür.' },
 ];
 

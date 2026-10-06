@@ -153,6 +153,19 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'oda-takvimi',
+    audiences: ['member'],
+    title: 'Oda takvimi',
+    where: 'Operasyon › Oda rezervasyonu',
+    summary: 'Kulüp odasının hangi gün ve saatte kim tarafından kullanılacağını haftalık takvimde görürsünüz.',
+    steps: [
+      'Oda rezervasyonu sayfasını açın; haftalık takvimde dolu saatler renkli kutularla, geçmiş saatler soluk gösterilir.',
+      'Ok düğmeleriyle haftalar arasında gezin; “Bu hafta” ile bugüne dönün.',
+      'Bir kutuya tıklayarak rezervasyonun komitesini, başlığını ve kimin yaptığını görün.',
+    ],
+    tips: ['Rezervasyonu yalnızca komite başkanları yapar. Odaya ihtiyacınız varsa komite başkanınıza iletin.'],
+  },
+  {
     id: 'icerik-talebi',
     audiences: ['member', 'manager'],
     title: 'İçerik (tanıtım) talebi',
@@ -316,6 +329,25 @@ export const MANUAL: ManualSection[] = [
     tips: ['Kesinleşmemiş taslak “Taslağı sil” ile silinebilir; kesinleşen tutanak kalıcıdır.'],
   },
   {
+    id: 'oda-rezervasyonu',
+    audiences: ['manager'],
+    title: 'Kulüp odası rezervasyonu',
+    where: 'Operasyon › Oda rezervasyonu',
+    summary: 'Komiteniz adına mülakat, toplantı ve benzeri kullanımlar için odayı yarım saatlik dilimlerle ayırırsınız. Dolu bir saat ikinci kez alınamaz.',
+    steps: [
+      'Takvimde boş bir saate tıklayın ya da “Rezervasyon yap” düğmesini kullanın.',
+      'Komiteyi, tarihi, başlangıç ve bitiş saatini, kullanım türünü (Mülakat, Toplantı, Etkinlik / çalışma, Diğer) seçin ve başlık yazın.',
+      'Seçtiğiniz aralıkta oda doluysa “Bu saatlerde oda dolu” uyarısı çıkar; başka bir saat seçin. Uygunsa “Odayı ayır” deyin.',
+      'İptal için takvimdeki kutuya tıklayıp “Rezervasyonu iptal et” deyin ya da “Bu haftanın rezervasyonları” listesindeki “İptal et” bağlantısını kullanın.',
+    ],
+    tips: [
+      'Saati değiştirmek için rezervasyonu iptal edip yeniden alın; iptal edilen saatler hemen başkalarına açılır.',
+      'İki kişi aynı saati aynı anda almaya çalışırsa ilk kaydeden alır; diğeri “Bu aralık az önce doldu” uyarısı görür.',
+      'Başlamış bir rezervasyonu iptal ederseniz yalnızca kalan saatler boşalır; geçmiş kullanım kayıtta kalır.',
+      'Kullanmayacağınız rezervasyonu iptal edin ki oda başkalarına açılsın.',
+    ],
+  },
+  {
     id: 'butce',
     audiences: ['manager'],
     title: 'Bütçe özeti',
@@ -460,6 +492,20 @@ export const MANUAL: ManualSection[] = [
       'Sorumlusu olduğunuz firmalar için gelen iletişim taleplerini talepler sekmesinden yanıtlayın.',
     ],
     tips: ['Sonraki işlem tarihi geçmiş görüşmeler Raporlar › Aylık yönetim’de listelenir.'],
+  },
+  {
+    id: 'oda-yonetimi',
+    audiences: ['admin'],
+    title: 'Odalar ve rezervasyon yetkisi',
+    where: 'Operasyon › Oda rezervasyonu › Odalar · Yönetim › Roller ve yetkiler',
+    summary: 'Rezervasyona açılan odaları, kullanım saatlerini ve kimlerin rezervasyon yapabileceğini siz belirlersiniz.',
+    steps: [
+      'Oda rezervasyonu sayfasında “Odalar” düğmesine basın, “Oda ekle” ile oda adını, konumunu, açılış ve kapanış saatini ve en fazla kaç gün sonrasına rezervasyon yapılabileceğini girin.',
+      'Kullanılmayacak odada “Rezervasyona açık” seçeneğini kapatın; oda silinmez, geçmiş rezervasyonlar kayıtta kalır.',
+      'Roller ve yetkiler sayfasında “Oda rezervasyonu yap” yetkisini rezervasyon yapacak role verin. Yeni kurulumlarda bu yetki yalnızca komite başkanı rolündedir.',
+      'Gerekirse herhangi bir rezervasyonu takvimden açıp iptal edin.',
+    ],
+    tips: ['Bu yetki eklenmeden önce kurulmuş sistemlerde komite başkanı rolüne “Oda rezervasyonu yap” yetkisini bir kez elle işaretlemeniz gerekir.'],
   },
   {
     id: 'demirbas',
