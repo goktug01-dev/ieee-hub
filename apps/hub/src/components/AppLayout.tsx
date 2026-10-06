@@ -31,6 +31,7 @@ import {
   IconSettings,
   IconShieldLock,
   IconSitemap,
+  IconGavel,
   IconSun,
   IconTemplate,
   IconUserCircle,
@@ -48,6 +49,12 @@ import {
   IconServer,
   IconLifebuoy,
   IconNotebook,
+  IconUsersGroup,
+  IconDatabaseCog,
+  IconBook2,
+  IconPackage,
+  IconBan,
+  IconBriefcase2,
 } from '@tabler/icons-react';
 import { Suspense, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
@@ -104,8 +111,10 @@ export function AppLayout() {
       label: 'Operasyon',
       items: [
         { to: '/etkinlikler', label: 'Etkinlikler', icon: <IconCalendarStar size={18} /> },
+        { to: '/toplantilar', label: 'Toplantılar', icon: <IconUsersGroup size={18} /> },
         { to: '/iletisim', label: 'İletişim', icon: <IconSpeakerphone size={18} /> },
         { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
+        ...(can('inventory.manage') || can('finance.read') || can('finance.manage') || can('secretary.ledger.manage') || can('work.manageAll') ? [{ to: '/demirbas', label: 'Demirbaş ve zimmet', icon: <IconPackage size={18} /> }] : []),
         ...(can('finance.read') || can('finance.manage') || unitManager ? [{ to: '/butceler', label: 'Bütçeler', icon: <IconCoin size={18} /> }] : []),
         ...(can('reports.read') || can('reports.approve') ? [{ to: '/raporlar', label: 'Raporlar', icon: <IconChartBar size={18} /> }] : []),
         ...(can('secretary.ledger.manage') ? [{ to: '/sekreterlik-defteri', label: 'Sekreterlik defteri', icon: <IconNotebook size={18} /> }] : []),
@@ -115,7 +124,11 @@ export function AppLayout() {
       label: 'Organizasyon',
       items: [
         { to: '/organizasyon', label: 'Organizasyon şeması', icon: <IconSitemap size={18} /> },
+        { to: '/kurullar', label: 'Kurullar ve karar defteri', icon: <IconGavel size={18} /> },
+        { to: '/tuzuk', label: 'Tüzük', icon: <IconBook2 size={18} /> },
+        { to: '/kariyer', label: 'Açık başvurular', icon: <IconBriefcase2 size={18} /> },
         { to: '/gonulluluk', label: 'Gönüllülük', icon: <IconHeartHandshake size={18} /> },
+        ...(unitManager || can('assignments.manage') ? [{ to: '/basvuru-yonetimi', label: 'Başvuru yönetimi', icon: <IconUsersGroup size={18} /> }] : []),
         { to: '/devir', label: 'Devir paketleri', icon: <IconArrowsExchange size={18} /> },
       ],
     },
@@ -124,6 +137,7 @@ export function AppLayout() {
       items: (
         [
           { to: '/yonetim/uyeler', label: 'Üyeler', icon: <IconUsers size={18} />, perm: 'members.manage' },
+          { to: '/yonetim/etkinlik-kisitlamalari', label: 'Etkinlik kısıtlamaları', icon: <IconBan size={18} />, perm: 'members.manage' },
           { to: '/yonetim/atamalar', label: 'Görev atamaları', icon: <IconUserShield size={18} />, perm: 'assignments.manage' },
           { to: '/yonetim/secimler', label: 'Seçimler', icon: <IconBallpen size={18} />, perm: 'elections.manage' },
           { to: '/yonetim/birimler', label: 'Komiteler ve birimler', icon: <IconBuildingCommunity size={18} />, perm: 'org.manage' },
@@ -131,6 +145,7 @@ export function AppLayout() {
           { to: '/yonetim/donemler', label: 'Dönemler', icon: <IconCalendarEvent size={18} />, perm: 'org.manage' },
           { to: '/yonetim/sablonlar', label: 'Dilekçe şablonları', icon: <IconTemplate size={18} />, perm: 'templates.manage' },
           { to: '/yonetim/envanter', label: 'Envanter', icon: <IconServer size={18} />, perm: 'inventory.manage' },
+          { to: '/yonetim/harici-firebase', label: 'Harici Firebase', icon: <IconDatabaseCog size={18} />, perm: 'external.firebase.manage' },
           { to: '/yonetim/ayarlar', label: 'Kurum ayarları', icon: <IconSettings size={18} />, perm: 'org.manage' },
           { to: '/yonetim/denetim', label: 'Denetim kaydı', icon: <IconHistory size={18} />, perm: 'audit.read' },
         ] as NavItem[]

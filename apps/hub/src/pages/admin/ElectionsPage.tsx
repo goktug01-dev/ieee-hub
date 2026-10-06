@@ -15,8 +15,11 @@ import type { Election, ElectionStatus } from '../../lib/types';
 
 export const ELECTION_STATUS: Record<ElectionStatus, { label: string; color: string }> = {
   draft: { label: 'Hazırlanıyor', color: 'gray' },
+  nominations: { label: 'Adaylık süreci', color: 'cyan' },
+  voting: { label: 'Oylama / sayım', color: 'orange' },
   completed: { label: 'Sonuçlandı', color: 'blue' },
   applied: { label: 'Görevlere işlendi', color: 'green' },
+  cancelled: { label: 'İptal edildi', color: 'red' },
 };
 
 export function ElectionsPage() {
@@ -38,9 +41,17 @@ export function ElectionsPage() {
         date: dateStringToTs(form.date),
         description: form.description,
         status: 'draft',
+        electionType: 'general_assembly',
+        votingMethod: 'secret_ballot',
         positions: [],
         eligibleVoters: null,
         totalVotes: null,
+        quorumRequired: null,
+        minutesUrl: '',
+        decisionNo: '',
+        electionChair: '',
+        electionClerk: '',
+        resultNote: '',
         createdBy: user!.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

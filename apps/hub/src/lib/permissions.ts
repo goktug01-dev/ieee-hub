@@ -25,11 +25,13 @@ export type PermissionId =
   | 'secretary.ledger.manage'
   | 'inventory.manage'
   | 'handover.manage'
+  | 'external.firebase.manage'
   // Birim kapsamlı
   | 'unit.petitions.read'
   | 'unit.manage'
   | 'unit.tasks.manage'
-  | 'unit.events.propose';
+  | 'unit.events.propose'
+  | 'unit.meetings.manage';
 
 export type PermissionGroup = 'Organizasyon' | 'Dilekçe' | 'Görev ve etkinlik' | 'İletişim' | 'Sponsorluk ve finans' | 'Raporlama ve denetim' | 'Birim içi';
 
@@ -69,10 +71,12 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'secretary.ledger.manage', group: 'Raporlama ve denetim', scope: 'branch', label: 'Sekreterlik defterini yönet', description: 'Toplantı tutanağı, karar, gelen-giden evrak ve takip notlarını kaydeder.' },
   { id: 'audit.read', group: 'Raporlama ve denetim', scope: 'branch', label: 'Denetim kaydını gör', description: 'Sistemde yapılan tüm yönetim işlemlerinin kaydını görür.' },
   { id: 'inventory.manage', group: 'Raporlama ve denetim', scope: 'branch', label: 'Sistem envanterini yönet', description: 'Sistem, erişim, kişisel veri ve risk envanterini yönetir; sorun bildirimlerini görür.' },
+  { id: 'external.firebase.manage', group: 'Raporlama ve denetim', scope: 'branch', critical: true, label: 'Harici Firebase sistemlerini yönet', description: 'Puan sistemi gibi ayrı Firebase projelerine kendi hesabıyla bağlanır ve izin verilen veri yollarını yönetir.' },
 
   { id: 'unit.manage', group: 'Birim içi', scope: 'unit', label: 'Birimi yönet', description: 'Birimde görev, proje ve etkinlikleri yönetir; gönüllü başvurularını karara bağlar; içerik taleplerini onaylar.' },
   { id: 'unit.tasks.manage', group: 'Birim içi', scope: 'unit', label: 'Birimde görev oluştur', description: 'Birimde görev ve proje oluşturur, atar, düzenler.' },
   { id: 'unit.events.propose', group: 'Birim içi', scope: 'unit', label: 'Etkinlik öner ve içerik talep et', description: 'Birim adına etkinlik önerir ve iletişim birimine içerik talebi açar.' },
+  { id: 'unit.meetings.manage', group: 'Birim içi', scope: 'unit', label: 'Birim toplantılarını yönet', description: 'Birim adına toplantı, gündem, katılım, karar ve tutanak kaydı oluşturur.' },
   { id: 'unit.petitions.read', group: 'Birim içi', scope: 'unit', label: 'Birimin dilekçelerini gör', description: 'Birimin ve alt birimlerinin dilekçelerini görür.' },
 ];
 

@@ -11,6 +11,7 @@ import { auth, db } from '../src/firebase';
 import { createAssignments } from '../src/lib/assignments';
 import { approveEventWithPetition, createTask, importParticipants, previewParticipantsCsv, proposeEvent, updateEvent } from '../src/lib/ops';
 import { createDraft, decidePetition, submitPetition } from '../src/lib/petitions';
+import { POLICIES, fillPlaceholders, publishPolicy } from '../src/lib/privacy';
 import { claimFounder, markSetupDone, seedOrganization } from '../src/lib/setup';
 import type { PetitionTemplate } from '../src/lib/types';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../src/lib/demo';
@@ -63,6 +64,15 @@ it('demo verisi', async () => {
     () => undefined,
   );
   await markSetupDone();
+
+  // Politika metinleri: taslaklar, yer tutucular demo değerleriyle doldurularak yayımlanır.
+  for (const policy of POLICIES) {
+    await publishPolicy(policy.kind, {
+      title: `${policy.defaultTitle} (DEMO)`,
+      versionLabel: 'demo-v1',
+      body: fillPlaceholders(policy.template, '(demo değeri)'),
+    });
+  }
 
   // Üye onayı (biri onay bekler durumda kalır)
   for (const a of DEMO_ACCOUNTS) {

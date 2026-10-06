@@ -10,6 +10,7 @@ import { fmtDateTime } from '../lib/format';
 import { useCollection } from '../lib/hooks';
 import type { Handover } from '../lib/opsTypes';
 import type { Assignment, WithId } from '../lib/types';
+import { printArea } from '../lib/print';
 
 /** Bildirge §18 devir paketi başlıkları. */
 export const HANDOVER_SECTIONS: { key: string; label: string; hint: string }[] = [
@@ -127,7 +128,7 @@ function HandoverCard({ h, editable, reviewable }: { h: WithId<Handover>; editab
         </div>
         <Group gap="xs">
           <Badge color={STATUS[h.status].color}>{STATUS[h.status].label}</Badge>
-          <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} onClick={() => window.print()}>
+          <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} onClick={() => printArea()}>
             Yazdır
           </Button>
         </Group>

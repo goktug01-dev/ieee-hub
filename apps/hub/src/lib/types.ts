@@ -79,7 +79,7 @@ export interface Assignment {
   startsAt: Timestamp;
   endsAt: Timestamp | null;
   status: 'active' | 'ended';
-  source: 'manual' | 'election';
+  source: 'manual' | 'election' | 'volunteer';
   electionId?: string | null;
   note?: string;
   createdBy: string;
@@ -100,9 +100,14 @@ export interface ElectionPosition {
   unitId: string;
   candidates: ElectionCandidate[];
   winnerUid: string | null;
+  blankVotes?: number;
+  invalidVotes?: number;
+  tieBreakNote?: string;
 }
 
-export type ElectionStatus = 'draft' | 'completed' | 'applied';
+export type ElectionStatus = 'draft' | 'nominations' | 'voting' | 'completed' | 'applied' | 'cancelled';
+export type ElectionType = 'general_assembly' | 'board' | 'unit' | 'by_election';
+export type VotingMethod = 'secret_ballot' | 'open_vote' | 'appointment';
 
 export interface Election {
   title: string;
@@ -110,9 +115,17 @@ export interface Election {
   date: Timestamp | null;
   description?: string;
   status: ElectionStatus;
+  electionType?: ElectionType;
+  votingMethod?: VotingMethod;
   positions: ElectionPosition[];
   eligibleVoters?: number | null;
   totalVotes?: number | null;
+  quorumRequired?: number | null;
+  minutesUrl?: string;
+  decisionNo?: string;
+  electionChair?: string;
+  electionClerk?: string;
+  resultNote?: string;
   createdBy: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -121,7 +134,7 @@ export interface Election {
 
 // ---------- Dilekçe şablonları ----------
 
-export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'email' | 'phone';
+export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'email' | 'phone' | 'checkbox';
 
 export interface TemplateField {
   key: string;
@@ -135,12 +148,18 @@ export interface TemplateField {
 }
 
 export type StepUnitMode = 'petition' | 'branch' | 'fixed';
+export type ApprovalMode = 'any' | 'all' | 'quorum';
 
 export interface ApprovalStep {
   name: string;
   roleIds: string[];
   unitMode: StepUnitMode;
   unitId: string | null;
+  /** any: rollerden biri; all: her makam; quorum: requiredApprovals kadar farklı makam. */
+  approvalMode?: ApprovalMode;
+  requiredApprovals?: number | null;
+  /** Bu adımdaki yetkilinin karar verirken dolduracağı Word alanları. */
+  responseFieldKeys?: string[];
 }
 
 export interface BuilderSpec {
@@ -237,6 +256,10 @@ export interface Petition {
   verificationCode?: string;
   revision?: number;
   approvals?: ApprovalRecord[];
+  /** Başvuru sahibinden ayrı tutulan, yalnız yetkili makamların doldurduğu belge alanları. */
+  approvalData?: Record<string, string>;
+  /** Yalnızca etkin adımda onay vermiş farklı makamlar; adım ilerleyince sıfırlanır. */
+  stepApprovalRoleIds?: string[];
   notes?: PetitionNote[];
   submittedAt?: Timestamp;
   completedAt?: Timestamp;
@@ -262,6 +285,40 @@ export interface PublicSettings {
   orgShortName: string;
   logoDataUrl?: string | null;
   loginNote?: string;
+  /** Kariyer başvurularında gösterilen, yürürlükteki KVKK aydınlatma metni (privacyNotices/{id}). */
+  recruitmentPrivacyNoticeId?: string;
+  /** Hub üyeleri için yürürlükteki KVKK aydınlatma metni. */
+  memberPrivacyNoticeId?: string;
+  /** Yürürlükteki çerez ve yerel depolama politikası. */
+  cookiePolicyId?: string;
+  /** Yürürlükteki kullanım koşulları. */
+  termsId?: string;
+}
+
+export type PolicyKind = 'recruitment' | 'members' | 'cookies' | 'terms';
+
+/** Herkese açık, değiştirilemez politika sürümü (KVKK aydınlatma, çerez, kullanım koşulları). */
+export interface PrivacyNotice {
+  kind: PolicyKind;
+  title: string;
+  versionLabel: string;
+  body: string;
+  publishedAt: Timestamp;
+}
+
+/** Herkese açık, değiştirilemez bir tüzük sürümünün üstverisi. */
+export interface StatuteVersion {
+  versionId: string;
+  title: string;
+  versionLabel: string;
+  summary: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  sha256: string;
+  chunkCount: number;
+  publishedAt: Timestamp;
+  publishedByName: string;
 }
 
 export interface OrgSettings {

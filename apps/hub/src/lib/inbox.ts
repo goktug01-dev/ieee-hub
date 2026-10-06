@@ -12,7 +12,8 @@ export function eligibleRoles(p: Petition, access: Access | null, uid: string | 
   const step = p.steps[p.currentStep ?? 0];
   if (!step) return [];
   const unit = stepUnitId(step, p.unitId);
-  return step.roleIds.filter((r) => hasRoleKey(access, `${unit}__${r}`));
+  const approvedRoles = p.stepApprovalRoleIds ?? [];
+  return step.roleIds.filter((r) => !approvedRoles.includes(r) && hasRoleKey(access, `${unit}__${r}`));
 }
 
 /** Kullanıcının görebildiği süreçteki dilekçeler ve bunlardan onayını bekleyenler. */

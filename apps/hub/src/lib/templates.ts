@@ -13,7 +13,7 @@ import {
 import { auth, db } from '../firebase';
 import { auditInBatch, logAudit } from './audit';
 import { buildDocxFromSpec, inspectDocx, mergeFields, writeChunks } from './docx';
-import type { ApprovalStep, BuilderSpec, PetitionTemplate, TemplateContent } from './types';
+import type { ApprovalStep, BuilderSpec, PetitionTemplate, TemplateContent, TemplateField } from './types';
 
 export interface TemplateMeta {
   name: string;
@@ -79,19 +79,33 @@ export async function saveDraftContent(id: string, content: TemplateContent) {
   await updateDoc(doc(db, 'petitionTemplates', id), { draft: content, updatedAt: serverTimestamp() });
 }
 
-export function validateSteps(steps: ApprovalStep[]): string[] {
+export function validateSteps(steps: ApprovalStep[], fields: TemplateField[] = []): string[] {
   const errors: string[] = [];
+  const fieldKeys = new Set(fields.map((field) => field.key));
+  const assignedFields = new Set<string>();
   if (!steps.length) errors.push('En az bir onay adımı tanımlayın.');
   steps.forEach((s, i) => {
     if (!s.name.trim()) errors.push(`${i + 1}. adımın adı boş.`);
     if (!s.roleIds.length) errors.push(`${i + 1}. adımda en az bir rol seçin.`);
     if (s.unitMode === 'fixed' && !s.unitId) errors.push(`${i + 1}. adım için birim seçin.`);
+    if (s.approvalMode === 'all' && s.roleIds.length < 2) errors.push(`${i + 1}. oybirliği adımında en az iki makam seçin.`);
+    if (
+      s.approvalMode === 'quorum' &&
+      (!Number.isInteger(s.requiredApprovals) || (s.requiredApprovals ?? 0) < 1 || (s.requiredApprovals ?? 0) > s.roleIds.length)
+    ) {
+      errors.push(`${i + 1}. adımın gerekli onay sayısı 1 ile seçilen makam sayısı arasında olmalı.`);
+    }
+    for (const key of s.responseFieldKeys ?? []) {
+      if (fields.length && !fieldKeys.has(key)) errors.push(`${i + 1}. adımda belgede bulunmayan {${key}} alanı seçilmiş.`);
+      if (assignedFields.has(key)) errors.push(`{${key}} alanı birden fazla onay adımına bağlanamaz.`);
+      assignedFields.add(key);
+    }
   });
   return errors;
 }
 
 export function validateTemplateContent(content: TemplateContent): string[] {
-  const errors = validateSteps(content.steps);
+  const errors = validateSteps(content.steps, content.fields);
   if (!content.fields.length) {
     errors.unshift('Word belgesinde doldurulabilir alan etiketi yok. Belgeye {alan_adi} biçiminde en az bir etiket ekleyin.');
   }

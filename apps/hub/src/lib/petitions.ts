@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { reauthenticateWithPopup, GoogleAuthProvider, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { readChunks, renderDocx } from './docx';
+import { appendVerificationStamp, readChunks, renderDocx } from './docx';
 import { DECISION_LABEL, STATUS_META, fmtDate, fmtDateTime, maskName } from './format';
 import type {
   ApprovalRecord,
@@ -30,9 +30,11 @@ import type {
 import { BRANCH } from './types';
 import {
   DEFAULT_ORG_SETTINGS,
+  approvalFieldKeys,
   computeVisibleTo,
   formatDocumentNo,
   newVerificationCode,
+  stepRequiredApprovals,
   stepUnitId,
   verifyUrl,
 } from './workflow';
@@ -42,6 +44,7 @@ export {
   computeVisibleTo,
   formatDocumentNo,
   newVerificationCode,
+  stepRequiredApprovals,
   stepUnitId,
   verifyUrl,
 } from './workflow';
@@ -150,6 +153,8 @@ export async function submitPetition(petitionId: string, data: Record<string, st
       verificationCode: code,
       revision: 1,
       approvals: [],
+      approvalData: {},
+      stepApprovalRoleIds: [],
       notes: [],
       visibleTo: computeVisibleTo(p.ownerUid, p.unitId, v.steps),
     };
@@ -166,6 +171,8 @@ export async function submitPetition(petitionId: string, data: Record<string, st
       verificationCode: code,
       revision: 1,
       approvals: [],
+      approvalData: {},
+      stepApprovalRoleIds: [],
       notes: [],
       visibleTo: next.visibleTo,
       submittedAt: serverTimestamp(),
@@ -185,13 +192,15 @@ export async function resubmitPetition(petitionId: string, data: Record<string, 
     const p = pSnap.data() as Petition;
     if (p.status !== 'returned') throw new Error('Yalnızca iade edilen dilekçeler yeniden gönderilebilir.');
     const vRef = doc(db, 'petitionVerifications', p.verificationCode!);
-    const next: Petition = { ...p, data, title, status: 'pending', currentStep: 0, revision: (p.revision ?? 1) + 1 };
+    const next: Petition = { ...p, data, title, status: 'pending', currentStep: 0, revision: (p.revision ?? 1) + 1, approvalData: {}, stepApprovalRoleIds: [] };
     tx.update(pRef, {
       data,
       title,
       status: 'pending',
       currentStep: 0,
       revision: next.revision,
+      approvalData: {},
+      stepApprovalRoleIds: [],
       visibleTo: p.visibleTo,
       submittedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -254,6 +263,7 @@ export interface DecisionInput {
   roleName: string;
   unitName: string;
   comment: string;
+  responseData?: Record<string, string>;
 }
 
 export async function decidePetition(input: DecisionInput) {
@@ -267,6 +277,8 @@ export async function decidePetition(input: DecisionInput) {
     const unitId = stepUnitId(step, p.unitId);
     const approvals = p.approvals ?? [];
     const notes = p.notes ?? [];
+    const approvedRoles = p.stepApprovalRoleIds ?? [];
+    if (approvedRoles.includes(input.roleId)) throw new Error('Bu makam bu adım için zaten onay verdi.');
 
     const record: ApprovalRecord = {
       step: stepIdx,
@@ -284,18 +296,28 @@ export async function decidePetition(input: DecisionInput) {
     const newApprovals = [...approvals, record];
     const comment = input.comment.trim();
     const newNotes = comment ? [...notes, { approvalIndex: approvals.length, text: comment }] : notes;
+    const responseData = Object.fromEntries(
+      Object.entries(input.responseData ?? {}).filter(([key, value]) => (step.responseFieldKeys ?? []).includes(key) && value.trim()),
+    );
 
     const isLast = stepIdx === p.steps!.length - 1;
+    const nextApprovedRoles = [...approvedRoles, input.roleId];
+    const stepComplete = nextApprovedRoles.length >= stepRequiredApprovals(step);
     const patch: Record<string, unknown> = {
       approvals: newApprovals,
       notes: newNotes,
       updatedAt: serverTimestamp(),
     };
+    if (Object.keys(responseData).length) patch.approvalData = { ...(p.approvalData ?? {}), ...responseData };
     let status: Petition['status'] = 'pending';
-    if (input.decision === 'approve' && !isLast) {
+    if (input.decision === 'approve' && !stepComplete) {
+      patch.stepApprovalRoleIds = nextApprovedRoles;
+    } else if (input.decision === 'approve' && !isLast) {
       patch.currentStep = stepIdx + 1;
+      patch.stepApprovalRoleIds = [];
     } else if (input.decision === 'approve') {
       status = 'approved';
+      patch.stepApprovalRoleIds = nextApprovedRoles;
       patch.completedAt = serverTimestamp();
     } else if (input.decision === 'reject') {
       status = 'rejected';
@@ -322,7 +344,9 @@ export function templateData(
   p: Petition,
   opts: { orgName: string; settings: OrgSettings | null; data?: Record<string, string> },
 ): Record<string, unknown> {
-  const data = opts.data ?? p.data;
+  const data = { ...(opts.data ?? p.data) };
+  for (const key of approvalFieldKeys(p.steps ?? [])) data[key] = '';
+  Object.assign(data, p.approvalData ?? {});
   const approvals = (p.approvals ?? []).filter((a) => a.revision === (p.revision ?? 1));
   const perStep: Record<string, string> = {};
   approvals.forEach((a) => {
@@ -369,7 +393,15 @@ export async function renderPetitionDocx(
   opts: { orgName: string; settings: OrgSettings | null; data?: Record<string, string> },
 ): Promise<Blob> {
   const buf = await loadVersionFile(p.templateId, p.templateVersion);
-  return renderDocx(buf, templateData(p, opts));
+  const rendered = renderDocx(buf, templateData(p, opts));
+  if (!p.verificationCode) return rendered;
+  return appendVerificationStamp(rendered, {
+    url: verifyUrl(opts.settings, p.verificationCode),
+    code: p.verificationCode,
+    documentNo: p.documentNo ?? 'TASLAK',
+    status: STATUS_META[p.status].label,
+    approved: p.status === 'approved',
+  });
 }
 
 export function petitionFileName(p: Petition): string {

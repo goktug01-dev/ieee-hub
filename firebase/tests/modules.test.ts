@@ -11,6 +11,8 @@ import {
   arrayUnion,
   collection,
   doc,
+  deleteDoc,
+  deleteField,
   getDoc,
   getDocs,
   query,
@@ -18,6 +20,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
@@ -33,10 +36,15 @@ const baseAccess = (uid: string) => ({ superAdmin: false, perms: {}, roleKeys: {
 async function seed() {
   await env.withSecurityRulesDisabled(async (c) => {
     const db = c.firestore() as unknown as Firestore;
-    for (const u of ['chair', 'csVol', 'rasVol', 'stranger', 'gs', 'sponsorMgr', 'sayman', 'comms', 'newbie', 'coord']) {
+    for (const u of ['chair', 'csVol', 'rasVol', 'stranger', 'gs', 'sponsorMgr', 'sayman', 'comms', 'newbie', 'coord', 'techops', 'orgAdmin']) {
       await setDoc(doc(db, 'members', u), { uid: u, status: 'active', displayName: u, createdAt: Timestamp.now() });
     }
     await setDoc(doc(db, 'settings', 'org'), { volunteerRoleId: 'gonullu' });
+    await setDoc(doc(db, 'privacyNotices', 'n1'), {
+      kind: 'recruitment', title: 'KVKK', versionLabel: 'v1', body: 'x'.repeat(300), publishedAt: Timestamp.now(),
+    });
+    await setDoc(doc(db, 'settings', 'public'), { orgName: 'IEEE', orgShortName: 'IEEE', recruitmentPrivacyNoticeId: 'n1' });
+    await setDoc(doc(db, 'access', 'orgAdmin'), { ...baseAccess('orgAdmin'), perms: { 'org.manage': FAR } });
     await setDoc(doc(db, 'access', 'chair'), {
       ...baseAccess('chair'),
       roleKeys: { 'cs__birim-baskani': FAR },
@@ -46,7 +54,7 @@ async function seed() {
     });
     await setDoc(doc(db, 'access', 'coord'), {
       ...baseAccess('coord'),
-      unitPerms: { 'cs__unit.tasks.manage': FAR, 'cs__unit.events.propose': FAR },
+      unitPerms: { 'cs__unit.tasks.manage': FAR, 'cs__unit.events.propose': FAR, 'cs__unit.meetings.manage': FAR },
       memberOf: { cs: FAR },
     });
     await setDoc(doc(db, 'access', 'csVol'), { ...baseAccess('csVol'), memberOf: { cs: FAR } });
@@ -54,13 +62,14 @@ async function seed() {
     await setDoc(doc(db, 'access', 'stranger'), baseAccess('stranger'));
     await setDoc(doc(db, 'access', 'gs'), {
       ...baseAccess('gs'),
-      perms: { 'work.manageAll': FAR, 'events.approve': FAR, 'events.manageAll': FAR },
+      perms: { 'work.manageAll': FAR, 'events.approve': FAR, 'events.manageAll': FAR, 'members.manage': FAR },
       roleKeys: { 'branch__genel-sekreter': FAR },
       tokens: ['uid:gs', 'role:branch__genel-sekreter'],
     });
     await setDoc(doc(db, 'access', 'sponsorMgr'), { ...baseAccess('sponsorMgr'), perms: { 'sponsors.manage': FAR } });
     await setDoc(doc(db, 'access', 'sayman'), { ...baseAccess('sayman'), perms: { 'finance.read': FAR, 'finance.manage': FAR } });
     await setDoc(doc(db, 'access', 'comms'), { ...baseAccess('comms'), perms: { 'content.manage': FAR } });
+    await setDoc(doc(db, 'access', 'techops'), { ...baseAccess('techops'), perms: { 'external.firebase.manage': FAR } });
 
     await setDoc(doc(db, 'tasks', 't1'), {
       code: 'CS-0001', title: 'Afiş', unitId: 'cs', assigneeUid: 'csVol', supporterUids: [], status: 'todo',
@@ -108,6 +117,113 @@ describe('sekreterlik defteri', () => {
     await assertSucceeds(setDoc(doc(ctx('gs'), 'secretaryLedger', 'l1'), entry));
     await assertFails(setDoc(doc(ctx('stranger'), 'secretaryLedger', 'l2'), { ...entry, createdBy: 'stranger' }));
     await assertFails(getDoc(doc(ctx('stranger'), 'secretaryLedger', 'l1')));
+  });
+});
+
+describe('birim toplantıları', () => {
+  const meeting = (over: Record<string, unknown> = {}) => ({
+    unitId: 'cs', unitName: 'Computer Society', title: 'Aylık toplantı', meetingNo: 'CS-2026-04',
+    date: '2026-09-27', startTime: '19:00', endTime: '20:00', location: 'B-201',
+    chairName: 'Başkan', recorderName: 'Sekreter', attendeeUids: ['csVol'], attendeeNames: ['csVol'],
+    guestAttendees: '', agenda: [], decisions: [], generalNotes: '', nextMeetingDate: null,
+    status: 'draft', createdBy: 'coord', createdByName: 'coord', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    ...over,
+  });
+
+  it('birim toplantı yetkilisi oluşturur; aynı birimin üyesi okur, başka birim okuyamaz', async () => {
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'meetings', 'm1'), meeting()));
+    await assertSucceeds(getDocs(query(collection(ctx('csVol'), 'meetings'), where('unitId', '==', 'cs'))));
+    await assertFails(getDoc(doc(ctx('rasVol'), 'meetings', 'm1')));
+    await assertFails(setDoc(doc(ctx('csVol'), 'meetings', 'm2'), meeting({ createdBy: 'csVol' })));
+  });
+
+  it('kesinleşen tutanak değiştirilmez ve silinmez', async () => {
+    await setDoc(doc(ctx('coord'), 'meetings', 'm1'), meeting());
+    await assertSucceeds(updateDoc(doc(ctx('coord'), 'meetings', 'm1'), {
+      status: 'final', finalizedBy: 'coord', finalizedByName: 'coord', finalizedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(ctx('coord'), 'meetings', 'm1'), { title: 'Sonradan değişti', updatedAt: serverTimestamp() }));
+  });
+});
+
+describe('harici Firebase bağlantı ayarı', () => {
+  it('yalnız özel TechOps izni olan kullanıcı okuyup yazar', async () => {
+    const config = { apiKey: 'public-web-key', authDomain: 'x.firebaseapp.com', projectId: 'x', appId: '1:x:web:y', databaseURL: '', resources: [], updatedBy: 'techops', updatedAt: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(ctx('techops'), 'externalIntegrations', 'firebase'), config));
+    await assertSucceeds(getDoc(doc(ctx('techops'), 'externalIntegrations', 'firebase')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'externalIntegrations', 'firebase')));
+    await assertFails(setDoc(doc(ctx('stranger'), 'externalIntegrations', 'firebase'), { ...config, updatedBy: 'stranger' }));
+  });
+});
+
+describe('herkese açık tüzük', () => {
+  const metadata = (versionId: string) => ({
+    versionId,
+    title: 'IEEE İKÇÜ Öğrenci Kolu Tüzüğü',
+    versionLabel: '2026 Rev. 1',
+    summary: 'Genel kurulda kabul edildi.',
+    fileName: 'tuzuk.pdf',
+    mimeType: 'application/pdf',
+    size: 8,
+    sha256: 'a'.repeat(64),
+    chunkCount: 1,
+    publishedAt: serverTimestamp(),
+    publishedByName: 'Genel Sekreter',
+  });
+
+  it('yetkili yeni sürümü atomik yayımlar; girişsiz ziyaretçi güncel dosyayı ve arşivi okur', async () => {
+    const db = ctx('gs');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'statuteVersions', 'v1'), metadata('v1'));
+    batch.set(doc(db, 'statuteVersions/v1/chunks', '000'), { index: 0, data: 'JVBERi0x' });
+    batch.set(doc(db, 'statutes', 'current'), metadata('v1'));
+    await assertSucceeds(batch.commit());
+
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    await assertSucceeds(getDoc(doc(publicDb, 'statutes', 'current')));
+    await assertSucceeds(getDocs(collection(publicDb, 'statuteVersions')));
+    await assertSucceeds(getDocs(collection(publicDb, 'statuteVersions/v1/chunks')));
+  });
+
+  it('sıradan üye yayımlayamaz ve yayımlanmış sürüm değiştirilemez', async () => {
+    await assertFails(setDoc(doc(ctx('stranger'), 'statuteVersions', 'bad'), metadata('bad')));
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'statuteVersions', 'v1'), { ...metadata('v1'), publishedAt: Timestamp.now() });
+    });
+    await assertFails(updateDoc(doc(ctx('gs'), 'statuteVersions', 'v1'), { summary: 'Değiştirildi' }));
+  });
+});
+
+describe('demirbaş ve zimmet', () => {
+  const asset = (by = 'sayman') => ({
+    code: 'DMB-2026-0001', name: 'Dizüstü bilgisayar', category: 'Bilgisayar', description: '', serialNo: 'SN-1',
+    unitId: 'branch', unitName: 'Kol Geneli', location: 'Kulüp odası', status: 'available', condition: 'good',
+    custodianUid: null, custodianName: '', purchaseDate: null, purchaseValue: 1000, warrantyEndDate: null, notes: '', lastMovementId: 'am1',
+    createdBy: by, createdByName: by, createdAt: serverTimestamp(), updatedBy: by, updatedByName: by, updatedAt: serverTimestamp(),
+  });
+
+  it('envanter/finans yetkilisi kaydeder ve hareket ekler; yetkisiz üye göremez', async () => {
+    const db = ctx('sayman');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'assets', 'a1'), asset());
+    batch.set(doc(db, 'assetMovements', 'am1'), {
+      assetId: 'a1', assetCode: 'DMB-2026-0001', assetName: 'Dizüstü bilgisayar', type: 'create', note: 'İlk kayıt',
+      from: null, to: { status: 'available', location: 'Kulüp odası', custodianName: '' }, byUid: 'sayman', byName: 'sayman', at: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+    await assertSucceeds(getDoc(doc(ctx('sayman'), 'assets', 'a1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'assets', 'a1')));
+    await assertFails(setDoc(doc(ctx('stranger'), 'assets', 'a2'), asset('stranger')));
+  });
+
+  it('demirbaş silinemez; hareket geçmişi değiştirilemez', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'assets', 'a1'), { ...asset(), createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+      await setDoc(doc(db, 'assetMovements', 'am1'), { assetId: 'a1', assetCode: 'DMB-2026-0001', assetName: 'Dizüstü bilgisayar', type: 'create', note: '', from: null, to: {}, byUid: 'sayman', byName: 'sayman', at: Timestamp.now() });
+    });
+    await assertFails(deleteDoc(doc(ctx('sayman'), 'assets', 'a1')));
+    await assertFails(updateDoc(doc(ctx('sayman'), 'assetMovements', 'am1'), { note: 'değişti' }));
   });
 });
 
@@ -176,6 +292,183 @@ describe('gönüllü kabulü (birim başkanı yetki devri)', () => {
   });
 });
 
+describe('komite ve YK başvuru ilanları', () => {
+  const nextWeek = Timestamp.fromDate(new Date(Date.now() + 7 * 864e5));
+  const yesterday = Timestamp.fromDate(new Date(Date.now() - 864e5));
+  const call = (status = 'draft') => ({
+    unitId: 'cs', unitName: 'Computer Society', title: 'CS Güz Ekip Alımı', roleTitle: 'Etkinlik ekibi gönüllüsü',
+    summary: 'Birlikte teknik etkinlikler üretmek isteyen ekip arkadaşları arıyoruz.', description: '', expectations: '',
+    capacity: 8, status, opensAt: yesterday, closesAt: nextWeek, questions: [],
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  const application = () => ({
+    callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
+    uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
+    studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
+    availability: '', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending', submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  const meta = (uid: string) => ({ createdBy: uid, createdByName: uid, createdAt: serverTimestamp() });
+  // İlan ve açanın kimliğini taşıyan internal/meta aynı batch'te yazılır.
+  const createCall = (uid: string, id: string, data: Record<string, unknown> = call(), metaData: Record<string, unknown> = meta(uid)) => {
+    const db = ctx(uid);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'recruitmentCalls', id), data);
+    batch.set(doc(db, 'recruitmentCalls', id, 'internal', 'meta'), metaData);
+    return batch.commit();
+  };
+  // Karar ve değerlendirenin kimliğini taşıyan internal/review aynı batch'te yazılır.
+  const review = (uid: string, status: string, reviewer = uid) => {
+    const db = ctx(uid);
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'recruitmentApplications', 'c1__candidate'), {
+      status, reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, 'recruitmentApplications', 'c1__candidate', 'internal', 'review'), {
+      reviewedBy: reviewer, reviewedByName: reviewer, reviewedAt: serverTimestamp(), status,
+    });
+    return batch.commit();
+  };
+  const openCall = async () => {
+    await createCall('chair', 'c1');
+    await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });
+  };
+
+  it('birim yöneticisi taslak açar; yalnız yayımlanmış ilan anonim vitrinde görünür', async () => {
+    await assertSucceeds(createCall('chair', 'c1'));
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    await assertFails(getDoc(doc(publicDb, 'recruitmentCalls', 'c1')));
+    await assertSucceeds(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() }));
+    await assertSucceeds(getDoc(doc(publicDb, 'recruitmentCalls', 'c1')));
+    await assertSucceeds(getDocs(query(collection(publicDb, 'recruitmentCalls'), where('status', '==', 'open'))));
+    await assertFails(createCall('rasVol', 'bad'));
+  });
+
+  it('ilanı açanın kimliği herkese açık belgeye yazılamaz; yalnız yöneticiler okur', async () => {
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    await assertFails(createCall('chair', 'leak', { ...call(), createdBy: 'chair', createdByName: 'chair' }));
+    await assertFails(setDoc(doc(ctx('chair'), 'recruitmentCalls', 'nometa'), call()));
+    await assertFails(createCall('chair', 'spoof', call(), meta('rasVol')));
+    await openCall();
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(getDoc(doc(publicDb, 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(getDoc(doc(ctx('candidate'), 'recruitmentCalls', 'c1', 'internal', 'meta')));
+    await assertFails(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1', 'internal', 'meta'), { createdByName: 'x' }));
+    await assertFails(updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { createdByName: 'chair', updatedAt: serverTimestamp() }));
+  });
+
+  it('eski sürümden kalan kişi alanları ilk güncellemede silinmek zorundadır', async () => {
+    await env.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'recruitmentCalls', 'legacy'), {
+        ...call(), createdBy: 'chair', createdByName: 'Başkan', createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      });
+    });
+    const ref = doc(ctx('chair'), 'recruitmentCalls', 'legacy');
+    await assertFails(updateDoc(ref, { status: 'open', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { status: 'open', updatedAt: serverTimestamp(), createdBy: deleteField(), createdByName: deleteField() }));
+  });
+
+  it('değerlendirenin kimliği adaya görünmez; kayıtsız veya sahte kimlikli karar reddedilir', async () => {
+    await openCall();
+    await setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application());
+    const appRef = doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate');
+    await assertFails(updateDoc(appRef, {
+      status: 'reviewing', reviewedBy: 'chair', reviewedByName: 'chair', reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(appRef, { status: 'reviewing', reviewedAt: serverTimestamp(), decisionNote: '', updatedAt: serverTimestamp() }));
+    await assertFails(review('chair', 'reviewing', 'rasVol'));
+    await assertFails(setDoc(doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review'), {
+      reviewedBy: 'chair', reviewedByName: 'chair', reviewedAt: serverTimestamp(), status: 'reviewing',
+    }));
+    await assertSucceeds(review('chair', 'reviewing'));
+    await assertSucceeds(review('chair', 'accepted'));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(getDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(getDoc(doc(ctx('rasVol'), 'recruitmentApplications', 'c1__candidate', 'internal', 'review')));
+    await assertFails(review('chair', 'rejected'));
+  });
+
+  it('KVKK aydınlatma metni zorunludur: yayımlı sürüm dışında veya metin yokken başvuru alınmaz', async () => {
+    await openCall();
+    const ref = doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate');
+    await assertFails(setDoc(ref, { ...application(), privacyNoticeId: 'eski-surum' }));
+    const { privacyNoticeId: _omit, ...withoutNotice } = application();
+    await assertFails(setDoc(ref, withoutNotice));
+    await assertFails(setDoc(ref, { ...application(), privacyConsent: false }));
+    await env.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'settings', 'public'), { orgName: 'IEEE', orgShortName: 'IEEE' });
+    });
+    await assertFails(setDoc(ref, application()));
+  });
+
+  it('aydınlatma metni herkese açık, değiştirilemez sürümlerle yalnız organizasyon yöneticisince yayımlanır', async () => {
+    const publicDb = env.unauthenticatedContext().firestore() as unknown as Firestore;
+    const notice = { kind: 'recruitment', title: 'KVKK', versionLabel: 'v2', body: 'y'.repeat(300), publishedAt: serverTimestamp() };
+    const publish = (uid: string, id: string, data: Record<string, unknown> = notice, pointer = id) => {
+      const db = ctx(uid);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'privacyNotices', id), data);
+      batch.set(doc(db, 'settings', 'public'), { recruitmentPrivacyNoticeId: pointer }, { merge: true });
+      return batch.commit();
+    };
+    await assertSucceeds(getDoc(doc(publicDb, 'privacyNotices', 'n1')));
+    await assertFails(publish('chair', 'n2'));
+    await assertFails(publish('orgAdmin', 'short', { ...notice, body: 'kısa' }));
+    await assertFails(publish('orgAdmin', 'extra', { ...notice, publishedByName: 'Yönetici' }));
+    await assertFails(setDoc(doc(ctx('orgAdmin'), 'settings', 'public'), { recruitmentPrivacyNoticeId: 'yok' }, { merge: true }));
+    await assertFails(publish('orgAdmin', 'wrongkind', { ...notice, kind: 'unknown' }));
+    // Çerez politikası, başvuru metni yerine yürürlüğe konamaz; kendi işaretçisine konabilir.
+    const adminDb = ctx('orgAdmin');
+    const cookies = writeBatch(adminDb);
+    cookies.set(doc(adminDb, 'privacyNotices', 'cookie1'), { ...notice, kind: 'cookies' });
+    cookies.set(doc(adminDb, 'settings', 'public'), { recruitmentPrivacyNoticeId: 'cookie1' }, { merge: true });
+    await assertFails(cookies.commit());
+    const cookiesOk = writeBatch(adminDb);
+    cookiesOk.set(doc(adminDb, 'privacyNotices', 'cookie1'), { ...notice, kind: 'cookies' });
+    cookiesOk.set(doc(adminDb, 'settings', 'public'), { cookiePolicyId: 'cookie1' }, { merge: true });
+    await assertSucceeds(cookiesOk.commit());
+    await assertFails(setDoc(doc(ctx('orgAdmin'), 'settings', 'public'), { termsId: 'cookie1' }, { merge: true }));
+    await assertSucceeds(publish('orgAdmin', 'n2'));
+    await assertFails(updateDoc(doc(ctx('orgAdmin'), 'privacyNotices', 'n2'), { body: 'z'.repeat(300) }));
+    await assertFails(deleteDoc(doc(ctx('orgAdmin'), 'privacyNotices', 'n1')));
+    // Yeni sürüm yürürlüğe girince eski sürüme bağlı başvuru reddedilir.
+    await openCall();
+    await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application()));
+    await assertSucceeds(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), { ...application(), privacyNoticeId: 'n2' }));
+  });
+
+  it('Hub üyeliği olmayan oturum açık ilana bir kez başvurur; ilgili başkan değerlendirir', async () => {
+    await createCall('chair', 'c1');
+    await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });
+    const application = {
+      callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
+      uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
+      studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
+      availability: 'Haftada dört saat', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending',
+      submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application));
+    await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'another-id'), application));
+    await assertSucceeds(getDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate')));
+    await assertFails(getDoc(doc(ctx('rasVol'), 'recruitmentApplications', 'c1__candidate')));
+    await assertSucceeds(review('chair', 'reviewing'));
+  });
+
+  it('kapalı ilana başvuru ve başvuru içeriğini sonradan değiştirme reddedilir', async () => {
+    await createCall('chair', 'c1');
+    const application = {
+      callId: 'c1', callTitle: 'CS Güz Ekip Alımı', unitId: 'cs', unitName: 'Computer Society',
+      uid: 'candidate', name: 'Aday Kişi', email: 'aday@example.com', phone: '', department: 'Bilgisayar Mühendisliği',
+      studentNo: '', ieeeMemberNo: '', motivation: 'Komitenin teknik etkinliklerinde sorumluluk almak ve birlikte üretmek istiyorum.',
+      availability: '', answers: {}, privacyConsent: true, privacyNoticeId: 'n1', status: 'pending', submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    await assertFails(setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application));
+    await updateDoc(doc(ctx('chair'), 'recruitmentCalls', 'c1'), { status: 'open', updatedAt: serverTimestamp() });
+    await setDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), application);
+    await assertFails(updateDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), { motivation: 'Değiştirildi', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(ctx('candidate'), 'recruitmentApplications', 'c1__candidate'), { status: 'withdrawn', updatedAt: serverTimestamp() }));
+  });
+});
+
 describe('etkinlikler', () => {
   it('sorumlu dilekçesiz onaylayamaz; aynı birimin onaylı dilekçesiyle onaylar', async () => {
     const db = ctx('coord');
@@ -192,6 +485,47 @@ describe('etkinlikler', () => {
   it('katılımcı listesini yalnızca sorumlu ve yöneticiler görür', async () => {
     await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', 'p1'), { name: 'x' }));
     await assertFails(getDocs(collection(ctx('csVol'), 'events', 'e1', 'participants')));
+  });
+
+  it('dönemler arası kısıtlama gerekçesini gizler ve engelli katılımcı yazımını kurallarda durdurur', async () => {
+    const hash = 'a'.repeat(32);
+    const restriction = {
+      personName: 'Kişi', email: 'kisi@example.org', emailHash: hash, level: 'blocked', reason: 'Etkinlik güvenliğini ihlal eden somut olay.',
+      sourceEventId: 'e1', sourceEventName: 'AI Günü', evidenceLink: '', endsOn: null, reviewOn: null, active: true,
+      createdBy: 'gs', createdByName: 'Genel Sekreter', createdAt: serverTimestamp(),
+    };
+    const coordDb = ctx('coord');
+    const denied = writeBatch(coordDb);
+    denied.set(doc(coordDb, 'eventRestrictions', 'r-denied'), { ...restriction, createdBy: 'coord' });
+    await assertFails(denied.commit());
+
+    const db = ctx('gs');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'eventRestrictions', 'r1'), restriction);
+    batch.set(doc(db, 'eventRestrictionIndex', hash), { restrictionId: 'r1', level: 'blocked', expiresAt: FAR, updatedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+
+    await assertFails(getDoc(doc(ctx('coord'), 'eventRestrictions', 'r1')));
+    await assertSucceeds(getDoc(doc(ctx('coord'), 'eventRestrictionIndex', hash)));
+    await assertFails(getDocs(collection(ctx('coord'), 'eventRestrictionIndex')));
+    await assertFails(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', hash), { name: 'Kişi', email: 'kisi@example.org' }));
+    const lift = writeBatch(db);
+    lift.update(doc(db, 'eventRestrictions', 'r1'), { active: false, liftedBy: 'gs', liftedByName: 'Genel Sekreter', liftedAt: serverTimestamp(), liftReason: 'İnceleme tamamlandı.' });
+    lift.delete(doc(db, 'eventRestrictionIndex', hash));
+    await assertSucceeds(lift.commit());
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', hash), { name: 'Kişi', email: 'kisi@example.org' }));
+  });
+
+  it('dikkat kaydı katılımı engellemez, süresi dolan engel uygulanmaz', async () => {
+    const watchHash = 'b'.repeat(32);
+    const expiredHash = 'c'.repeat(32);
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'eventRestrictionIndex', watchHash), { restrictionId: 'w1', level: 'watch', expiresAt: FAR, updatedAt: Timestamp.now() });
+      await setDoc(doc(db, 'eventRestrictionIndex', expiredHash), { restrictionId: 'x1', level: 'blocked', expiresAt: Timestamp.fromDate(new Date('2020-01-01')), updatedAt: Timestamp.now() });
+    });
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', watchHash), { name: 'Dikkat' }));
+    await assertSucceeds(setDoc(doc(ctx('coord'), 'events', 'e1', 'participants', expiredHash), { name: 'Süresi doldu' }));
   });
 });
 
@@ -233,5 +567,111 @@ describe('devir paketleri', () => {
       getDocs(query(collection(ctx('chair'), 'handovers'), where('visibleTo', 'array-contains-any', ['uid:chair', 'role:cs__birim-baskani']))),
     );
     await assertFails(getDoc(doc(ctx('csVol'), 'handovers', 'h1')));
+  });
+});
+
+describe('kurul oylamaları ve karar defteri', () => {
+  const PAST = Timestamp.fromDate(new Date('2020-01-01T00:00:00Z'));
+  const entry = (roleKey: string, boards: string[]) => ({ name: roleKey, roleKey, roleName: roleKey, unitName: 'x', boards });
+  const roster = {
+    ykBaskan: entry('branch__baskan', ['yk']),
+    ykUye: entry('branch__yk-uyesi', ['yk']),
+    ykEski: entry('branch__yk-uyesi', ['yk']),
+    chair: entry('cs__birim-baskani', ['ik']),
+  };
+  const newVote = (extra: Record<string, unknown> = {}) => ({
+    title: 'Bütçe revizyonu', description: '', scope: 'both', rule: 'majority', isDecree: false, status: 'open',
+    closesAt: FAR, roster, recusedUids: ['ykUye'], fullSizes: { yk: 6, ik: 5 }, chairUid: 'ykBaskan', meetingId: null,
+    visibleUids: [...Object.keys(roster), 'gs'], createdBy: 'gs', createdByName: 'GS',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...extra,
+  });
+  const ballot = (choice = 'yes') => ({ choice, name: 'x', at: serverTimestamp() });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      const people = [['ykBaskan', 'branch__baskan', FAR], ['ykUye', 'branch__yk-uyesi', FAR], ['ykEski', 'branch__yk-uyesi', PAST]] as const;
+      for (const [uid, roleKey, until] of people) {
+        await setDoc(doc(db, 'members', uid), { uid, status: 'active', displayName: uid, createdAt: Timestamp.now() });
+        await setDoc(doc(db, 'access', uid), { ...baseAccess(uid), roleKeys: { [roleKey]: until }, memberOf: { branch: until } });
+      }
+    });
+  });
+
+  it('oylamayı yalnız Genel Sekreter açar; liste görünürlükte olmalı, YKK yalnız YK 2/3 ile açılır', async () => {
+    await assertSucceeds(setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote()));
+    await assertFails(setDoc(doc(ctx('chair'), 'boardVotes', 'v2'), newVote({ createdBy: 'chair' })));
+    await assertFails(setDoc(doc(ctx('gs'), 'boardVotes', 'v3'), newVote({ visibleUids: ['gs'] })));
+    await assertFails(setDoc(doc(ctx('gs'), 'boardVotes', 'v4'), newVote({ isDecree: true })));
+    await assertSucceeds(setDoc(doc(ctx('gs'), 'boardVotes', 'v5'), newVote({ isDecree: true, scope: 'yk', rule: 'twoThirds' })));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'boardVotes', 'v1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'boardVotes', 'v1')));
+  });
+
+  it('herkes yalnız kendi adına, görevi sürerken ve oylama açıkken oy verir', async () => {
+    await setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote());
+    const b = (uid: string, as = uid) => doc(ctx(as), 'boardVotes', 'v1', 'ballots', uid);
+    await assertSucceeds(setDoc(b('ykBaskan'), ballot('yes')));
+    await assertSucceeds(setDoc(b('ykBaskan'), ballot('no')));
+    await assertSucceeds(setDoc(b('chair'), ballot('abstain')));
+    await assertFails(setDoc(b('ykBaskan', 'chair'), ballot('yes')));
+    await assertFails(setDoc(b('stranger'), ballot('yes')));
+    await assertFails(setDoc(b('ykEski'), ballot('yes')));
+    await assertFails(setDoc(b('ykUye'), ballot('yes')));
+    await assertFails(setDoc(b('chair'), ballot('maybe')));
+    await assertFails(deleteDoc(b('ykBaskan')));
+    await assertSucceeds(getDoc(b('ykBaskan', 'chair')));
+    await assertFails(getDoc(b('ykBaskan', 'stranger')));
+  });
+
+  it('oylama içeriği değişmez; kapandıktan sonra oy verilemez; karar defteri numaralı ve değiştirilemez', async () => {
+    await setDoc(doc(ctx('gs'), 'boardVotes', 'v1'), newVote());
+    await setDoc(doc(ctx('ykBaskan'), 'boardVotes', 'v1', 'ballots', 'ykBaskan'), ballot('yes'));
+    const vRef = doc(ctx('gs'), 'boardVotes', 'v1');
+    await assertFails(updateDoc(vRef, { title: 'Değişti', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(vRef, { roster: { gs: entry('x', ['yk']) }, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(ctx('chair'), 'boardVotes', 'v1'), { status: 'closed', closedAt: serverTimestamp(), closedByName: 'x', updatedAt: serverTimestamp() }));
+    const result = { outcome: 'accepted', summary: 'Kabul', counts: { yes: 1, no: 0, abstain: 0 } };
+    await assertSucceeds(updateDoc(vRef, { status: 'closed', closedAt: serverTimestamp(), closedByName: 'GS', result, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(ctx('chair'), 'boardVotes', 'v1', 'ballots', 'chair'), ballot('yes')));
+
+    const manual = { type: 'manual', id: null, label: 'Elle' };
+    const decision = (seq: number, extra: Record<string, unknown> = {}) => ({
+      board: 'yk', year: 2026, seq, number: `YK-2026/00${seq}`, counterId: 'yk_2026', kind: 'decision', date: '2026-09-29',
+      title: 'Bütçe revizyonu', text: 'Kabul edildi.', result: 'Kabul', source: { type: 'vote', id: 'v1', label: 'Oylama' },
+      correctsId: null, visibility: 'board', visibleUids: Object.keys(roster), createdBy: 'gs', createdByName: 'GS', createdAt: serverTimestamp(), ...extra,
+    });
+    const record = (seq: number, id: string, extra: Record<string, unknown> = {}, linkVote = true) => {
+      const db = ctx('gs');
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'decisionCounters', 'yk_2026'), { value: seq, lastDecisionId: id });
+      batch.set(doc(db, 'boardDecisions', id), decision(seq, extra));
+      if (linkVote) batch.update(doc(db, 'boardVotes', 'v1'), { decisionId: id, updatedAt: serverTimestamp() });
+      return batch.commit();
+    };
+    await assertFails(record(2, 'd0')); // numara 1 ile başlar
+    await assertFails(record(1, 'd0', {}, false)); // oylamaya bağlanmadan işlenemez
+    await assertSucceeds(record(1, 'd1'));
+    await assertFails(record(2, 'd2')); // aynı oylama ikinci kez işlenemez
+    await assertFails(record(3, 'd3', { source: manual }, false)); // numara atlanamaz
+    await assertSucceeds(record(2, 'd2', { source: manual, visibility: 'members', visibleUids: [] }, false));
+    await assertFails(updateDoc(doc(ctx('gs'), 'boardDecisions', 'd1'), { text: 'Değişti' }));
+    await assertFails(deleteDoc(doc(ctx('gs'), 'boardDecisions', 'd1')));
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'boardDecisions', 'd1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'boardDecisions', 'd1'))); // kurula özel
+    await assertSucceeds(getDoc(doc(ctx('stranger'), 'boardDecisions', 'd2'))); // üyelere açık
+    // Kararname (YKK) yalnız kabul edilmiş YKK oylamasından işlenir.
+    await assertFails(record(3, 'd3', { kind: 'decree', source: manual }, false));
+  });
+
+  it('kurul toplantısını kurul üyesi okur; kurul dışı okuyamaz', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore() as unknown as Firestore, 'meetings', 'ik1'), {
+        unitId: 'branch', unitName: 'İdari Kurul', title: 'İK toplantısı', date: '2026-09-29', status: 'draft',
+        attendeeUids: [], attendeeNames: [], agenda: [], decisions: [], boardId: 'ik', visibleUids: ['chair'],
+      });
+    });
+    await assertSucceeds(getDoc(doc(ctx('chair'), 'meetings', 'ik1')));
+    await assertFails(getDoc(doc(ctx('stranger'), 'meetings', 'ik1')));
   });
 });

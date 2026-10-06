@@ -4,10 +4,17 @@ IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portal
 
 **Canlı sistem:** https://ieee-hub-techops.web.app
 
+**Aday ve kariyer vitrini:** https://ieee-ikcu-kariyer.web.app
+
 - **E-dilekçe:** Kurumun kendi **Word** dilekçe formatları Hub'a yüklenir ya da Hub içinde oluşturulur. Word içindeki `{alan_adi}` etiketleri kendiliğinden forma dönüşür. Dilekçe doldurulurken belge anında önizlenir. Hem **kol geneli** hem **komite içi** dilekçe gönderilebilir.
 - **Rol bazlı onay:** Her şablonun kendi onay zinciri vardır (örneğin Komite Başkanı → Genel Sekreter → Başkan). Onaylayan kişinin rolü, birimi, görev süresi ve adım sırası güvenlik kurallarıyla denetlenir. İade, ret ve düzeltip yeniden gönderme desteklenir.
 - **Evrak numarası ve doğrulama:** Numaralar boşluksuz ve seri bazlıdır (`IEEEIKCU-2026-ETK-0007`). Belge Word olarak indirilebilir ya da tarayıcıdan PDF'e yazdırılabilir. Herkese açık `/dogrula/{kod}` sayfası belgenin gerçek olup olmadığını gösterir.
 - **Arayüzden düzenlenen organizasyon:** Komiteler ve birimler, roller ve yetkileri, dönemler, görev atamaları, **seçimler** (sonuçlar tek tıkla göreve işlenir), üye onayı, kurum ayarları ve denetim kaydı.
+- **Komite toplantıları:** Birimler gündem, katılım, görüşme, karar, sorumlu ve son tarihleri kaydeder; kesinleşen tutanak kilitlenir ve Word olarak indirilir.
+- **Harici Firebase paneli:** TechOps, IEEE Puan gibi ayrı Firestore/Realtime Database yollarına uzak projedeki kendi hesabıyla bağlanır; servis hesabı veya ortak şifre Hub'da tutulmaz.
+- **Herkese açık tüzük:** Güncel PDF/Word tüzük `/tuzuk` adresinde girişsiz okunur ve indirilir; önceki sürümler değiştirilemez arşivde kalır.
+- **Demirbaş ve zimmet:** Fiziksel varlık, seri no, konum, kondisyon, zimmet, bakım/kayıp/hurda durumu, değiştirilemez hareket geçmişi, CSV ve QR etiketi.
+- **Komite/YK başvuruları:** Birimler tarihli ilan, kontenjan ve özel sorular açar; adaylar ayrı kariyer vitrininden başvurur, durumunu izler; kabul edilen aday güvenli gönüllü rolü ve oryantasyon görevlerine bağlanır. Standart IEEE üyeliği ayrı sistemde kalır.
 
 > **Maliyet: 0 TL.** Hub, Firebase'in ücretsiz **Spark** planında sunucu kodu olmadan çalışır. Faturalandırma hesabı gerekmez, bu yüzden beklenmedik fatura riski de yoktur ([ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md)). Firestore bölgesi **europe-west1**'dir ([ADR-0018](docs/adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md)).
 
@@ -50,7 +57,8 @@ Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı,
    npm run deploy         # derleme + Hosting + Firestore kuralları ve dizinleri
    ```
 
-7. `https://<proje>.web.app` adresini açın. İlk kurulum yalnızca Firestore kurallarındaki izinli kurucu e-postasıyla yapılabilir; mevcut canlı hedefte bu hesap `techopsieee@gmail.com` adresidir. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
+7. Çoklu Hosting için `hub` ve `career` hedeflerini `.firebaserc` içinde gerçek site kimliklerine bağlayın. Kariyer sitesinin alan adını Firebase Authentication → **Authorized domains** listesine ekleyin.
+8. `https://<hub-site>.web.app` adresini açın. İlk kurulum yalnızca Firestore kurallarındaki izinli kurucu e-postasıyla yapılabilir; mevcut canlı hedefte bu hesap `techopsieee@gmail.com` adresidir. Kurulumdan sonra **Kurum ayarları**'ndan logo ve evrak numarası biçimini, **Komiteler ve birimler**'den gerçek birim listesini düzenleyin.
 
 ### GitHub Actions ile otomatik dağıtım
 
@@ -70,6 +78,16 @@ Sayı: {evrak_no}                                  Tarih: {tarih}
 ```
 
 **Dilekçe şablonları → Yeni şablon → Word dosyası yükle** adımlarından sonra alanlar otomatik algılanır. Soru metinlerini ve alan türlerini düzenleyin, onay zincirini tanımlayın ve **Yayımla**'ya basın. Sistemin doldurduğu etiketlerin (`{evrak_no}`, `{dilekce_sahibi}`, `{onay_1_ad}`, `{#onaylar}…{/onaylar}` …) listesi şablon editöründeki yardım bölümündedir. Word kullanmak istemeyenler için **Sistemde oluştur** seçeneği aynı biçimde bir .docx üretir.
+
+## IEEE Puan / harici Firebase bağlantısı
+
+1. Hub'da Sistem Sorumlusu rolüne `external.firebase.manage` iznini verin.
+2. **Yönetim → Harici Firebase** ekranında uzak projenin Firebase Console → Proje ayarları → Web uygulaması değerlerini girin.
+3. Firestore koleksiyonunu veya Realtime Database yolunu görünüm olarak ekleyin; ilk bağlantıda kritik yolları **salt okunur** bırakın.
+4. Uzak Firebase Authentication'da Google veya e-posta/şifre sağlayıcısını etkinleştirin, Hub alan adını Authorized domains listesine ekleyin ve yalnız TechOps hesaplarına gereken okuma/yazma yetkisini uzak Security Rules içinde verin.
+5. Panelde uzak projeye kişisel TechOps hesabıyla ayrıca giriş yapın.
+
+Firebase web `apiKey` değeri kimlik bilgisi değildir. Servis hesabı JSON'u, private key veya ortak yönetici şifresi bu ekrana girilmez. Gerçek IEEE Puan koleksiyon/yol adları bilinmeden sistem veri keşfi yapmaz; yollar açıkça izin listesine eklenir.
 
 ## Depo yapısı
 
@@ -94,7 +112,7 @@ ieee-hub/
 - E-posta bildirimi yok. Bekleyen onaylar Hub'daki sayaçta görünür.
 - Çevrim içi gizli oylama yok. Seçim genel kurulda yapılır, sonuçlar Hub'a işlenir.
 - Dört göz onayı (ADR-0008), acil erişim (ADR-0010), koşullu onay adımı ve MFA sonraki sürümlere bırakıldı.
-- Word belgesine QR görseli basılmaz. Doğrulama bağlantısı ve kodu metin olarak basılır; QR, Hub'daki dilekçe sayfasında görünür.
+- Harici Firebase paneli uzak projenin şemasını veya kurallarını kendiliğinden değiştirmez; bağlantı için web yapılandırması, veri yolları ve uzak kullanıcı yetkileri gerekir.
 
 Ayrıntılar: [ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md).
 

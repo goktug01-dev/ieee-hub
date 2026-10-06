@@ -98,9 +98,9 @@ export function friendlyError(e: unknown): string {
       return 'Giriş penceresi kapatıldı.';
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
-      return 'E-posta veya şifre hatalı.';
+      return 'E-posta veya şifre hatalı. Hesabınızı Google ile açtıysanız “Google ile devam et”i kullanın.';
     case 'auth/email-already-in-use':
-      return 'Bu e-posta adresiyle zaten bir hesap var.';
+      return 'Bu e-posta adresiyle zaten bir hesap var; yeni hesap açılmadı ve mevcut hesabınız etkilenmedi. Google ile açılmış bir hesapsa “Google ile devam et”i, değilse giriş yap seçeneğini kullanın.';
     case 'auth/weak-password':
       return 'Şifre en az 6 karakter olmalı.';
     default:

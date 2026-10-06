@@ -26,6 +26,7 @@ import Docxtemplater from 'docxtemplater';
 import InspectModule from 'docxtemplater/js/inspect-module.js';
 import { collection, doc, getDocs, orderBy, query, writeBatch, type Firestore } from 'firebase/firestore';
 import PizZip from 'pizzip';
+import QRCode from 'qrcode';
 import { humanizeKey } from './format';
 import type { BuilderSpec, TemplateField } from './types';
 
@@ -228,6 +229,64 @@ export function renderDocx(buf: ArrayBuffer, data: Record<string, unknown>): Blo
     throw new Error(explainError(e).join('\n'));
   }
   const out = d.getZip().generate({ type: 'arraybuffer', compression: 'DEFLATE' }) as ArrayBuffer;
+  return new Blob([out], { type: DOCX_MIME });
+}
+
+export interface VerificationStamp {
+  url: string;
+  code: string;
+  documentNo: string;
+  status: string;
+  approved: boolean;
+}
+
+const xmlEscape = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+/**
+ * Doldurulmuş Word belgesinin sonuna doğrulama QR'ı ve durum damgası ekler.
+ * Şablonun nasıl üretildiğinden bağımsız çalışır; ücretli docxtemplater image modülü gerektirmez.
+ */
+export async function appendVerificationStamp(blob: Blob, stamp: VerificationStamp): Promise<Blob> {
+  const zip = new PizZip(await blob.arrayBuffer());
+  const documentFile = zip.file('word/document.xml');
+  const relsFile = zip.file('word/_rels/document.xml.rels');
+  const contentTypesFile = zip.file('[Content_Types].xml');
+  if (!documentFile || !relsFile || !contentTypesFile) throw new Error('Word belgesine doğrulama damgası eklenemedi.');
+
+  let documentXml = documentFile.asText();
+  let relsXml = relsFile.asText();
+  let contentTypesXml = contentTypesFile.asText();
+  let suffix = 1;
+  while (relsXml.includes(`rIdHubVerification${suffix}`)) suffix++;
+  const relationshipId = `rIdHubVerification${suffix}`;
+  const imageName = `hub-verification-${suffix}.png`;
+  const dataUrl = await QRCode.toDataURL(stamp.url, { errorCorrectionLevel: 'M', margin: 1, width: 256 });
+  zip.file(`word/media/${imageName}`, base64ToBuffer(dataUrl.slice(dataUrl.indexOf(',') + 1)));
+
+  if (!/Extension=["']png["']/i.test(contentTypesXml)) {
+    contentTypesXml = contentTypesXml.replace(
+      '</Types>',
+      '<Default Extension="png" ContentType="image/png"/></Types>',
+    );
+    zip.file('[Content_Types].xml', contentTypesXml);
+  }
+  relsXml = relsXml.replace(
+    '</Relationships>',
+    `<Relationship Id="${relationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${imageName}"/></Relationships>`,
+  );
+  zip.file('word/_rels/document.xml.rels', relsXml);
+
+  const headline = stamp.approved ? 'ELEKTRONİK OLARAK ONAYLANMIŞTIR' : `BELGE DURUMU: ${stamp.status.toLocaleUpperCase('tr')}`;
+  const color = stamp.approved ? '16803A' : '9A6700';
+  const stampXml = `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="240" w:after="80"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1371600" cy="1371600"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${900000 + suffix}" name="IEEE İKÇÜ Hub doğrulama QR"/><wp:cNvGraphicFramePr/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="${imageName}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1371600" cy="1371600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="${color}"/><w:sz w:val="24"/></w:rPr><w:t>${xmlEscape(headline)}</w:t></w:r></w:p><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="160"/></w:pPr><w:r><w:rPr><w:color w:val="555555"/><w:sz w:val="17"/></w:rPr><w:t>${xmlEscape(`Evrak: ${stamp.documentNo} • Kod: ${stamp.code} • QR kodu okutarak belgenin güncel durumunu doğrulayın.`)}</w:t></w:r></w:p>`;
+
+  const sectionIndex = documentXml.lastIndexOf('<w:sectPr');
+  if (sectionIndex >= 0) documentXml = `${documentXml.slice(0, sectionIndex)}${stampXml}${documentXml.slice(sectionIndex)}`;
+  else documentXml = documentXml.replace('</w:body>', `${stampXml}</w:body>`);
+  zip.file('word/document.xml', documentXml);
+
+  const out = zip.generate({ type: 'arraybuffer', compression: 'DEFLATE' }) as ArrayBuffer;
   return new Blob([out], { type: DOCX_MIME });
 }
 

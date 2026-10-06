@@ -1,6 +1,6 @@
 # AI devir notu — IEEE İKÇÜ Hub
 
-Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-09-24.
+Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-09-27.
 
 ## 1. Proje bir bakışta
 
@@ -23,8 +23,13 @@ Sunucu olmadığı için **`firebase/firestore.rules` tek güvenilir katmandır.
 
 - Yetki özeti `access/{uid}`: `superAdmin`, `perms` (kol geneli izin → bitiş), `unitPerms` (`"birim__izin"` → bitiş), `roleKeys` (`"birim__rol"` → bitiş), `memberOf`, `tokens` (dilekçe/devir görünürlüğü). İstemcide `lib/access.ts → computeAccess` görev atamalarından hesaplar; kurallar bitiş zamanını her istekte `request.time` ile karşılaştırır.
 - İzin kataloğu `apps/hub/src/lib/permissions.ts` ile kurallar **birlikte** değişir. Yeni izin = kurallarda karşılığı + test.
-- Dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). Kurallar: rol ve birim eşleşmesi, sıra, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
+- Dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). Adım politikası rollerden biri, tüm makamlar veya belirli nisap olabilir. Kurallar: rol ve birim eşleşmesi, sıra/nisap, aynı rolün bir kez sayılması, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
 - Birim yöneticisi yalnızca **gönüllü rolünü** kendi biriminde verip alabilir (`access` üzerinde sınırlı güncelleme, `lastDelegation` alanı).
+- Birim toplantıları `meetings` koleksiyonundadır: birim üyeleri okur; `unit.meetings.manage` / `unit.manage` yetkilileri taslak yönetir; kesinleşen tutanak kurallarda değişmezdir.
+- Harici Firebase bağlantısı servis hesabı kullanmaz. `external.firebase.manage` paneli açar; kullanıcı uzak projede ayrıca oturum açar ve uzak Security Rules nihai yetkidir ([ADR-0027](docs/adr/0027-harici-firebase-ikincil-oturum.md)).
+- Tüzük `statutes/current` ve değiştirilemez `statuteVersions/{id}/chunks` kayıtlarında tutulur; tamamı bilinçli olarak public okunur, yalnız organizasyon yöneticisi/Genel Sekreter yayımlar ([ADR-0029](docs/adr/0029-herkese-acik-tuzuk-arsivi.md)).
+- Fiziksel demirbaş silinmez; `assets` durumu güncellenirken `assetMovements` hareketi aynı batch'te eklenir. QR etiketi yetki aşmaz ([ADR-0030](docs/adr/0030-demirbas-zimmet-ve-hareket-defteri.md)).
+- Komite/YK alımları `recruitmentCalls` + `recruitmentApplications` ile yürür. Açık ilan herkese görünür; başvuru Auth ister ama aktif Hub üyeliği istemez. Başvuruyu yalnız sahibi ve ilgili birim yöneticisi okur; ilanı açan ve başvuruyu değerlendiren kişinin kimliği herkese/adaya açık belgelere yazılmaz, yalnız yöneticilerin okuduğu `internal/meta` ve `internal/review` alt belgelerinde tutulur; başvuru yürürlükteki KVKK aydınlatma metni sürümünü (`privacyNotices`, değiştirilemez) `privacyNoticeId` ile taşımak zorundadır, yayımlı metin yoksa başvuru alınmaz ([ADR-0032](docs/adr/0032-kariyer-kvkk-aydinlatma-ve-kimlik-gizliligi.md)); standart IEEE üyeliği ayrı sistemde kalır ([ADR-0031](docs/adr/0031-ayri-kariyer-vitrini-ve-tarihli-birim-basvurulari.md)).
 - Firestore kuralları istek başına **1000 ifade** sınırına sahiptir; `update` kurallarını duruma göre dallara ayırın. Liste dilimi `list[0:0]` emülatörde hata verir; boş durumu ayrıca ele alın. Dizi içinde `serverTimestamp()` kullanılamaz.
 - Var olmayan dokümana `updateDoc`, kurallar yüzünden `not-found` yerine `permission-denied` döner.
 
@@ -70,7 +75,7 @@ baslat.cmd           Windows: çift tıkla → emülatör + arayüz + demo hesap
 4. **GitHub:** hedef, **`ieeetechops` kullanıcı hesabı altında public repo**. Şu an orada yalnızca boş `ieeetechops/ieeetechops` (profil README adı) var ve yerel kimlik `goktug01-dev`'in yazma yetkisi yok. Kullanıcıdan depo adını ve collaborator erişimini bekleyin; kendiniz depo açmaya veya başka hesabın kimlik bilgisini kullanmaya çalışmayın.
 5. **Canlıya alma:** README "Canlıya alma" adımları (Firebase projesi, `europe-west1`, Auth sağlayıcıları, `.env.local`, `npm run deploy`) kullanıcı tarafından yapılacak.
 
-**Bilinen sınırlar (bilinçli):** e-posta bildirimi yok, çevrim içi gizli oylama yok, dört göz onayı (ADR-0008) ve acil erişim (ADR-0010) yok, koşullu onay adımı ve MFA yok, Word belgesine QR görseli basılmıyor, dönem sonu değerlendirme formu (WP04-T08) yok.
+**Bilinen sınırlar (bilinçli):** e-posta bildirimi yok, gerçek anonimlik sağlayan çevrim içi gizli oylama yok (fiziksel gizli oy süreci ve sonucu yönetilir), kritik rol atamasında dört göz (ADR-0008) ve acil erişim (ADR-0010) yok, koşullu onay adımı ve MFA yok, dönem sonu değerlendirme formu (WP04-T08) yok. Harici Firebase entegrasyonu için uzak proje web yapılandırması, açık veri yolları, kullanıcı hesabı ve güvenlik kuralları ayrıca sağlanmalıdır.
 
 ## 6. Çalışma biçimi
 
@@ -78,4 +83,5 @@ baslat.cmd           Windows: çift tıkla → emülatör + arayüz + demo hesap
 - Bilgisayar ayarını değiştiren işlerden (PowerShell politikası, sistem geneline kurulum) ve dış dünyaya yazan işlerden (GitHub, Firebase deploy) önce onay alın.
 - Yeni mimari karar = yeni ADR (`docs/adr/_sablon.md`); kabul edilmiş ADR düzenlenmez, "Yerini Aldı" ile işaretlenir.
 - Kod ile doküman çelişirse kod esastır; aynı değişiklikte dokümanı düzeltin.
+- Kullanma kılavuzu `apps/hub/src/lib/manual.ts` tek kaynaktır (Yardım › Kullanma kılavuzu ve Word çıktısı buradan üretilir). Menü, sekme veya düğme adı değişen ya da yeni iş akışı eklenen her değişiklikte ilgili bölümü aynı commit'te güncelleyin.
 - Kullanıcıya "bitti" demeden önce ilgili testleri çalıştırın ve sonucu olduğu gibi bildirin; tarayıcıda denenmemiş ekranı "çalışıyor" diye sunmayın.

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut as fbSignOut, type User } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { hasPermission } from '../lib/access';
 import { useDoc } from '../lib/hooks';
@@ -37,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [bootstrapped, setBootstrapped] = useState<boolean | null>(null);
+  // Kariyer vitrini ve herkese açık politika sayfaları Hub üyelik kaydı açmaz.
+  const careerMode =
+    window.location.pathname.startsWith('/kariyer') ||
+    window.location.pathname.startsWith('/politika/') ||
+    window.location.hostname.includes('ieee-ikcu-kariyer');
 
   useEffect(
     () =>
@@ -67,17 +72,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [uid, memberState.data?.status]);
 
   // İlk girişte üyelik kaydı (onay bekleyen) otomatik oluşturulur.
+  // Hesap değişirken memberState bir an önceki kullanıcıya ait kalabilir; bu yüzden kayıt yalnızca
+  // işlem içinde gerçekten yoksa yazılır. Aksi hâlde mevcut (ör. yönetici) kaydın üzerine "pending" yazılabiliyordu.
   useEffect(() => {
-    if (!user || memberState.loading || memberState.data || bootstrapped !== true) return;
-    setDoc(doc(db, 'members', user.uid), {
-      uid: user.uid,
-      displayName: user.displayName ?? user.email?.split('@')[0] ?? 'Yeni üye',
-      email: user.email ?? '',
-      photoURL: user.photoURL ?? null,
-      status: 'pending',
-      createdAt: serverTimestamp(),
+    if (!user || memberState.loading || memberState.data || bootstrapped !== true || careerMode) return;
+    const ref = doc(db, 'members', user.uid);
+    runTransaction(db, async (tx) => {
+      if ((await tx.get(ref)).exists()) return;
+      tx.set(ref, {
+        uid: user.uid,
+        displayName: user.displayName ?? user.email?.split('@')[0] ?? 'Yeni üye',
+        email: user.email ?? '',
+        photoURL: user.photoURL ?? null,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
     }).catch((e) => console.error('Üyelik kaydı oluşturulamadı', e));
-  }, [user, memberState.loading, memberState.data, bootstrapped]);
+  }, [user, memberState.loading, memberState.data, bootstrapped, careerMode]);
 
   const access = accessState.data;
 

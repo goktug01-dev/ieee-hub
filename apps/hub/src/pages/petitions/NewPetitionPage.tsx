@@ -29,6 +29,7 @@ import { renderDocx } from '../../lib/docx';
 import { useCollection, useDoc } from '../../lib/hooks';
 import { useOrg } from '../../lib/org';
 import { createDraft, loadVersionFile, stepUnitId, submitPetition, templateData } from '../../lib/petitions';
+import { applicantFields } from '../../lib/workflow';
 import type { Assignment, Petition, PetitionTemplate, TemplateVersion, WithId } from '../../lib/types';
 import { BRANCH } from '../../lib/types';
 
@@ -94,9 +95,12 @@ export function NewPetitionPage() {
     setStep(1);
   };
 
+  const steps = version.data?.steps ?? [];
+  const fields = applicantFields(version.data?.fields ?? [], steps);
+
   // Alanlar yüklendiğinde profilden ön doldurma
   useEffect(() => {
-    if (version.data) setValues((v) => prefillValues(version.data!.fields, member, v));
+    if (version.data) setValues((v) => prefillValues(applicantFields(version.data!.fields, version.data!.steps), member, v));
   }, [version.data, member]);
 
   // Şablon dosyasını bir kez indir
@@ -137,8 +141,6 @@ export function NewPetitionPage() {
     }
   }, [file, fakePetition, publicSettings.orgName, orgSettings]);
 
-  const fields = version.data?.fields ?? [];
-  const steps = version.data?.steps ?? [];
   const missing = missingRequired(fields, values);
 
   const save = async (andSubmit: boolean) => {

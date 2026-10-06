@@ -19,6 +19,7 @@ import { useOrg } from '../../lib/org';
 import type { Assignment, Member, Petition, PetitionTemplate, TemplateVersion, WithId } from '../../lib/types';
 import { BRANCH } from '../../lib/types';
 import { stepUnitId } from '../../lib/workflow';
+import { printArea } from '../../lib/print';
 
 const DAY = 864e5;
 const tsMs = (t: { toMillis(): number } | null | undefined) => (t ? t.toMillis() : 0);
@@ -132,7 +133,7 @@ function SnapshotBar({ type, title, periodStart, periodEnd, data }: { type: Repo
       .catch(notifyError);
   return (
     <Group justify="flex-end">
-      <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>
+      <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => printArea()}>
         Yazdır / PDF
       </Button>
       <Button leftSection={<IconDeviceFloppy size={16} />} onClick={() => void save()}>
@@ -721,7 +722,7 @@ function Archive() {
         <Card className="print-area">
           <Group justify="space-between">
             <Title order={5}>{open.title}</Title>
-            <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} onClick={() => window.print()}>
+            <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} onClick={() => printArea()}>
               Yazdır
             </Button>
           </Group>

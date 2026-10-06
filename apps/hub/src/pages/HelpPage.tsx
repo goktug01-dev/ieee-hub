@@ -1,5 +1,6 @@
-import { Accordion, Badge, Button, Card, Group, List, Select, SimpleGrid, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
-import { IconLifebuoy } from '@tabler/icons-react';
+import { Accordion, Alert, Badge, Button, Card, Group, List, SegmentedControl, Select, SimpleGrid, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconBulb, IconFileDownload, IconLifebuoy, IconSearch } from '@tabler/icons-react';
 import { addDoc, collection, doc, orderBy, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
@@ -8,6 +9,7 @@ import { db } from '../firebase';
 import { hasPermission } from '../lib/access';
 import { fmtRelative } from '../lib/format';
 import { useCollection } from '../lib/hooks';
+import { MANUAL_AUDIENCES, manualFor, type ManualAudience } from '../lib/manual';
 import type { Feedback } from '../lib/opsTypes';
 import type { WithId } from '../lib/types';
 
@@ -70,16 +72,20 @@ const GUIDES: { role: string; items: string[] }[] = [
 export function HelpPage() {
   const { access } = useAuth();
   const isSupport = hasPermission(access, 'inventory.manage');
-  const [tab, setTab] = useState<string | null>('kilavuz');
+  const [tab, setTab] = useState<string | null>('el-kitabi');
   return (
     <Stack>
-      <PageHeader title="Yardım" description="Rolünüze göre kısa kılavuzlar ve sorun bildirimi." />
+      <PageHeader title="Yardım" description="Kullanma kılavuzu, rolünüze göre kısa ipuçları ve sorun bildirimi." />
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
-          <Tabs.Tab value="kilavuz">Kılavuzlar</Tabs.Tab>
+          <Tabs.Tab value="el-kitabi">Kullanma kılavuzu</Tabs.Tab>
+          <Tabs.Tab value="kilavuz">Hızlı ipuçları</Tabs.Tab>
           <Tabs.Tab value="bildir">Sorun bildir</Tabs.Tab>
           {isSupport && <Tabs.Tab value="gelen">Gelen talepler</Tabs.Tab>}
         </Tabs.List>
+        <Tabs.Panel value="el-kitabi">
+          <Manual />
+        </Tabs.Panel>
         <Tabs.Panel value="kilavuz">
           <Accordion variant="separated" defaultValue="Gönüllü">
             {GUIDES.map((g) => (
@@ -101,6 +107,97 @@ export function HelpPage() {
         </Tabs.Panel>
         <Tabs.Panel value="gelen">{isSupport && <Inbox />}</Tabs.Panel>
       </Tabs>
+    </Stack>
+  );
+}
+
+type AudienceFilter = ManualAudience | 'all';
+
+function Manual() {
+  const { publicSettings } = useAuth();
+  const [audience, setAudience] = useState<AudienceFilter>('member');
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState(false);
+  const narrow = useMediaQuery('(max-width: 36em)');
+  const sections = manualFor(audience, query);
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      // Word üreticisi yalnız indirmede yüklenir.
+      const { buildManualDocx, downloadManual } = await import('../lib/manualDocx');
+      const audiences = audience === 'all' ? (Object.keys(MANUAL_AUDIENCES) as ManualAudience[]) : [audience];
+      downloadManual(await buildManualDocx(audiences, publicSettings.orgName));
+    } catch (e) {
+      notifyError(e, 'Kılavuz oluşturulamadı');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack>
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <SegmentedControl
+          value={audience}
+          onChange={(value) => setAudience(value as AudienceFilter)}
+          data={[
+            ...(Object.entries(MANUAL_AUDIENCES) as [ManualAudience, { label: string }][]).map(([value, item]) => ({ value, label: item.label })),
+            { value: 'all', label: 'Tümü' },
+          ]}
+          orientation={narrow ? 'vertical' : 'horizontal'}
+          fullWidth={narrow}
+          w={narrow ? '100%' : undefined}
+        />
+        <Group gap="xs" wrap="wrap" style={{ flex: '1 1 320px', justifyContent: 'flex-end' }}>
+          <TextInput
+            placeholder="Kılavuzda ara…"
+            leftSection={<IconSearch size={16} />}
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            style={{ flex: '1 1 200px', maxWidth: 320 }}
+          />
+          <Button variant="default" leftSection={<IconFileDownload size={16} />} loading={busy} onClick={() => void download()}>
+            Word olarak indir
+          </Button>
+        </Group>
+      </Group>
+      {audience !== 'all' && (
+        <Text size="sm" c="dimmed">
+          {MANUAL_AUDIENCES[audience].description}
+        </Text>
+      )}
+      {sections.length === 0 ? (
+        <EmptyState title="Sonuç yok" description="Farklı bir kelime deneyin veya “Tümü”nü seçin." />
+      ) : (
+        <Accordion variant="separated" multiple defaultValue={query ? sections.map((section) => section.id) : []} key={`${audience}-${query ? 'q' : ''}`}>
+          {sections.map((section) => (
+            <Accordion.Item key={section.id} value={section.id}>
+              <Accordion.Control>
+                <Text fw={600}>{section.title}</Text>
+                <Text size="xs" c="dimmed">
+                  {section.where}
+                </Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="sm">
+                  <Text size="sm">{section.summary}</Text>
+                  <List type="ordered" spacing="xs" size="sm">
+                    {section.steps.map((step) => (
+                      <List.Item key={step}>{step}</List.Item>
+                    ))}
+                  </List>
+                  {section.tips?.map((tip) => (
+                    <Alert key={tip} variant="light" color="blue" icon={<IconBulb size={16} />} p="xs">
+                      <Text size="sm">{tip}</Text>
+                    </Alert>
+                  ))}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
+      )}
     </Stack>
   );
 }

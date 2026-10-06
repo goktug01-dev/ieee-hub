@@ -2,16 +2,24 @@ import { Timestamp } from 'firebase/firestore';
 import PizZip from 'pizzip';
 import { describe, expect, it } from 'vitest';
 import { computeAccess } from '../lib/access';
-import { DEFAULT_BUILDER, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
+import { DEFAULT_BUILDER, appendVerificationStamp, buildDocxFromSpec, inspectDocx, renderDocx } from '../lib/docx';
 import { maskName, slugify } from '../lib/format';
-import { vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
+import { approvedEventsIcs, isApprovedCalendarEvent, vtoolsMissingFields, vtoolsPreparationRow } from '../lib/eventExports';
 import { parseCsv, previewParticipantsCsv } from '../lib/heptacert';
 import { classifyPetitionFile } from '../lib/petitionCategories';
-import type { HubEvent } from '../lib/opsTypes';
-import { computeVisibleTo, formatDocumentNo, newVerificationCode } from '../lib/petitions';
+import type { HubEvent, Meeting } from '../lib/opsTypes';
+import { buildMeetingMinutes } from '../lib/meetingDocx';
+import { externalPointUserIssues, parseExternalData, stringifyExternalData } from '../lib/externalFirebase';
+import { computeVisibleTo, formatDocumentNo, newVerificationCode, stepRequiredApprovals } from '../lib/petitions';
 import type { Assignment, Role } from '../lib/types';
-import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
+import { DEFAULT_ORG_SETTINGS, applicantFields, responseFieldsForStep } from '../lib/workflow';
 import { validateTemplateContent } from '../lib/templates';
+import { validateStatuteFile } from '../lib/statutes';
+import { applicationDocumentId, recruitmentCallIsOpen, validateRecruitmentCall } from '../lib/recruitment';
+import { POLICIES, RECRUITMENT_PRIVACY_TEMPLATE, fillPlaceholders, privacyPlaceholders, validatePrivacyNotice } from '../lib/privacy';
+import { MANUAL, MANUAL_AUDIENCES, manualFor, type ManualAudience } from '../lib/manual';
+import { buildManualDocx } from '../lib/manualDocx';
+import { normalizeRestrictionEmail, restrictionIsCurrent } from '../lib/eventRestrictions';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -36,6 +44,60 @@ describe('yardımcılar', () => {
   });
   it('slug', () => {
     expect(slugify('Başkan Yardımcısı')).toBe('baskan-yardimcisi');
+  });
+});
+
+describe('etkinlik kısıtlamaları', () => {
+  it('e-postayı dönemler arası eşleşme için normalize eder', () => {
+    expect(normalizeRestrictionEmail('  Kisi@Example.ORG ')).toBe('kisi@example.org');
+  });
+
+  it('süresi dolmuş indeksi etkin saymaz', () => {
+    expect(restrictionIsCurrent({ expiresAt: ts('2026-10-01T00:00:00Z') }, Date.parse('2026-09-30T00:00:00Z'))).toBe(true);
+    expect(restrictionIsCurrent({ expiresAt: ts('2026-10-01T00:00:00Z') }, Date.parse('2026-10-02T00:00:00Z'))).toBe(false);
+  });
+});
+
+describe('dilekçe makam alanları', () => {
+  const fields = [
+    { key: 'konu', label: 'Konu', type: 'text' as const, required: true },
+    { key: 'uygundur', label: 'Uygundur', type: 'checkbox' as const, required: false },
+    { key: 'gerekce', label: 'Gerekçe', type: 'textarea' as const, required: false },
+  ];
+  const steps = [{ name: 'Denetleme Kurulu', roleIds: ['dk'], unitMode: 'branch' as const, unitId: null, responseFieldKeys: ['uygundur', 'gerekce'] }];
+
+  it('başvuru sahibi ile karar makamının alanlarını ayırır', () => {
+    expect(applicantFields(fields, steps).map((field) => field.key)).toEqual(['konu']);
+    expect(responseFieldsForStep(fields, steps[0]).map((field) => field.key)).toEqual(['uygundur', 'gerekce']);
+  });
+});
+
+describe('tüzük dosyası', () => {
+  it('PDF ve Word kabul eder; farklı türü ve 4 MB üstünü reddeder', () => {
+    expect(validateStatuteFile({ name: 'tuzuk.pdf', type: 'application/pdf', size: 1024 })).toBeNull();
+    expect(validateStatuteFile({ name: 'tuzuk.docx', type: '', size: 1024 })).toBeNull();
+    expect(validateStatuteFile({ name: 'tuzuk.txt', type: 'text/plain', size: 10 })).toContain('PDF');
+    expect(validateStatuteFile({ name: 'buyuk.pdf', type: 'application/pdf', size: 5 * 1024 * 1024 })).toContain('4 MB');
+  });
+});
+
+describe('başvuru ilanı yardımcıları', () => {
+  const call = {
+    unitId: 'cs', unitName: 'Computer Society', title: 'Güz ekip alımı', roleTitle: 'Gönüllü',
+    summary: 'Teknik etkinliklerde birlikte çalışacak ekip arkadaşları arıyoruz.', description: '', expectations: '',
+    capacity: 5, opensAt: ts('2026-09-01'), closesAt: ts('2026-10-01'), questions: [],
+  };
+
+  it('ilan tarihini ve tekil başvuru kimliğini belirler', () => {
+    expect(recruitmentCallIsOpen({ ...call, status: 'open' }, new Date('2026-09-15').getTime())).toBe(true);
+    expect(recruitmentCallIsOpen({ ...call, status: 'closed' }, new Date('2026-09-15').getTime())).toBe(false);
+    expect(applicationDocumentId('ilan-1', 'uye-1')).toBe('ilan-1__uye-1');
+  });
+
+  it('hatalı tarih ve seçeneksiz özel soruyu reddeder', () => {
+    expect(validateRecruitmentCall({ ...call, opensAt: call.closesAt, closesAt: call.opensAt })).toContain('bitişi');
+    expect(validateRecruitmentCall({ ...call, questions: [{ id: 'q1', label: 'Alan', type: 'choice', required: true, options: ['Tek'] }] })).toContain('iki seçenek');
+    expect(validateRecruitmentCall(call)).toBeNull();
   });
 });
 
@@ -121,6 +183,18 @@ describe('vTools L31 hazırlık paketi', () => {
     const broken = { ...event, vtools: { ...event.vtools!, guestAttendees: 11 } };
     expect(vtoolsMissingFields(broken, settings)).toContain('katılımcı toplamı uyuşmuyor');
   });
+
+  it('yalnız onaylanmış ve tarihli etkinlikleri iCalendar çıktısına alır', () => {
+    const approved = { ...event, id: 'evt-1', status: 'approved' as const };
+    const proposed = { ...event, id: 'evt-2', status: 'proposed' as const, name: 'Taslak' };
+    expect(isApprovedCalendarEvent(approved)).toBe(true);
+    expect(isApprovedCalendarEvent(proposed)).toBe(false);
+    const ics = approvedEventsIcs([approved, proposed], 'https://hub.example');
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('SUMMARY:Yapay Zekâ Günü');
+    expect(ics).toContain('URL:https://hub.example/etkinlikler/evt-1');
+    expect(ics).not.toContain('Taslak');
+  });
 });
 
 describe('erişim özeti', () => {
@@ -157,6 +231,13 @@ describe('erişim özeti', () => {
     ]);
     expect(v).toEqual(['uid:owner', 'unit:cs', 'role:cs__chair', 'role:cs__vice', 'role:branch__gs', 'role:techops__chair']);
   });
+
+  it('tek, tüm makamlar ve nisap için gerekli onay sayısını hesaplar', () => {
+    const base = { name: 'YK', roleIds: ['a', 'b', 'c', 'd'], unitMode: 'branch' as const, unitId: null };
+    expect(stepRequiredApprovals(base)).toBe(1);
+    expect(stepRequiredApprovals({ ...base, approvalMode: 'all' })).toBe(4);
+    expect(stepRequiredApprovals({ ...base, approvalMode: 'quorum', requiredApprovals: 3 })).toBe(3);
+  });
 });
 
 describe('Word şablon hattı', () => {
@@ -183,5 +264,95 @@ describe('Word şablon hattı', () => {
     expect(xml).toContain('Yapay Zekâ Günü');
     expect(xml).toContain('Ayşe Yılmaz');
     expect(xml).not.toContain('{etkinlik_adi}');
+
+    const stamped = await appendVerificationStamp(blob, {
+      url: 'https://hub.example/dogrula/ABCDEFGHJKMN',
+      code: 'ABCDEFGHJKMN',
+      documentNo: 'IEEEIKCU-2026-ETK-0001',
+      status: 'Onaylandı',
+      approved: true,
+    });
+    const stampedZip = new PizZip(await stamped.arrayBuffer());
+    expect(stampedZip.file('word/document.xml')!.asText()).toContain('ELEKTRONİK OLARAK ONAYLANMIŞTIR');
+    expect(stampedZip.file('word/document.xml')!.asText()).toContain('ABCDEFGHJKMN');
+    expect(stampedZip.file('word/_rels/document.xml.rels')!.asText()).toContain('hub-verification-1.png');
+    expect(stampedZip.file('word/media/hub-verification-1.png')).toBeTruthy();
+  });
+});
+
+describe('toplantı tutanağı ve harici veri', () => {
+  it('yapılandırılmış toplantıyı Word tutanağına dönüştürür', async () => {
+    const meeting: Meeting = {
+      unitId: 'cs', unitName: 'Computer Society', title: 'Aylık toplantı', meetingNo: 'CS-2026-04',
+      date: '2026-09-27', startTime: '19:00', endTime: '20:00', location: 'B-201', chairName: 'Ayşe', recorderName: 'Can',
+      attendeeUids: ['u1'], attendeeNames: ['Zeynep Kaya'], guestAttendees: '',
+      agenda: [{ id: 'a1', title: 'Etkinlik planı', notes: 'Salon ve konuşmacı görüşüldü.' }],
+      decisions: [{ id: 'd1', number: 'CS-04/1', text: 'Salon başvurusu yapılacak.', vote: 'Oy birliği', responsible: 'Can', dueDate: '2026-10-01' }],
+      generalNotes: '', nextMeetingDate: null, status: 'final', createdBy: 'u1', createdByName: 'Zeynep', createdAt: ts('2026-09-27'), updatedAt: ts('2026-09-27'),
+    };
+    const zip = new PizZip(await (await buildMeetingMinutes(meeting)).arrayBuffer());
+    const xml = zip.file('word/document.xml')!.asText();
+    expect(xml).toContain('TOPLANTI TUTANAĞI');
+    expect(xml).toContain('Salon başvurusu yapılacak.');
+    expect(xml).toContain('kesinleştirilmiştir');
+  });
+
+  it('Firestore zaman işaretlerini JSON düzenlemede türünü koruyarak taşır', () => {
+    const original = { name: 'Üye', updatedAt: ts('2026-09-27T12:00:00Z') };
+    const parsed = parseExternalData(stringifyExternalData(original));
+    expect(parsed.updatedAt).toBeInstanceOf(Timestamp);
+    expect((parsed.updatedAt as Timestamp).toDate().toISOString()).toBe('2026-09-27T12:00:00.000Z');
+  });
+
+  it('harici üyelik kaydındaki eksik ve eski alanları işaretler', () => {
+    const raw = { name: 'Üye', lifetime_spend: 3 };
+    const issues = externalPointUserIssues({
+      id: 'u1', name: 'Üye', surname: '', email: '', phone: '', department: '', approved: false, kvkkConsent: false,
+      technicalLocked: false, eventCount: 0, roleCount: 0, committeeCount: 0, points: 0, lifetimeEarned: 0, lifetimeSpent: 3, raw,
+    });
+    expect(issues).toEqual(expect.arrayContaining(['üyelik durumu eksik', 'güncel puan alanı eksik', 'eski harcama alanı kullanılıyor', 'KVKK onayı yok', 'e-posta eksik']));
+  });
+});
+
+describe('KVKK aydınlatma metni', () => {
+  it('doldurulmamış yer tutucu varken yayımlanamaz', () => {
+    const input = { title: 'KVKK', versionLabel: 'v1', body: RECRUITMENT_PRIVACY_TEMPLATE };
+    expect(privacyPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE)).toContain('[SAKLAMA SÜRESİ]');
+    expect(validatePrivacyNotice(input)).toContain('Doldurulmamış');
+    expect(privacyPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE)).toContain('[BAŞVURU E-POSTA ADRESİ]');
+    const filled = fillPlaceholders(RECRUITMENT_PRIVACY_TEMPLATE, 'Doldurulmuş değer');
+    expect(validatePrivacyNotice({ ...input, body: filled })).toBeNull();
+    expect(validatePrivacyNotice({ ...input, body: 'kısa' })).toContain('200');
+  });
+
+  it('her politika taslağı doldurulunca yayımlanabilir ve benzersiz kısa yola sahiptir', () => {
+    for (const policy of POLICIES) {
+      expect(privacyPlaceholders(policy.template).length).toBeGreaterThan(0);
+      expect(validatePrivacyNotice({ title: policy.defaultTitle, versionLabel: 'v1', body: fillPlaceholders(policy.template, 'x') })).toBeNull();
+    }
+    expect(new Set(POLICIES.map((policy) => policy.slug)).size).toBe(POLICIES.length);
+    expect(new Set(POLICIES.map((policy) => policy.field)).size).toBe(POLICIES.length);
+  });
+});
+
+describe('kullanma kılavuzu', () => {
+  it('bölüm kimlikleri benzersiz, her kitlenin bölümü ve her bölümün adımı var', () => {
+    expect(new Set(MANUAL.map((section) => section.id)).size).toBe(MANUAL.length);
+    for (const audience of Object.keys(MANUAL_AUDIENCES) as ManualAudience[]) expect(manualFor(audience).length).toBeGreaterThan(3);
+    for (const section of MANUAL) {
+      expect(section.audiences.length).toBeGreaterThan(0);
+      expect(section.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('arama Türkçe büyük/küçük harf duyarsızdır', () => {
+    expect(manualFor('all', 'İADE').some((section) => section.id === 'onaylar')).toBe(true);
+    expect(manualFor('member', 'kvkk metni yayımlanmadan')).toHaveLength(0);
+    expect(manualFor('admin', 'kvkk').some((section) => section.id === 'politikalar')).toBe(true);
+  });
+
+  it('Word belgesi üretilir', async () => {
+    const blob = await buildManualDocx(['member', 'manager', 'admin'], 'IEEE İKÇÜ');
+    expect(blob.size).toBeGreaterThan(5000);
   });
 });
