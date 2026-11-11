@@ -20,6 +20,7 @@ import { POLICIES, RECRUITMENT_PRIVACY_TEMPLATE, fillPlaceholders, privacyPlaceh
 import { MANUAL, MANUAL_AUDIENCES, manualFor, type ManualAudience } from '../lib/manual';
 import { buildManualDocx } from '../lib/manualDocx';
 import { normalizeRestrictionEmail, restrictionIsCurrent } from '../lib/eventRestrictions';
+import { conflictingBookings, groupBookings, roomNow, slotEnded, slotId, slotRange, validateBookingRequest, weekStart, type Room, type RoomSlot } from '../lib/rooms';
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
@@ -354,5 +355,57 @@ describe('kullanma kılavuzu', () => {
   it('Word belgesi üretilir', async () => {
     const blob = await buildManualDocx(['member', 'manager', 'admin'], 'IEEE İKÇÜ');
     expect(blob.size).toBeGreaterThan(5000);
+  });
+});
+
+describe('oda rezervasyonu', () => {
+  const room: Room & { id: string } = { id: 'oda', name: 'Kulüp Odası', location: '', note: '', openSlot: 16, closeSlot: 44, maxDaysAhead: 30, active: true };
+  const slot = (date: string, n: number, groupId: string, unitId = 'cs'): RoomSlot & { id: string } => ({
+    id: slotId('oda', date, n), roomId: 'oda', date, slot: n, groupId, unitId, unitName: unitId.toUpperCase(), kind: 'meeting',
+    title: 'Toplantı', note: '', byUid: 'u1', byName: 'U1', createdAt: null,
+  });
+  // 6 Ekim 2026 Salı 14:10 (Türkiye) = 11:10 UTC
+  const now = Date.parse('2026-10-06T11:10:00Z');
+
+  it('dilim kimliği ve saat biçimi', () => {
+    expect(slotId('oda', '2026-10-06', 9)).toBe('oda_2026-10-06_09');
+    expect(slotRange(20, 24)).toBe('10:00–12:00');
+    expect(slotRange(43, 48)).toBe('21:30–24:00');
+  });
+
+  it('oda saati tarayıcının saat diliminden bağımsızdır (UTC+3)', () => {
+    expect(roomNow(now)).toEqual({ date: '2026-10-06', slot: 28 });
+    expect(roomNow(Date.parse('2026-10-06T21:30:00Z'))).toEqual({ date: '2026-10-07', slot: 1 });
+    expect(slotEnded('2026-10-06', 27, now)).toBe(true);
+    expect(slotEnded('2026-10-06', 28, now)).toBe(false); // içinde bulunulan dilim henüz bitmedi
+    expect(slotEnded('2026-10-05', 40, now)).toBe(true);
+    expect(weekStart('2026-10-06')).toBe('2026-10-05');
+    expect(weekStart('2026-10-11')).toBe('2026-10-05');
+  });
+
+  it('dilimler rezervasyona birleşir; iptalle bölünen grup ayrı gösterilir', () => {
+    const bookings = groupBookings([
+      slot('2026-10-07', 21, 'a'), slot('2026-10-07', 20, 'a'), slot('2026-10-07', 23, 'a'),
+      slot('2026-10-07', 22, 'b', 'ras'), slot('2026-10-08', 20, 'a'),
+    ]);
+    expect(bookings.map((b) => [b.date, b.startSlot, b.endSlot, b.groupId])).toEqual([
+      ['2026-10-07', 20, 22, 'a'], ['2026-10-07', 22, 23, 'b'], ['2026-10-07', 23, 24, 'a'], ['2026-10-08', 20, 21, 'a'],
+    ]);
+    expect(conflictingBookings(bookings, 'oda', '2026-10-07', 22, 23).map((b) => b.groupId)).toEqual(['b']);
+    expect(conflictingBookings(bookings, 'oda', '2026-10-07', 24, 26)).toEqual([]); // bitişik aralık çakışmaz
+    expect(conflictingBookings(bookings, 'oda', '2026-10-07', 16, 30)).toHaveLength(3);
+    expect(conflictingBookings(bookings, 'baska', '2026-10-07', 16, 30)).toEqual([]);
+  });
+
+  it('istek sınırları: oda saatleri, geçmiş ve ileri tarih', () => {
+    const check = (date: string, startSlot: number, endSlot: number, r = room) => validateBookingRequest({ room: r, date, startSlot, endSlot }, now);
+    expect(check('2026-10-06', 28, 30)).toBeNull();
+    expect(check('2026-10-06', 27, 30)).toMatch(/Geçmiş/);
+    expect(check('2026-10-07', 14, 18)).toMatch(/08:00–22:00/);
+    expect(check('2026-10-07', 42, 46)).toMatch(/08:00–22:00/);
+    expect(check('2026-10-07', 22, 22)).toMatch(/Bitiş/);
+    expect(check('2026-11-04', 20, 22)).toBeNull(); // 29 gün sonrası
+    expect(check('2026-11-05', 20, 22)).toMatch(/30 gün/);
+    expect(check('2026-10-07', 20, 22, { ...room, active: false })).toMatch(/kapalı/);
   });
 });

@@ -43,6 +43,7 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0035](0035-harici-puan-sisteminde-uyelik-yonetimi.md) | Harici puan sisteminin üyelik durumu Hub'dan yönetilir | Kabul Edildi | ✓ | WP-01, WP-04, WP-11 |
 | [0036](0036-onaylanan-etkinliklerin-takvim-gorunumu.md) | Onaylanan etkinlikler canlı takvim görünümüne otomatik yansır | Kabul Edildi | ✓ | WP-06, WP-11 |
 | [0037](0037-donemler-arasi-etkinlik-kisitlamalari.md) | Etkinlik kısıtlamaları dönemlerden bağımsız ve denetlenebilir tutulur | Kabul Edildi | ✓ | WP-04, WP-06, WP-11 |
+| [0038](0038-oda-rezervasyonu-dilim-belgeleriyle-cakismasiz.md) | Oda rezervasyonu yarım saatlik dilim belgeleriyle çakışmasız tutulur | Kabul Edildi | ✓ | WP-05, WP-11 |
 | [0039](0039-site-firebase-yonetim-formlari.md) | Site komiteleri, duyuruları, etkinlikleri ve puan QR kayıtları Hub formlarıyla yönetilir | Yerini Aldı (0040) | ✓ | WP-01, WP-04, WP-11 |
 | [0040](0040-hub-site-otomasyonu-ve-actor-dogrulamasi.md) | Hub onayları ve duyuruları siteye aktarılır; puan QR’ını ACTOR doğrular | Kabul Edildi | ✓ | WP-01, WP-04, WP-06, WP-11 |
 | [0041](0041-tuzuk-surecleri-ve-yillik-aktiflik.md) | Tüzük dosyaları makam onayları, yıllık aktiflik ve süre takibiyle yürütülür | Kabul Edildi | ✓ | WP-04, WP-09, WP-10, WP-11 |

@@ -18,6 +18,7 @@ import {
   submitPetition,
   withdrawPetition,
 } from '../lib/petitions';
+import { RoomConflictError, addDays, cancelBooking, createBooking, groupBookings, roomNow, slotId, type Room, type RoomSlot } from '../lib/rooms';
 import { claimFounder, markSetupDone, seedOrganization } from '../lib/setup';
 import type { Access, Assignment, Petition, PetitionTemplate, PetitionVerification } from '../lib/types';
 
@@ -221,6 +222,35 @@ run('uçtan uca dilekçe akışı', () => {
     expect(board.size).toBeGreaterThanOrEqual(4);
     const mine = await getDocs(query(collection(db, 'tasks'), where('assigneeUid', '==', uids.vol)));
     expect(mine.size).toBe(4);
+  });
+
+  it('oda rezervasyonu: komite başkanı alır, çakışan istek reddedilir, iptal edilen saat yeniden alınır', async () => {
+    const date = addDays(roomNow().date, 1);
+    const request = (startSlot: number, endSlot: number, unitId: string, unitName: string, room: Room & { id: string }) => ({
+      room, date, startSlot, endSlot, unitId, unitName, kind: 'interview' as const, title: 'Mülakat', note: '', byName: 'Test',
+    });
+    await as('cs');
+    const room = { id: 'kulup-odasi', ...((await getDoc(doc(db, 'rooms', 'kulup-odasi'))).data() as Room) };
+    expect(room.active).toBe(true);
+    await createBooking(request(20, 24, 'cs', 'Computer Society', room)); // 10:00–12:00
+    await expect(createBooking(request(20, 21, 'ras', 'RAS', room))).rejects.toThrow(); // başka birim adına alamaz
+
+    await as('baskan'); // kurucu yönetici her birim adına deneyebilir; dolu saat yine de alınamaz
+    await expect(createBooking(request(22, 26, 'ras', 'RAS', room))).rejects.toBeInstanceOf(RoomConflictError);
+    expect((await getDoc(doc(db, 'roomSlots', slotId(room.id, date, 24)))).exists()).toBe(false);
+
+    await as('uye');
+    await expect(createBooking(request(30, 32, 'cs', 'Computer Society', room))).rejects.toThrow();
+    const seen = await getDocs(query(collection(db, 'roomSlots'), where('date', '==', date)));
+    const bookings = groupBookings(seen.docs.map((d) => ({ id: d.id, ...(d.data() as RoomSlot) })));
+    expect(bookings).toHaveLength(1);
+    expect([bookings[0].startSlot, bookings[0].endSlot, bookings[0].unitId]).toEqual([20, 24, 'cs']);
+    await expect(cancelBooking(bookings[0])).rejects.toThrow(); // üye iptal edemez
+
+    await as('cs');
+    expect(await cancelBooking(bookings[0])).toBe(4);
+    await as('baskan');
+    await createBooking(request(22, 26, 'ras', 'RAS', room));
   });
 
   it('görev sonlandırılınca onay yetkisi hemen kalkar', async () => {

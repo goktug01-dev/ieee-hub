@@ -58,6 +58,8 @@ flowchart LR
 | `eventRestrictionIndex/{emailHash}` | Açık kimlik ve gerekçe taşımayan katılımcı koruma indeksi | Aktif üye tekil `get`; yalnız `members.manage` liste | `members.manage`; tam kayıtla aynı işlemde |
 | `secretaryLedger/{id}` | Toplantı, karar, gelen-giden evrak, takip ve not defteri | `secretary.ledger.manage` | `secretary.ledger.manage` |
 | `meetings/{id}` | Birim toplantısı; katılım, gündem, görüşme, karar ve takip maddeleri | Birim üyeleri ve üst yetkililer | Birim toplantı/yönetim yetkilisi; kesinleşen kayıt kilitli |
+| `rooms/{id}` | Rezervasyona açılan oda; kullanım saatleri ve ileri tarih sınırı | Aktif üye | `org.manage`; silinmez, kapatılır |
+| `roomSlots/{oda}_{tarih}_{dilim}` | Odanın alınmış yarım saatlik dilimi; kimlik tekil olduğundan çakışma oluşamaz ([ADR-0038](../adr/0038-oda-rezervasyonu-dilim-belgeleriyle-cakismasiz.md)) | Aktif üye | Birimde `unit.room.reserve` (varsayılan: komite başkanı); güncellenmez, iptal = silme |
 | `settings/boards` | YK/İK adları, tüzükteki tam sayılar ve oy hakkı veren görev koltukları | Aktif üye | `org.manage` |
 | `boardVotes/{id}` + `ballots/{uid}` | Dondurulmuş kurul listesiyle açık oylama ve kişiye ait pusula | İlgili kurul üyeleri ve kurul yöneticisi | Kurul yöneticisi; pusulayı yalnız sahibi ve geçerli rolü varken |
 | `boardDecisions/{id}` | Numaralı, kaynak bağlantılı YK/İK/ortak karar defteri | Görünürlük politikasına göre aktif üyeler/kurul | Kurul yöneticisi; yalnız oluşturma |

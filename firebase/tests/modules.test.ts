@@ -49,7 +49,7 @@ async function seed() {
       ...baseAccess('chair'),
       roleKeys: { 'cs__birim-baskani': FAR },
       tokens: ['uid:chair', 'role:cs__birim-baskani', 'unit:cs'],
-      unitPerms: { 'cs__unit.manage': FAR, 'cs__unit.tasks.manage': FAR, 'cs__unit.events.propose': FAR },
+      unitPerms: { 'cs__unit.manage': FAR, 'cs__unit.tasks.manage': FAR, 'cs__unit.events.propose': FAR, 'cs__unit.room.reserve': FAR },
       memberOf: { cs: FAR },
     });
     await setDoc(doc(db, 'access', 'coord'), {
@@ -673,5 +673,125 @@ describe('kurul oylamaları ve karar defteri', () => {
     });
     await assertSucceeds(getDoc(doc(ctx('chair'), 'meetings', 'ik1')));
     await assertFails(getDoc(doc(ctx('stranger'), 'meetings', 'ik1')));
+  });
+});
+
+describe('oda rezervasyonu', () => {
+  // Tarih ve dilimler oda saatidir (UTC+3).
+  const day = (offset: number) => new Date(Date.now() + 3 * 3600e3 + offset * 86400e3).toISOString().slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const slotRef = (uid: string, date: string, slot: number, roomId = 'oda') => doc(ctx(uid), 'roomSlots', `${roomId}_${date}_${pad(slot)}`);
+  const slotData = (uid: string, date: string, slot: number, extra: Record<string, unknown> = {}) => ({
+    roomId: 'oda', date, slot, groupId: 'g1', unitId: 'cs', unitName: 'Computer Society', kind: 'interview',
+    title: 'Mülakat', note: '', byUid: uid, byName: uid, createdAt: serverTimestamp(), ...extra,
+  });
+  const book = (uid: string, date: string, from: number, to: number, extra: Record<string, unknown> = {}) => {
+    const db = ctx(uid);
+    const batch = writeBatch(db);
+    for (let slot = from; slot < to; slot++) {
+      batch.set(doc(db, 'roomSlots', `oda_${date}_${pad(slot)}`), slotData(uid, date, slot, extra));
+    }
+    return batch.commit();
+  };
+  const roomData = (uid: string, extra: Record<string, unknown> = {}) => ({
+    name: 'Kulüp Odası', location: 'Merkezi Derslik', note: '', openSlot: 16, closeSlot: 44, maxDaysAhead: 60,
+    active: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid, ...extra,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      for (const u of ['rasChair', 'csVice']) {
+        await setDoc(doc(db, 'members', u), { uid: u, status: 'active', displayName: u, createdAt: Timestamp.now() });
+      }
+      await setDoc(doc(db, 'access', 'rasChair'), {
+        ...baseAccess('rasChair'), unitPerms: { 'ras__unit.manage': FAR, 'ras__unit.room.reserve': FAR }, memberOf: { ras: FAR },
+      });
+      // Başkan yardımcısı: birimi yönetir ama oda rezervasyonu izni yoktur.
+      await setDoc(doc(db, 'access', 'csVice'), { ...baseAccess('csVice'), unitPerms: { 'cs__unit.manage': FAR }, memberOf: { cs: FAR } });
+      await setDoc(doc(db, 'rooms', 'oda'), {
+        name: 'Kulüp Odası', location: '', note: '', openSlot: 16, closeSlot: 44, maxDaysAhead: 60, active: true,
+        createdAt: Timestamp.now(), updatedAt: Timestamp.now(), updatedBy: 'orgAdmin',
+      });
+      await setDoc(doc(db, 'rooms', 'kapali'), {
+        name: 'Kapalı oda', location: '', note: '', openSlot: 16, closeSlot: 44, maxDaysAhead: 60, active: false,
+        createdAt: Timestamp.now(), updatedAt: Timestamp.now(), updatedBy: 'orgAdmin',
+      });
+    });
+  });
+
+  it('odayı yalnız organizasyon yöneticisi tanımlar; oda silinmez', async () => {
+    await assertSucceeds(setDoc(doc(ctx('orgAdmin'), 'rooms', 'yeni'), roomData('orgAdmin')));
+    await assertFails(setDoc(doc(ctx('chair'), 'rooms', 'yeni2'), roomData('chair')));
+    await assertFails(setDoc(doc(ctx('orgAdmin'), 'rooms', 'bozuk'), roomData('orgAdmin', { openSlot: 30, closeSlot: 20 })));
+    await assertSucceeds(updateDoc(doc(ctx('orgAdmin'), 'rooms', 'yeni'), { active: false, updatedAt: serverTimestamp(), updatedBy: 'orgAdmin' }));
+    await assertFails(deleteDoc(doc(ctx('orgAdmin'), 'rooms', 'yeni')));
+    await assertSucceeds(getDoc(doc(ctx('csVol'), 'rooms', 'oda')));
+  });
+
+  it('yalnız komite başkanı kendi birimi adına rezervasyon yapar', async () => {
+    const d = day(2);
+    await assertSucceeds(book('chair', d, 20, 24));
+    for (const uid of ['csVice', 'coord', 'csVol', 'stranger', 'gs', 'orgAdmin']) {
+      await assertFails(book(uid, d, 30, 31));
+    }
+    await assertFails(book('chair', d, 30, 31, { unitId: 'ras' })); // başka birim adına
+    await assertFails(book('chair', d, 30, 31, { byUid: 'rasChair' })); // başkası adına
+    await assertFails(book('chair', d, 30, 31, { kind: 'parti' }));
+    await assertFails(book('chair', d, 30, 31, { title: '' }));
+    await assertSucceeds(getDocs(collection(ctx('csVol'), 'roomSlots'))); // takvimi her aktif üye görür
+    await assertFails(getDocs(collection(env.unauthenticatedContext().firestore() as unknown as Firestore, 'roomSlots')));
+  });
+
+  it('dolu dilim ikinci kez alınamaz; çakışan rezervasyonun hiçbir dilimi yazılmaz', async () => {
+    const d = day(2);
+    await assertSucceeds(book('chair', d, 20, 24)); // 10:00–12:00
+    await assertFails(book('rasChair', d, 22, 26, { unitId: 'ras', groupId: 'g2' })); // 11:00–13:00 çakışır
+    const leaked = await getDoc(slotRef('rasChair', d, 24));
+    if (leaked.exists()) throw new Error('çakışan rezervasyonun bir dilimi yazıldı');
+    await assertFails(book('chair', d, 23, 24, { groupId: 'g3' })); // kendi dilimini de ezemez
+    await assertFails(updateDoc(slotRef('chair', d, 20), { title: 'Değişti' }));
+    await assertSucceeds(book('rasChair', d, 24, 26, { unitId: 'ras', groupId: 'g2' })); // bitişik aralık serbest
+    await assertSucceeds(book('rasChair', day(3), 20, 24, { unitId: 'ras', groupId: 'g4' })); // başka gün serbest
+  });
+
+  it('kimlik, saat ve tarih sınırları kurallarda denetlenir', async () => {
+    const d = day(2);
+    await assertFails(setDoc(doc(ctx('chair'), 'roomSlots', `oda_${d}_21`), slotData('chair', d, 20))); // kimlik ≠ dilim
+    await assertFails(setDoc(doc(ctx('chair'), 'roomSlots', 'serbest-kimlik'), slotData('chair', d, 20)));
+    await assertFails(book('chair', d, 15, 16)); // açılıştan önce
+    await assertFails(book('chair', d, 44, 45)); // kapanıştan sonra
+    await assertFails(book('chair', day(-1), 20, 21)); // geçmiş gün
+    await assertFails(book('chair', day(61), 20, 21)); // ufkun ötesi
+    await assertSucceeds(book('chair', day(59), 20, 21));
+    await assertFails(setDoc(doc(ctx('chair'), 'roomSlots', 'oda_2026-13-45_20'), slotData('chair', '2026-13-45', 20)));
+    await assertFails(setDoc(slotRef('chair', d, 20, 'kapali'), slotData('chair', d, 20, { roomId: 'kapali' }))); // pasif oda
+    await assertFails(setDoc(slotRef('chair', d, 20, 'yok'), slotData('chair', d, 20, { roomId: 'yok' }))); // olmayan oda
+    await assertFails(setDoc(slotRef('chair', d, 20), { ...slotData('chair', d, 20), approved: true })); // fazladan alan
+  });
+
+  it('tam günlük rezervasyon tek batch ile yazılır', async () => {
+    await assertSucceeds(book('chair', day(2), 16, 44)); // 08:00–22:00, 28 dilim
+  });
+
+  it('iptal: sahibi, birimin başkanı veya organizasyon yöneticisi; bitmiş dilim geçmişte kalır', async () => {
+    const d = day(2);
+    await assertSucceeds(book('chair', d, 20, 24));
+    await assertFails(deleteDoc(slotRef('rasChair', d, 20)));
+    await assertFails(deleteDoc(slotRef('csVice', d, 20)));
+    await assertSucceeds(deleteDoc(slotRef('chair', d, 20)));
+    await assertSucceeds(deleteDoc(slotRef('orgAdmin', d, 21)));
+    await assertSucceeds(book('rasChair', d, 20, 22, { unitId: 'ras', groupId: 'g2' })); // boşalan dilim yeniden alınır
+
+    const past = day(-2);
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'roomSlots', `oda_${past}_20`), { ...slotData('chair', past, 20), createdAt: Timestamp.now() });
+      // Önceki başkanın gelecekteki rezervasyonu: birimin yeni başkanı iptal edebilir.
+      await setDoc(doc(db, 'roomSlots', `oda_${d}_30`), { ...slotData('oldChair', d, 30), createdAt: Timestamp.now() });
+    });
+    await assertFails(deleteDoc(slotRef('chair', past, 20)));
+    await assertSucceeds(deleteDoc(slotRef('orgAdmin', past, 20)));
+    await assertSucceeds(deleteDoc(slotRef('chair', d, 30)));
   });
 });

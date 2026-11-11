@@ -55,6 +55,7 @@ import {
   IconPackage,
   IconBan,
   IconBriefcase2,
+  IconDoor,
 } from '@tabler/icons-react';
 import { Suspense, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
@@ -116,6 +117,7 @@ export function AppLayout() {
         { to: '/surecler', label: 'Tüzük süreçleri', icon: <IconShieldLock size={18} /> },
         ...(siteQrController(access) ? [{ to: '/actor', label: 'ACTOR · Puan ve QR', icon: <IconShieldLock size={18} /> }] : []),
         { to: '/toplantilar', label: 'Toplantılar', icon: <IconUsersGroup size={18} /> },
+        { to: '/oda-rezervasyonu', label: 'Oda rezervasyonu', icon: <IconDoor size={18} /> },
         { to: '/iletisim', label: 'İletişim', icon: <IconSpeakerphone size={18} /> },
         { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
         ...(can('inventory.manage') || can('finance.read') || can('finance.manage') || can('secretary.ledger.manage') || can('work.manageAll') ? [{ to: '/demirbas', label: 'Demirbaş ve zimmet', icon: <IconPackage size={18} /> }] : []),
