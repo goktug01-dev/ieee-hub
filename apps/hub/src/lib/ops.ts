@@ -30,6 +30,7 @@ export { parseCsv, previewParticipantsCsv, type CsvPreview } from './heptacert';
 import type { HubEvent, Participant, Task, VolunteerApplication } from './opsTypes';
 import type { OrgSettings, Term } from './types';
 import { DEFAULT_ORG_SETTINGS } from './workflow';
+import { queueMail } from './mail';
 
 function me() {
   const u = auth.currentUser!;
@@ -51,6 +52,7 @@ export async function createTask(input: NewTask, unitShortCode: string): Promise
     tx.set(cRef, { value });
     tx.set(ref, {
       ...input,
+      mailAssignmentKey: crypto.randomUUID(),
       code: `${unitShortCode}-${String(value).padStart(4, '0')}`,
       createdBy: who.uid,
       createdByName: who.name,
@@ -58,14 +60,21 @@ export async function createTask(input: NewTask, unitShortCode: string): Promise
       updatedAt: serverTimestamp(),
       completedAt: input.status === 'done' ? serverTimestamp() : null,
     });
+    queueMail(tx, 'task', ref.id);
   });
   return ref.id;
 }
 
 export async function updateTask(id: string, patch: Partial<Task>, prevStatus?: string) {
-  const extra: Record<string, unknown> = { updatedAt: serverTimestamp() };
-  if (patch.status && patch.status !== prevStatus) extra.completedAt = patch.status === 'done' ? serverTimestamp() : null;
-  await updateDoc(doc(db, 'tasks', id), { ...patch, ...extra });
+  await runTransaction(db, async tx => {
+    const target = doc(db, 'tasks', id);
+    const current = (await tx.get(target)).data() as Task;
+    const extra: Record<string, unknown> = { updatedAt: serverTimestamp() };
+    if (patch.status && patch.status !== (prevStatus ?? current.status)) extra.completedAt = patch.status === 'done' ? serverTimestamp() : null;
+    if (patch.assigneeUid && patch.assigneeUid !== current.assigneeUid) extra.mailAssignmentKey = crypto.randomUUID();
+    tx.update(target, { ...patch, ...extra });
+    queueMail(tx, 'task', id);
+  });
 }
 
 export async function addTaskComment(taskId: string, text: string) {

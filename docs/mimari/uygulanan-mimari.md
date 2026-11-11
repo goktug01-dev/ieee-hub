@@ -137,6 +137,8 @@ Kesinleştirme; seçmen/nisap, oy toplamları, kazananlar ve eşitlik çözüm n
 
 ## 7. Ücretsiz kota bütçesi (Spark)
 
+E-posta istisnası (ADR-0043): Hub, kaynak yazımıyla aynı işlemde `mailSignals/{kind}_{id}` yazar. Ayrı Firebase Auth kimliğiyle kurallara bağlı GitHub Actions yürütücüsü yalnız sinyali bulunan kaynakları ve güncel alıcı yetkilerini okur; Gmail SMTP üzerinden gönderir. Kaynak, rol veya üye belgesini değiştiremez. `settings/mail` yapılandırma; `mailRecipients/{uid}` doğrulanmış adrese bağlı tercihler; `mailDeliveries/{sha256}` tekrar engeli/teslim durumu; `mailDaily/{Türkiye tarihi}` deneme kotası; `mailHealth/current` son çalışma özetidir. Normal üye yalnız kendi tercihini okur/yazar; yönetici servis ve makbuzları izler. Gizli bilgiler GitHub Secrets'tadır. Sinyaller durum + `readyAt` indeksiyle sınırlı sorgulanır; boş kuyrukta tüm geçmiş veya üye listesi taranmaz. [Kurulum ve sınırlar](../e-posta-kurulumu.md).
+
 | Kaynak | Günlük kota | Tahmini kullanım (100 aktif üye) |
 |---|---|---|
 | Firestore okuma | 50.000 | ~5.000–10.000 (yerel önbellek + canlı dinleyiciler) |

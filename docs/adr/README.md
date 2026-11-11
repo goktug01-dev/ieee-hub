@@ -22,7 +22,7 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0014](0014-evrak-numaralandirma.md) | Evrak numarası gönderimde, sunucuda, seri bazlı atanır | Önerildi | ✓ | WP-12 |
 | [0015](0015-pdf-uretimi-ve-dogrulama.md) | PDF sunucuda üretilir, QR ile doğrulanır | Yerini Aldı (0021) | — | WP-12 |
 | [0016](0016-heptacert-aktarimi.md) | HeptaCert aktarımı: önce CSV, backend hazır olunca API | Önerildi | — | WP-06 |
-| [0017](0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) | Ücretsiz Spark planı; sunucu kodu yok, Security Rules tek güvenilir katman | Kabul Edildi | ✓ | Tümü |
+| [0017](0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) | Ücretsiz Spark planı; sunucu kodu yok, Security Rules tek güvenilir katman | Kısmen Yerini Aldı (0043, yalnız mail) | ✓ | Tümü |
 | [0018](0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md) | Firestore bölgesi europe-west1; Hub üyeliği kendi kaydını tutar | Kabul Edildi | ✓ | WP-04, WP-11 |
 | [0019](0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md) | Organizasyon, roller, dönemler ve seçimler arayüzden düzenlenir | Kabul Edildi | ✓ | WP-10, WP-11 |
 | [0020](0020-dilekce-sablonlari-word-tabanli.md) | Dilekçe şablonları Word (.docx) tabanlıdır; yüklenir veya sistemde oluşturulur | Kabul Edildi | — | WP-12 |
@@ -48,5 +48,6 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0040](0040-hub-site-otomasyonu-ve-actor-dogrulamasi.md) | Hub onayları ve duyuruları siteye aktarılır; puan QR’ını ACTOR doğrular | Kabul Edildi | ✓ | WP-01, WP-04, WP-06, WP-11 |
 | [0041](0041-tuzuk-surecleri-ve-yillik-aktiflik.md) | Tüzük dosyaları makam onayları, yıllık aktiflik ve süre takibiyle yürütülür | Kabul Edildi | ✓ | WP-04, WP-09, WP-10, WP-11 |
 | [0042](0042-telefona-kurulabilen-web-uygulamasi.md) | Hub telefona kurulabilen web uygulaması olarak sunulur | Kabul Edildi | ✓ | WP-10, WP-11 |
+| [0043](0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md) | Mail mevcut GitHub Actions ve Gmail ile gönderilir; Firebase Spark korunur | Kabul Edildi | ✓ | WP-10, WP-11, WP-12 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

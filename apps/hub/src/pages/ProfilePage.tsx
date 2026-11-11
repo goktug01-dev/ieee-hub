@@ -10,6 +10,7 @@ import { useCollection } from '../lib/hooks';
 import { useOrg } from '../lib/org';
 import type { Assignment } from '../lib/types';
 import { PERMISSION_MAP, type PermissionId } from '../lib/permissions';
+import { MailPreferences } from '../components/MailPreferences';
 
 export function ProfilePage() {
   const { member, user, access } = useAuth();
@@ -129,6 +130,7 @@ export function ProfilePage() {
           </Stack>
         </Grid.Col>
       </Grid>
+      <MailPreferences />
     </Stack>
   );
 }

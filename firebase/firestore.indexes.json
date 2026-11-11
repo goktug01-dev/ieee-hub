@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "mailSignals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "readyAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "petitions",
       "queryScope": "COLLECTION",
       "fields": [

@@ -67,6 +67,7 @@ import type { PermissionId } from '../lib/permissions';
 import { useUnitScope } from '../lib/unitScope';
 import { siteQrController } from '../lib/siteWorkflow';
 import { AppInstallButton } from './AppInstall';
+import { MailRegistration } from './MailPreferences';
 
 interface NavItem {
   to: string;
@@ -188,6 +189,7 @@ export function AppLayout() {
       navbar={{ width: 272, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding={{ base: 'md', sm: 'xl' }}
     >
+      <MailRegistration />
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
