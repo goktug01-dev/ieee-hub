@@ -134,7 +134,7 @@ export function AssignmentsPage() {
                 return (
                   <Table.Tr key={a.id}>
                     <Table.Td fw={500}>{a.memberName}</Table.Td>
-                    <Table.Td>{a.roleName}</Table.Td>
+                    <Table.Td>{a.roleName}<Text size="xs" c="dimmed">{a.unitId}__{a.roleId}</Text></Table.Td>
                     <Table.Td>{unitName(a.unitId)}</Table.Td>
                     <Table.Td>
                       <Text size="sm">

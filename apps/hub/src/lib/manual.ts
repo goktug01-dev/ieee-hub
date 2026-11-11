@@ -67,6 +67,10 @@ export const MANUAL: ManualSection[] = [
     summary: 'Tüzükteki kararlar makam imzaları, kurul oylamaları ve değişmez işlem geçmişiyle takip edilir. Süre uyarıları kendi başına karar oluşturmaz.',
     steps: [
       'İlk kurulumda organizasyon yöneticisi makam rol eşlemelerini, kurul koltuklarını, resmî tatilleri ve süreleri kontrol ederek süreç politikasını yayımlar. Açık dosyalar oluşturulduğu sürüme bağlı kalır.',
+      'Kurulumda her makam için listeden rol seçin. Aynı adlı kayıtları rol anahtarı ve altında gösterilen aktif görevlilerle ayırt edin. Eksik tüzük rollerini ekle mevcut aynı adlı kaydı değiştirmez veya çoğaltmaz; görevli atamaz. Eksik/pasif rol eşlemesi düzeltilmeden yayımlama açılmaz.',
+      'Görev atamalarını aç ve Kurul ayarlarını aç bağlantıları ayrı sekmede açılır. Kurul koltukları otomatik değiştirilmez. Aktif görevlisi olmayan makamda bekleyen imza ilerlemez; ilgili resmî görev ayrıca atanmalıdır.',
+      'İş günü takvimine tam gün resmî tatilleri YYYY-MM-DD olarak girin. Yarım gün desteği yoktur. Süre ve oranlar ile aşama süreleri açılır bölümlerdedir; aşama süresi 0 ise süre sınırı hesaplanmaz, onay zorunluluğu sürer. Fon hesaplayıcısı kasa kaydı oluşturmaz.',
+      'Eşlemeleri gözden geçir ve yayımla ile makamları son kez inceleyip Tüzük süreç politikasını yayımla düğmesine basın. Bu işlem bütçe ve bazı seçim/görev işlemlerinde tüzük kontrollerini etkinleştirir; kişi ataması veya tüzük metni yayını yapmaz.',
       'Süreç dosyaları › Yeni süreç / başvuru üzerinden türü, gerekçeyi, ilgili kişiyi ve birimi belirtin. Gerekli makamlar sırayla belge veya kesinleşmiş Hub oylaması kimliğiyle görüşlerini kaydeder.',
       'Tedbir son onayla Hub erişimine uygulanır. Savunma ve inceleme takip dosyası açılır; erişimi kapatılan üye /itirazlar adresinden kendi dosyasına ulaşır. Gizli başvuruyu yalnız başvuran, Denetleme ve Danışman okuyabilir.',
       'Aktif üyelik ve yıl sekmesinde baraj ve harcama oranı onaylı öneriyle aynı olarak yayımlanır. ACTOR yıllık XP kaydını doğrular; farklı bir Denetleme görevlisi kesinleştirir. Harcanabilir bakiye oy hakkını azaltmaz.',
@@ -484,6 +488,7 @@ export const MANUAL: ManualSection[] = [
       'Komiteler ve birimler sayfasında birim ekleyin: ad, kısa kod (evrak ve raporlarda görünür), tür, üst birim ve sıra.',
       'Kullanılmayan birimi “Aktif” işaretini kaldırarak pasifleştirin.',
       'Roller ve yetkiler sayfasında rolün adını, açıklamasını ve yetkilerini düzenleyin.',
+      'Aynı adlı rolleri karttaki Rol kimliği ile ayırt edin. Görev atamaları tablosunda da birim__rol anahtarı gösterilir; isim benzerliği kayıtların aynı olduğunu göstermez.',
     ],
     tips: ['Dilekçe onay zincirleri rollere göre kurulduğundan rol değişikliği onay akışlarını etkiler.'],
   },
