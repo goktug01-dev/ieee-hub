@@ -71,6 +71,7 @@ export function RolesPage() {
       <Group justify="space-between" wrap="nowrap" align="flex-start">
         <div style={{ minWidth: 0 }}>
           <Text fw={600}>{r.name}</Text>
+          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>Rol kimliği: {r.id}</Text>
           {r.description && (
             <Text size="xs" c="dimmed" lineClamp={2}>
               {r.description}
