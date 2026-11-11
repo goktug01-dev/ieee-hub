@@ -21,6 +21,7 @@
     "deploy": "npm run build && firebase deploy --only hosting,firestore",
     "emulators:empty": "firebase emulators:start --only auth,firestore --project demo-ieee-hub",
     "demo:rebuild": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --export-on-exit=firebase/demo-data \"npm run seed -w apps/hub\"",
-    "smoke": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke.mjs\""
+    "smoke": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke.mjs\"",
+    "smoke:pwa": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-pwa.mjs\""
   }
 }

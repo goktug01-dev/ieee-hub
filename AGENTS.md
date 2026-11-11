@@ -2,6 +2,14 @@
 
 Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-09-27.
 
+## Güncel devam noktası (2026-11-11)
+
+- Son commit `30d1cf7` (2026-09-29): etkinlik takvimi ve dönemler arası etkinlik kısıtlamaları. Aşağıdaki eski §5 notu güncel Git durumunu yansıtmaz.
+- Çalışma ağacında önceki oturumdan commitlenmemiş Hub–site otomasyonu, ACTOR puan/QR doğrulaması ve tüzük/yıllık aktiflik çalışmaları var (ADR-0039–0041). Bunları silmeyin veya yeni PWA değişikliğiyle karıştırmayın; bu oturumda canlıya dağıtılmadı.
+- Telefona kurulabilen PWA desteği eklendi (ADR-0042): giriş, kullanıcı menüsü ve Yardım üzerinden kurulum; yalnız statik bağlantısız ekranını saklayan üretim worker'ı. `npm run smoke:pwa` demo emülatörleriyle ayrı üretim derlemesini sınar; normal `dist` çıktısını değiştirmez.
+- Kullanıcı e-posta istiyor, ancak **harici hizmet eklemeden önce seçenekleri konuşmayı seçti**. Mail/Blaze/harici sunucu için karar verilmedi; §2.1 ve ADR-0017 geçerli. Kurulum e-posta veya push sistemi değildir.
+- Bu oturumda 59 birim testi ve PWA tarayıcı kontrolü geçti; üretim derlemesi temiz. Önceden değişmiş Firestore/RTDB kurallarının tüm emülatör testleri bu oturumda yeniden çalıştırılmadı. Gerçek telefonda kurulum ve canlı dağıtım ayrıca yapılacak.
+
 ## 1. Proje bir bakışta
 
 IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portalı: e-dilekçe ve rol bazlı onay, görev/proje, etkinlik, iletişim, sponsorluk, bütçe, raporlar, organizasyon (birim, rol, dönem, seçim), envanter ve devir. Dayanak: TechOps Dijital Dönüşüm Bildirgesi (IEEE/240826/SÜ/22). Tasarım: [docs/](docs/README.md); güncel mimari: [docs/mimari/uygulanan-mimari.md](docs/mimari/uygulanan-mimari.md).

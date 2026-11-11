@@ -15,6 +15,10 @@ import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
 import './lib/format';
 import { theme } from './theme';
+import { AppInstallProvider } from './components/AppInstall';
+import { registerAppWorker } from './lib/pwa';
+
+registerAppWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -22,11 +26,13 @@ createRoot(document.getElementById('root')!).render(
       <DatesProvider settings={{ locale: 'tr', firstDayOfWeek: 1 }}>
         <ModalsProvider labels={{ confirm: 'Onayla', cancel: 'Vazgeç' }}>
           <Notifications position="top-right" />
-          <BrowserRouter>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </BrowserRouter>
+          <AppInstallProvider>
+            <BrowserRouter>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </BrowserRouter>
+          </AppInstallProvider>
         </ModalsProvider>
       </DatesProvider>
     </MantineProvider>

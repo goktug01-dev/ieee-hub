@@ -65,6 +65,7 @@ import { SectionLoader } from './ui';
 import type { PermissionId } from '../lib/permissions';
 import { useUnitScope } from '../lib/unitScope';
 import { siteQrController } from '../lib/siteWorkflow';
+import { AppInstallButton } from './AppInstall';
 
 interface NavItem {
   to: string;
@@ -240,7 +241,9 @@ export function AppLayout() {
                 <Menu.Item component={Link} to="/profil" leftSection={<IconUserCircle size={16} />}>
                   Profilim ve görevlerim
                 </Menu.Item>
-                <Menu.Divider />                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut()}>
+                <Menu.Divider />
+                <AppInstallButton menu />
+                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut()}>
                   Çıkış yap
                 </Menu.Item>
               </Menu.Dropdown>

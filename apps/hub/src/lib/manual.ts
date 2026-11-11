@@ -24,6 +24,20 @@ export interface ManualSection {
 
 export const MANUAL: ManualSection[] = [
   {
+    id: 'uygulama-kurulumu',
+    audiences: ['member', 'manager', 'admin'],
+    title: 'Telefon veya bilgisayara uygulama kurulumu',
+    where: 'Giriş ekranı · sağ üst kullanıcı menüsü · Yardım › Uygulamayı yükle',
+    summary: 'Hub, ana ekranınıza eklenerek ayrı uygulama penceresinde kullanılabilir. Güncel veriler ve işlemler internet bağlantısı gerektirir.',
+    steps: [
+      'Uygulamayı yükle düğmesini açın. Tarayıcı destekliyorsa “Bu cihaza yükle” ile kurulumu başlatın.',
+      'Android’de Chrome veya Edge menüsünden “Uygulamayı yükle” / “Ana ekrana ekle” seçeneğini de kullanabilirsiniz.',
+      'iPhone veya iPad’de adresi Safari’de açın; Paylaş › Ana Ekrana Ekle › Ekle adımlarını izleyin. Varsa “Web Uygulaması Olarak Aç” seçeneği açık kalsın.',
+      'Ana ekranınızdaki simgeyle açın ve Hub hesabınızla giriş yapın. İnternet kesilirse bağlantıyı düzeltip yeniden deneyin.',
+    ],
+    tips: ['Kurulum e-posta veya telefon bildirim izni vermez. Servis çalışanı yalnız bağlantı uyarısını saklar; kişisel kayıtları ve dilekçeleri önbelleğine almaz.'],
+  },
+  {
     id: 'tuzuk-surecleri',
     audiences: ['member', 'manager', 'admin'],
     title: 'Tüzük süreçleri ve yıllık aktiflik',

@@ -28,6 +28,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { PolicyLinks } from '../../components/PolicyLinks';
+import { AppInstallButton } from '../../components/AppInstall';
 import { ErrorAlert, friendlyError, notifySuccess } from '../../components/ui';
 import { auth, useEmulators } from '../../firebase';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../lib/demo';
@@ -95,6 +96,7 @@ export function LoginPage() {
           </Stack>
 
           <ErrorAlert error={error} />
+          <AppInstallButton />
 
           <Button leftSection={<IconBrandGoogle size={18} />} variant="default" size="md" onClick={google} loading={busy}>
             Google ile devam et
