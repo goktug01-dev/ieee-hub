@@ -1,14 +1,16 @@
 # AI devir notu — IEEE İKÇÜ Hub
 
-Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-09-27.
+Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-11-11.
 
 ## Güncel devam noktası (2026-11-11)
 
-- Son commit `30d1cf7` (2026-09-29): etkinlik takvimi ve dönemler arası etkinlik kısıtlamaları. Aşağıdaki eski §5 notu güncel Git durumunu yansıtmaz.
-- Çalışma ağacında önceki oturumdan commitlenmemiş Hub–site otomasyonu, ACTOR puan/QR doğrulaması ve tüzük/yıllık aktiflik çalışmaları var (ADR-0039–0041). Bunları silmeyin veya yeni PWA değişikliğiyle karıştırmayın; bu oturumda canlıya dağıtılmadı.
+- GitHub'daki `4f943c0` sürümü (2026-10-06) oda rezervasyonu ve CI güncellemelerini içeriyordu; yereldeki eski tabanla birleştirildi. Aşağıdaki eski §5 notu güncel Git durumunu yansıtmaz.
+- Hub–site otomasyonu, ACTOR puan/QR doğrulaması ve tüzük/yıllık aktiflik çalışmaları ayrı commit'te kaydedildi (ADR-0039–0041). PWA ayrı commit'tedir. Oda rezervasyonunun yayımlanmış ADR-0038 numarası korundu; önceki commitlenmemiş ADR numaraları kaydırıldı.
 - Telefona kurulabilen PWA desteği eklendi (ADR-0042): giriş, kullanıcı menüsü ve Yardım üzerinden kurulum; yalnız statik bağlantısız ekranını saklayan üretim worker'ı. `npm run smoke:pwa` demo emülatörleriyle ayrı üretim derlemesini sınar; normal `dist` çıktısını değiştirmez.
 - Kullanıcı e-posta istiyor, ancak **harici hizmet eklemeden önce seçenekleri konuşmayı seçti**. Mail/Blaze/harici sunucu için karar verilmedi; §2.1 ve ADR-0017 geçerli. Kurulum e-posta veya push sistemi değildir.
-- Bu oturumda 59 birim testi ve PWA tarayıcı kontrolü geçti; üretim derlemesi temiz. Önceden değişmiş Firestore/RTDB kurallarının tüm emülatör testleri bu oturumda yeniden çalıştırılmadı. Gerçek telefonda kurulum ve canlı dağıtım ayrıca yapılacak.
+- Birleştirilmiş sürümde 84 Firestore kuralı testi, 75 birim/gerçek istemci testi ve 10 RTDB kuralı testi geçti; üretim derlemesi temiz. `npm run test:site` CI'a eklendi. PWA tarayıcı kontrolü kurulum yardımını ve bağlantısız yeniden denemeyi sınar; gerçek telefonda kurulum ayrıca doğrulanmalı.
+- Kullanıcı commit ve siteye yayın için 2026-11-11 tarihinde açık talimat verdi. Yayın PR üzerinden `main` birleştirmesi ve GitHub Actions ile yapılır; canlı durum için son CI çalışmasını kontrol edin. Ayrı site RTDB kuralları ve WordPress duyuru bileşeni Hub dağıtımıyla otomatik kurulmaz (ADR-0040).
+- Bu ortamda Firebase CLI ortam değişkenlerini debug günlüğüne yazabiliyor. Komut süreçlerinde `DEBUG` boş bırakılmalı; ortamın tamamını veya gizli değerleri çıktıya vermeyin.
 
 ## 1. Proje bir bakışta
 

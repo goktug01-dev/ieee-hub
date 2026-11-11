@@ -46,6 +46,7 @@ npm run typecheck
 npm test               # birim testleri
 npm run test:rules     # güvenlik kuralı testleri (emülatör)
 npm run test:e2e       # uçtan uca: gerçek istemci kodu + gerçek kurallar (emülatör)
+npm run test:site      # harici site RTDB kuralları (ayrı demo emülatörü)
 npm run smoke:pwa      # üretim worker'ı: mobil kurulum yardımı ve bağlantısız yeniden deneme (Edge)
 ```
 

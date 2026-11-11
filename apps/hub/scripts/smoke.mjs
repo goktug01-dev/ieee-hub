@@ -19,12 +19,12 @@ const ROUTES = {
   baskan: [
     '/', '/onaylar', '/gorevler', '/gorevler?sekme=pano', '/gorevler?sekme=projeler', '/dilekceler', '/dilekceler/yeni',
     '/etkinlikler', '/toplantilar', '/oda-rezervasyonu', '/iletisim', '/sponsorluk', '/demirbas', '/butceler', '/raporlar', '/organizasyon', '/tuzuk', '/gonulluluk', '/basvuru-yonetimi', '/devir', '/yardim', '/profil',
-    '/birimler/cs', '/sekreterlik-defteri',
+    '/birimler/cs', '/sekreterlik-defteri', '/surecler', '/itirazlar',
     '/yonetim/uyeler', '/yonetim/atamalar', '/yonetim/secimler', '/yonetim/birimler', '/yonetim/roller', '/yonetim/donemler',
     '/yonetim/sablonlar', '/yonetim/sablonlar/etkinlik-izin', '/yonetim/envanter', '/yonetim/harici-firebase', '/yonetim/ayarlar', '/yonetim/denetim',
   ],
   cs: ['/', '/birimler/cs', '/onaylar', '/gorevler?sekme=pano&birim=cs', '/gonulluluk', '/basvuru-yonetimi', '/etkinlikler?birim=cs', '/toplantilar', '/oda-rezervasyonu', '/iletisim?birim=cs', '/devir', '/butceler?birim=cs'],
-  uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/oda-rezervasyonu', '/sponsorluk', '/iletisim'],
+  uye: ['/', '/gorevler', '/dilekceler', '/dilekceler/yeni', '/etkinlikler', '/oda-rezervasyonu', '/sponsorluk', '/iletisim', '/surecler', '/itirazlar'],
   gonullu: ['/', '/gorevler', '/gonulluluk', '/sponsorluk'],
   yeni: ['/'],
 };
