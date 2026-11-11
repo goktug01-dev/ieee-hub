@@ -13,6 +13,7 @@ import { useOrg } from '../../lib/org';
 import { POLICIES, privacyPlaceholders, publishPolicy, type PolicyDefinition } from '../../lib/privacy';
 import { formatDocumentNo } from '../../lib/workflow';
 import type { Access, Member, OrgSettings, PolicyKind, PrivacyNotice, PublicSettings } from '../../lib/types';
+import { MailSettingsPanel } from '../../components/MailSettingsPanel';
 
 const MAX_LOGO = 150 * 1024;
 
@@ -197,6 +198,7 @@ export function SettingsPage() {
         </Card>
       </SimpleGrid>
       <PoliciesCard settings={publicSettings} />
+      <MailSettingsPanel />
       {isSuperAdmin && <SuperAdmins myUid={user!.uid} />}
     </Stack>
   );

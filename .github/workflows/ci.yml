@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run test:mail
       - name: Güvenlik kuralı testleri
         run: npm run test:rules
       - name: Uçtan uca testler (istemci + kurallar)

@@ -28,6 +28,7 @@ import type {
   WithId,
 } from './types';
 import { BRANCH } from './types';
+import { queueMail } from './mail';
 import {
   DEFAULT_ORG_SETTINGS,
   approvalFieldKeys,
@@ -179,6 +180,7 @@ export async function submitPetition(petitionId: string, data: Record<string, st
       updatedAt: serverTimestamp(),
     });
     tx.set(cRef, { value: seq, lastPetitionId: petitionId });
+    queueMail(tx, 'petition', petitionId);
     tx.set(doc(db, 'petitionVerifications', code), verificationPayload(next, petitionId, code, serverTimestamp()));
     return documentNo;
   });
@@ -213,6 +215,7 @@ export async function resubmitPetition(petitionId: string, data: Record<string, 
       revision: next.revision,
       updatedAt: serverTimestamp(),
     });
+    queueMail(tx, 'petition', petitionId);
   });
 }
 
@@ -327,6 +330,7 @@ export async function decidePetition(input: DecisionInput) {
     }
     patch.status = status;
     tx.update(pRef, patch);
+    queueMail(tx, 'petition', input.petitionId);
     tx.update(doc(db, 'petitionVerifications', p.verificationCode!), {
       status,
       approvals: newApprovals,

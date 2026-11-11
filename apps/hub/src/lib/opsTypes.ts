@@ -5,6 +5,7 @@ export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelle
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface Task {
+  mailAssignmentKey?: string;
   code: string;
   title: string;
   description: string;

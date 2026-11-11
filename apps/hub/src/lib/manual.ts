@@ -24,6 +24,28 @@ export interface ManualSection {
 
 export const MANUAL: ManualSection[] = [
   {
+    id: 'mail-tercihleri', audiences: ['member', 'manager', 'admin'],
+    title: 'E-posta bildirimleri', where: 'Profilim ve görevlerim › E-posta bildirimleri',
+    summary: 'Onayınızı bekleyen yeni dilekçe adımı ve size atanan görev için, servis kuruluysa doğrulanmış adresinize mail gelir. Teslim anlık değildir.',
+    steps: [
+      'Yeni sürüme giriş yapan doğrulanmış aktif hesaplar operasyon bildirimlerine eklenir. Profilim sayfasında dilekçe ve görev maillerini ayrı ayrı açıp kapatabilirsiniz.',
+      'Adresiniz doğrulanmamışsa “Doğrulama maili gönder” düğmesine basın, maildeki bağlantıyı açın ve “Doğrulamayı kontrol et”i kullanın.',
+      'Maildeki Hub bağlantısından hesabınızla giriş yaparak güncel kaydı inceleyin. Dilekçe metni ve ekleri mailde paylaşılmaz.',
+    ], tips: ['Kontroller yaklaşık 10 dakikada bir planlanır; gecikme veya sağlayıcı kotası olabilir. Hub’daki onay/görev listesi güncel başvuru kaynağıdır.'],
+  },
+  {
+    id: 'mail-yonetimi', audiences: ['admin'], title: 'E-posta servisini yönetme',
+    where: 'Yönetim › Kurum ayarları › E-posta bildirim servisi',
+    summary: 'Gönderici, ayrı otomasyon hesabı, Hub adresi ve gönderim sınırları bu panelden yönetilir. Gmail gizli bilgileri bu ekrana yazılmaz.',
+    steps: [
+      'TechOps, proje kökünde npm run mail:setup komutuyla Gmail bağlantısını ve GitHub Secrets kurulumunu tamamlar; betiğin verdiği bildirim hesabı kimliği panele girilir.',
+      'Servis erişimini açıp ayarları kaydedin. GitHub Actions’ta önce kuru kontrol, ardından kendi hesabınıza bir test göreviyle tek gerçek gönderim doğrulaması yapın; sonrasında zamanlamayı açın.',
+      'Üyeler yeni sürüme giriş yaptıktan sonra “Mevcut bekleyenleri kuyruğa al” ile ilk kurulumdan kalan işleri ekleyin. Önceden gönderilen aynı bildirimler tekrar gönderilmez.',
+      'Son servis kontrolü ve son teslimleri izleyin. Belirsiz veya başarısız kaydı, alıcı gelen kutusunu kontrol ederek “Yeniden dene” ile açabilirsiniz; çift mail riski uyarısını okuyun.',
+      'Durdurmak için servis erişimini kapatıp kaydedin; GitHub MAIL_ENABLED değişkenini de false yapın. Başlamış bir SMTP gönderimi geri alınamaz.',
+    ], tips: ['SMTP kabulü gelen kutusuna teslim garantisi değildir. Gmail bağlantısı hesap sahibinin iki adımlı doğrulama/uygulama şifresi adımını gerektirir.'],
+  },
+  {
     id: 'uygulama-kurulumu',
     audiences: ['member', 'manager', 'admin'],
     title: 'Telefon veya bilgisayara uygulama kurulumu',

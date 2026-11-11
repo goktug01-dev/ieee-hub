@@ -21,6 +21,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Ayrı Firebase Auth kimliği; Admin SDK/IAM ile kuralları aşmaz (ADR-0043).
+    function mailIdentity() {
+      return signedIn() && exists(docPath('settings', 'mail'))
+        && get(docPath('settings', 'mail')).data.workerUid == request.auth.uid;
+    }
+    function mailWorker() {
+      return mailIdentity() && get(docPath('settings', 'mail')).data.enabled == true;
+    }
+    function mailTargetActive(uid) {
+      return get(docPath('members', uid)).data.status == 'active' && !statutoryHold(uid, 'all');
+    }
+    function mailSourceReadable(kind, id) {
+      return mailWorker() && exists(docPath('mailSignals', kind + '_' + id));
+    }
+
     function me() {
       return request.auth.uid;
     }
@@ -241,9 +256,100 @@ service cloud.firestore {
     }
 
     match /settings/{docId} {
-      allow read: if isActive() || (docId == 'statutory' && signedIn());
+      allow read: if isActive() || (docId == 'statutory' && signedIn()) || (docId == 'mail' && mailIdentity());
       // settings/public kendi eşleşmesinde doğrulanır; kurallar VEYA ile birleştiği için burada dışlanır.
-      allow write: if docId != 'public' && hasPerm('org.manage');
+      allow write: if docId != 'public' && docId != 'mail' && hasPerm('org.manage');
+    }
+
+    match /settings/mail {
+      allow create, update: if hasPerm('org.manage')
+        && request.resource.data.keys().hasOnly(['enabled','workerUid','senderEmail','hubUrl','maxPerRun','maxPerDay','updatedAt'])
+        && request.resource.data.enabled is bool
+        && request.resource.data.workerUid is string && request.resource.data.workerUid.size() <= 128
+        && (!request.resource.data.enabled || request.resource.data.workerUid.size() > 0)
+        && (!request.resource.data.enabled || !exists(docPath('members', request.resource.data.workerUid)))
+        && request.resource.data.senderEmail is string && request.resource.data.senderEmail.matches('^[^ @]+@gmail[.]com$')
+        && request.resource.data.hubUrl is string && request.resource.data.hubUrl.matches('^https://[^/?#]+$')
+        && request.resource.data.maxPerRun is int && request.resource.data.maxPerRun >= 1 && request.resource.data.maxPerRun <= 30
+        && request.resource.data.maxPerDay is int && request.resource.data.maxPerDay >= 1 && request.resource.data.maxPerDay <= 200
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /mailRecipients/{uid} {
+      allow get: if (signedIn() && me() == uid) || (mailWorker() && mailTargetActive(uid));
+      allow list: if false;
+      allow create, update: if me() == uid && isActive()
+        && request.auth.token.email_verified == true
+        && request.resource.data.keys().hasOnly(['email','petitions','tasks','updatedAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.petitions is bool && request.resource.data.tasks is bool
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    match /mailSignals/{id} {
+      function source() {
+        return request.resource.data.kind == 'petition'
+          ? getAfter(docPath('petitions', request.resource.data.sourceId)).data
+          : getAfter(docPath('tasks', request.resource.data.sourceId)).data;
+      }
+      function validSignal() {
+        let d = request.resource.data;
+        let s = source();
+        return isActive() && d.keys().hasOnly(['kind','sourceId','sourceVersion','queuedAt','readyAt','state'])
+          && d.kind in ['petition','task'] && d.sourceId is string
+          && id == d.kind + '_' + d.sourceId && d.sourceVersion == s.updatedAt
+          && d.queuedAt == request.time && d.readyAt == request.time && d.state == 'pending'
+          && (d.kind == 'petition'
+            ? (s.status != 'draft' && (s.ownerUid == me() || hasPerm('petitions.readAll') || s.visibleTo.hasAny(myTokens())))
+            : canReadTask(s));
+      }
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create: if validSignal();
+      allow update: if (validSignal() && (request.resource.data.sourceVersion != resource.data.sourceVersion || hasPerm('org.manage')))
+        || (mailWorker() && onlyKeys(['state','readyAt']) && request.resource.data.readyAt is timestamp
+          && request.resource.data.state in ['processed','pending','blocked']);
+      allow delete: if false;
+    }
+
+    match /mailDeliveries/{id} {
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create, update: if mailWorker()
+        && request.resource.data.keys().hasOnly(['signalId','recipientUid','fingerprint','state','attempts','nextAttemptAt','updatedAt','errorCode'])
+        && request.resource.data.state in ['sending','sent','failed','uncertain','skipped']
+        && request.resource.data.signalId is string && request.resource.data.recipientUid is string
+        && request.resource.data.fingerprint is string
+        && request.resource.data.attempts is int && request.resource.data.attempts >= 1
+        && request.resource.data.nextAttemptAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.errorCode is string && request.resource.data.errorCode.size() <= 60;
+      // Belirsiz SMTP teslimi otomatik tekrarlanmaz; yönetici açıkça yeniden dener.
+      allow update: if hasPerm('org.manage') && resource.data.state in ['uncertain','failed','sending']
+        && request.resource.data.state == 'failed' && request.resource.data.updatedAt == request.time
+        && request.resource.data.nextAttemptAt == request.time
+        && onlyKeys(['state','nextAttemptAt','updatedAt']);
+      allow delete: if false;
+    }
+
+    match /mailDaily/{day} {
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create, update: if mailWorker()
+        && request.resource.data.keys().hasOnly(['attempts','updatedAt'])
+        && request.resource.data.attempts is int
+        && request.resource.data.attempts == (resource == null ? 1 : resource.data.attempts + 1)
+        && request.resource.data.attempts <= get(docPath('settings', 'mail')).data.maxPerDay
+        && request.resource.data.updatedAt == request.time;
+    }
+    match /mailHealth/current {
+      allow read: if hasPerm('org.manage');
+      allow create, update: if mailIdentity()
+        && request.resource.data.keys().hasOnly(['at','mode','result','sent','skipped','uncertain','errorCode'])
+        && request.resource.data.at == request.time
+        && request.resource.data.mode in ['dry-run','live']
+        && request.resource.data.result in ['ok','error','disabled']
+        && request.resource.data.sent is int && request.resource.data.skipped is int && request.resource.data.uncertain is int
+        && request.resource.data.errorCode is string && request.resource.data.errorCode.size() <= 60;
     }
 
     // ---------- Herkese açık tüzük ve değiştirilemez sürüm arşivi ----------
@@ -303,7 +409,7 @@ service cloud.firestore {
     // ---------- Erişim özeti ----------
 
     match /access/{uid} {
-      allow read: if me() == uid || hasPerm('assignments.manage');
+      allow read: if me() == uid || hasPerm('assignments.manage') || mailWorker();
 
       allow create: if (bootstrapping() && me() == uid && request.resource.data.superAdmin == true)
                     || (hasPerm('assignments.manage')
@@ -680,7 +786,8 @@ service cloud.firestore {
           && onlyKeys(['status', 'completedAt', 'updatedAt']);
       }
 
-      allow get, list: if canRead();
+      allow get: if canRead() || mailSourceReadable('petition', pid);
+      allow list: if canRead();
       allow create: if isActive() && validDraftCreate();
       // Dallar mevcut/yeni duruma göre ayrılır; böylece her istekte yalnızca bir dal değerlendirilir
       // (Firestore kurallarında istek başına 1000 ifade sınırı vardır).
@@ -927,7 +1034,8 @@ service cloud.firestore {
     }
 
     match /tasks/{id} {
-      allow read: if canReadTask(resource.data);
+      allow get: if canReadTask(resource.data) || mailSourceReadable('task', id);
+      allow list: if canReadTask(resource.data);
       allow create: if isActive()
         && canManageWork(request.resource.data.unitId)
         && request.resource.data.createdBy == me()

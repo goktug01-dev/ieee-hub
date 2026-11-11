@@ -1,6 +1,6 @@
 # ADR-0017: Ücretsiz Spark planı; sunucu kodu yok, Security Rules tek güvenilir katman
 
-- **Durum:** Kabul Edildi
+- **Durum:** Kısmen Yerini Aldı ([ADR-0043](0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md), yalnız e-posta yürütücüsü); Firebase Spark ve Hub yetki kararları geçerlidir.
 - **Tarih:** 2026-09-24
 - **Karar vericiler:** TechOps Başkanlığı
 - **Onay kaydı:** Proje sahibinin 2026-09-24 tarihli talimatı ("Blaze planı alınamaz, bütçe yok; sistem olabildiğince ücretsiz olmalı"). YK karar numarası işlenecek.

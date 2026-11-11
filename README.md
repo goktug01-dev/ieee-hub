@@ -17,7 +17,7 @@ IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portal
 - **Demirbaş ve zimmet:** Fiziksel varlık, seri no, konum, kondisyon, zimmet, bakım/kayıp/hurda durumu, değiştirilemez hareket geçmişi, CSV ve QR etiketi.
 - **Komite/YK başvuruları:** Birimler tarihli ilan, kontenjan ve özel sorular açar; adaylar ayrı kariyer vitrininden başvurur, durumunu izler; kabul edilen aday güvenli gönüllü rolü ve oryantasyon görevlerine bağlanır. Standart IEEE üyeliği ayrı sistemde kalır.
 
-> **Maliyet: 0 TL.** Hub, Firebase'in ücretsiz **Spark** planında sunucu kodu olmadan çalışır. Faturalandırma hesabı gerekmez, bu yüzden beklenmedik fatura riski de yoktur ([ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md)). Firestore bölgesi **europe-west1**'dir ([ADR-0018](docs/adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md)).
+> **Maliyet: 0 TL.** Hub Firebase'in ücretsiz **Spark** planındadır; faturalandırma hesabı gerekmez ([ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md)). Mail bildirimleri için mevcut public GitHub Actions ve Gmail bağlantısı ayrı çalışır ([ADR-0043](docs/adr/0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md)). Firestore bölgesi **europe-west1**'dir ([ADR-0018](docs/adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md)).
 
 Programın dayanağı: **TechOps Dijital Dönüşüm, Veri Yönetişimi ve Raporlama Otomasyonu Bildirgesi** (IEEE/240826/SÜ/22, Rev 00). Tasarım dokümanları [docs/](docs/README.md) klasöründedir. Önce [uygulanan mimariyi](docs/mimari/uygulanan-mimari.md) okuyun.
 
@@ -47,6 +47,8 @@ npm test               # birim testleri
 npm run test:rules     # güvenlik kuralı testleri (emülatör)
 npm run test:e2e       # uçtan uca: gerçek istemci kodu + gerçek kurallar (emülatör)
 npm run test:site      # harici site RTDB kuralları (ayrı demo emülatörü)
+npm run test:mail      # SMTP, kota, tekrar ve alıcı kontrolleri (gerçek mail göndermez)
+npm run smoke:mail     # profil doğrulaması/tercihler ve yönetim paneli (demo emülatörleri)
 npm run smoke:pwa      # üretim worker'ı: mobil kurulum yardımı ve bağlantısız yeniden deneme (Edge)
 ```
 
@@ -118,7 +120,7 @@ ieee-hub/
 
 ## Bilinen sınırlar (Spark planı)
 
-- E-posta bildirimi yok. Bekleyen onaylar Hub'daki sayaçta görünür.
+- Dilekçe/görev maili mevcut GitHub Actions + Gmail bağlantısıyla açılır; Firebase Spark kalır. Gönderici `techopsieee@gmail.com`; hesabın bir defalık bağlantısı gerekir. [Mail kurulumu](docs/e-posta-kurulumu.md). Anlık teslim garantisi yoktur; Hub sayaçları kullanılmaya devam edilir.
 - Çevrim içi gizli oylama yok. Seçim genel kurulda yapılır, sonuçlar Hub'a işlenir.
 - Dört göz onayı (ADR-0008), acil erişim (ADR-0010), koşullu onay adımı ve MFA sonraki sürümlere bırakıldı.
 - Harici Firebase paneli uzak projenin şemasını veya kurallarını kendiliğinden değiştirmez; bağlantı için web yapılandırması, veri yolları ve uzak kullanıcı yetkileri gerekir.

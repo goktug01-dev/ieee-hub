@@ -7,8 +7,8 @@ Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor
 - GitHub'daki `4f943c0` sürümü (2026-10-06) oda rezervasyonu ve CI güncellemelerini içeriyordu; yereldeki eski tabanla birleştirildi. Aşağıdaki eski §5 notu güncel Git durumunu yansıtmaz.
 - Hub–site otomasyonu, ACTOR puan/QR doğrulaması ve tüzük/yıllık aktiflik çalışmaları ayrı commit'te kaydedildi (ADR-0039–0041). PWA ayrı commit'tedir. Oda rezervasyonunun yayımlanmış ADR-0038 numarası korundu; önceki commitlenmemiş ADR numaraları kaydırıldı.
 - Telefona kurulabilen PWA desteği eklendi (ADR-0042): giriş, kullanıcı menüsü ve Yardım üzerinden kurulum; yalnız statik bağlantısız ekranını saklayan üretim worker'ı. `npm run smoke:pwa` demo emülatörleriyle ayrı üretim derlemesini sınar; normal `dist` çıktısını değiştirmez.
-- Kullanıcı e-posta istiyor, ancak **harici hizmet eklemeden önce seçenekleri konuşmayı seçti**. Mail/Blaze/harici sunucu için karar verilmedi; §2.1 ve ADR-0017 geçerli. Kurulum e-posta veya push sistemi değildir.
-- Birleştirilmiş sürümde 84 Firestore kuralı testi, 75 birim/gerçek istemci testi ve 10 RTDB kuralı testi geçti; üretim derlemesi temiz. `npm run test:site` CI'a eklendi. PWA tarayıcı kontrolü kurulum yardımını ve bağlantısız yeniden denemeyi sınar; gerçek telefonda kurulum ayrıca doğrulanmalı.
+- Kullanıcı **GitHub Actions + Gmail** çözümünü ve `techopsieee@gmail.com` göndericisini açıkça onayladı (ADR-0043). Firebase Spark kalır; yalnız mail yürütücüsü arka plan kodu istisnasıdır. Kurulum: `docs/e-posta-kurulumu.md`, `npm run mail:setup`. Gmail uygulama şifresi sohbete/dosyaya alınmaz; etkileşimli betik GitHub Secrets'a stdin ile yazar. Gerçek gönderim hesap bağlantısı ve testinden sonra açılır.
+- Mail sürümünde 101 Firestore/SDK testi, 75 birim/gerçek istemci testi, 14 mail mantığı testi ve 77 sayfalık genel tarayıcı kontrolü geçti; üretim derlemesi temiz. `npm run smoke:mail` doğrulama, tercih kalıcılığı, servis ayarı, ilk kuyruklama ve mobil görünümü sınar. Site RTDB testleri `npm run test:site` ile ayrıca CI'da çalışır. Gerçek Gmail gönderimi henüz doğrulanmadı; GitHub `MAIL_ENABLED=false` hesap bağlantısı tamamlanana kadar korunur.
 - Kullanıcı commit ve siteye yayın için 2026-11-11 tarihinde açık talimat verdi. Yayın PR üzerinden `main` birleştirmesi ve GitHub Actions ile yapılır; canlı durum için son CI çalışmasını kontrol edin. Ayrı site RTDB kuralları ve WordPress duyuru bileşeni Hub dağıtımıyla otomatik kurulmaz (ADR-0040).
 - Bu ortamda Firebase CLI ortam değişkenlerini debug günlüğüne yazabiliyor. Komut süreçlerinde `DEBUG` boş bırakılmalı; ortamın tamamını veya gizli değerleri çıktıya vermeyin.
 
@@ -20,7 +20,7 @@ IEEE İzmir Kâtip Çelebi Üniversitesi Öğrenci Kolu'nun iç operasyon portal
 
 Bunları "iyileştirme" adına değiştirmeyin; değişiklik gerekiyorsa önce kullanıcıya sorun ve yeni ADR yazın.
 
-1. **Maliyet sıfır: Firebase Spark planı.** Blaze yok → Cloud Functions, Secret Manager, zamanlanmış iş, Cloud Storage **yok**. Sunucu kodu gerektiren bir çözüm önermeyin ([ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md)).
+1. **Maliyet sıfır: Firebase Spark planı.** Blaze yok → Cloud Functions, Secret Manager, Firebase zamanlanmış iş ve Cloud Storage **yok**. Kullanıcının onaylı tek arka plan kodu istisnası, mevcut public GitHub Actions ve Gmail ile mail gönderimidir ([ADR-0043](docs/adr/0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md)); Hub veri/onay yetkisi Firestore kurallarında kalır. Diğer sunucu çözümleri için [ADR-0017](docs/adr/0017-ucretsiz-spark-plani-kurallar-tek-guvenilir-katman.md) geçerlidir.
 2. **Firestore bölgesi `europe-west1`** ([ADR-0018](docs/adr/0018-firestore-bolgesi-europe-west1-ve-hub-uyeligi.md)).
 3. **Her şey arayüzden düzenlenebilir:** birimler, roller ve izin atamaları, dönemler, seçimler, görevliler, dilekçe şablonları ([ADR-0019](docs/adr/0019-organizasyon-roller-ve-secimler-arayuzden-duzenlenir.md)). Yeni bir yapılandırmayı koda sabitlemeyin.
 4. **Dilekçe şablonları Word (.docx):** yüklenir veya sistemde oluşturulur, `{etiket}`'ler forma dönüşür; kol geneli ve komite içi dilekçeler var ([ADR-0020](docs/adr/0020-dilekce-sablonlari-word-tabanli.md)).
@@ -29,7 +29,7 @@ Bunları "iyileştirme" adına değiştirmeyin; değişiklik gerekiyorsa önce k
 
 ## 3. Güvenlik modeli — en önemli bölüm
 
-Sunucu olmadığı için **`firebase/firestore.rules` tek güvenilir katmandır.** İstemci koduna (`apps/hub/src`) asla güvenmeyin; arayüzdeki gizle/göster yalnızca kullanıcı deneyimi içindir.
+Hub veri ve onay yetkileri için **`firebase/firestore.rules` tek güvenilir katmandır.** İstemci koduna (`apps/hub/src`) asla güvenmeyin; arayüzdeki gizle/göster yalnızca kullanıcı deneyimi içindir. Mail yürütücüsü Admin SDK kullanmaz; ayrı Auth kimliğiyle kurallara tabidir ve yalnız mail işlem/kota/sağlık kayıtlarını yazabilir.
 
 - Yetki özeti `access/{uid}`: `superAdmin`, `perms` (kol geneli izin → bitiş), `unitPerms` (`"birim__izin"` → bitiş), `roleKeys` (`"birim__rol"` → bitiş), `memberOf`, `tokens` (dilekçe/devir görünürlüğü). İstemcide `lib/access.ts → computeAccess` görev atamalarından hesaplar; kurallar bitiş zamanını her istekte `request.time` ile karşılaştırır.
 - İzin kataloğu `apps/hub/src/lib/permissions.ts` ile kurallar **birlikte** değişir. Yeni izin = kurallarda karşılığı + test.
