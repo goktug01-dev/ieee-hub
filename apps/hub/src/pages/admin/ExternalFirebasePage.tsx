@@ -29,6 +29,9 @@ import {
 import { useDoc } from '../../lib/hooks';
 import type { ExternalFirebaseConfig, ExternalFirebaseResource } from '../../lib/opsTypes';
 import { downloadText, toCsv } from '../../lib/ops';
+import { SiteRecordFields, siteFields, siteKind } from './SiteRecordFields';
+import QRCode from 'qrcode';
+import { SiteSetupPanel } from './SiteSetupPanel';
 
 type ConfigDraft = Omit<ExternalFirebaseConfig, 'updatedAt' | 'updatedBy'>;
 const emptyConfig = (): ConfigDraft => ({ apiKey: '', authDomain: '', projectId: '', appId: '', databaseURL: '', resources: [] });
@@ -48,11 +51,13 @@ export function ExternalFirebasePage() {
   const [resourceError, setResourceError] = useState<Error | null>(null);
   const [editor, setEditor] = useState<{ originalId: string | null; id: string; json: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [committeeId, setCommitteeId] = useState('');
+  const [qrImage, setQrImage] = useState<string | null>(null);
   const connectionKey = stored.data ? [stored.data.projectId, stored.data.apiKey, stored.data.authDomain, stored.data.appId, stored.data.databaseURL].join('|') : '';
 
   useEffect(() => {
     if (stored.data && !configDirty) {
-      setConfigDraft({ apiKey: stored.data.apiKey, authDomain: stored.data.authDomain, projectId: stored.data.projectId, appId: stored.data.appId, databaseURL: stored.data.databaseURL ?? '', resources: stored.data.resources ?? [] });
+      setConfigDraft({ apiKey: stored.data.apiKey, authDomain: stored.data.authDomain, projectId: stored.data.projectId, appId: stored.data.appId, databaseURL: stored.data.databaseURL ?? '', resources: stored.data.resources ?? [], siteEventsPath: stored.data.siteEventsPath || 'events', siteAnnouncementsPath: stored.data.siteAnnouncementsPath || 'public_announcements', siteQrPath: stored.data.siteQrPath || 'valid_qrs', siteQrUrlTemplate: stored.data.siteQrUrlTemplate || 'https://studentbranches.ieee.org/tr-ikcu/profile/?qr_id={qrId}', siteUnitMap: stored.data.siteUnitMap || {} });
       setSelectedId((current) => current ?? stored.data!.resources?.[0]?.id ?? null);
     }
   }, [stored.data, configDirty]);
@@ -63,6 +68,7 @@ export function ExternalFirebasePage() {
     return onAuthStateChanged(externalServices(stored.data).auth, setExternalUser);
   }, [configured, connectionKey]);
   const selected = stored.data?.resources?.find((item) => item.id === selectedId) ?? null;
+  useEffect(() => { setEditor(null); setQrImage(null); }, [selectedId, externalUser?.uid, connectionKey]);
 
   const load = async () => {
     if (!stored.data || !selected || selected.preset === 'points-users') return;
@@ -97,7 +103,13 @@ export function ExternalFirebasePage() {
     setBusy(true);
     try {
       if (editor.originalId && editor.originalId !== editor.id) throw new Error('Mevcut kaydın kimliği değiştirilemez. Yeni kayıt oluşturun.');
-      await writeExternalRecord(stored.data, selected, editor.id, parseExternalData(editor.json));
+      const data = parseExternalData(editor.json);
+      const kind = selected.database === 'realtime' ? siteKind(selected.path) : null;
+      if (kind === 'events' && !editor.originalId) data.id = editor.id;
+      if (kind) for (const field of siteFields[kind]) {
+        if (field.required && (data[field.key] === undefined || data[field.key] === '')) throw new Error(`${field.label} zorunludur.`);
+      }
+      await writeExternalRecord(stored.data, selected, editor.id, data);
       setEditor(null); await load(); notifySuccess('Harici kayıt kaydedildi.');
     } catch (error) { notifyError(error); } finally { setBusy(false); }
   };
@@ -107,14 +119,29 @@ export function ExternalFirebasePage() {
   };
 
   const columns = useMemo(() => selected?.displayFields?.filter(Boolean) ?? [], [selected]);
+  const formKind = selected?.database === 'realtime' ? siteKind(selected.path) : null;
+  const addSiteViews = () => {
+    if (!committeeId.trim() || /[.#$\[\]/]/.test(committeeId)) return notifyError(new Error('Geçerli bir komite kimliği girin.'));
+    const paths = ['committees', 'public_announcements', 'events', 'technical_events', `committee_announcements/${committeeId.trim()}`, `committee_qrs/${committeeId.trim()}`];
+    const labels = ['Komiteler', 'Site duyuruları', 'Site etkinlikleri', 'Teknik etkinlikler', 'Komite duyuruları', 'Komite puan QR’ları'];
+    updateConfig('resources', [...configDraft.resources, ...paths.flatMap((path, index) => configDraft.resources.some((r) => r.database === 'realtime' && r.path === path) ? [] : [{ id: resourceId(), label: `${labels[index]}${index > 3 ? ` · ${committeeId.trim()}` : ''}`, database: 'realtime' as const, path, displayFields: siteFields[path.split('/')[0]].map((f) => f.key).slice(0, 4), readOnly: false, ...(index === 5 ? { qrRegistryPath: 'valid_qrs', qrUrlTemplate: 'https://studentbranches.ieee.org/tr-ikcu/profile/?qr_id={qrId}' } : {}) }])]);
+  };
+  const newRecord = () => {
+    const id = crypto.randomUUID();
+    const kind = selected?.database === 'realtime' ? siteKind(selected.path) : null;
+    const data: Record<string, unknown> = kind ? { ...(kind !== 'committees' ? { createdAt: Date.now() } : {}), ...(kind === 'committee_qrs' ? { active: true, puan: 0 } : {}), ...(kind === 'technical_events' ? { pointCost: 0, status: 'open' } : {}), ...(kind === 'events' ? { id, createdBy: externalUser!.uid, visibility: 'members', status: 'pending' } : {}) } : {};
+    setEditor({ originalId: null, id, json: stringifyExternalData(data) });
+  };
   if (stored.loading) return <SectionLoader />;
   return <Stack>
     <PageHeader title="Harici Firebase sistemleri" description="IEEE Puan ve diğer ayrı Firebase içeriklerini, o projenin kendi kimlik ve güvenlik kurallarıyla yönetin." />
     <Alert color="blue" title="Güvenlik sınırı">Firebase web yapılandırması gizli anahtar değildir. Servis hesabı JSON'u veya yönetici anahtarı buraya girilmez. Her TechOps sorumlusu uzak projede kendi hesabıyla ayrıca giriş yapar.</Alert>
+    <SiteSetupPanel config={configDraft} stored={stored.data} onChange={patch => { setConfigDraft(current => ({ ...current, ...patch })); setConfigDirty(true); }} />
 
     <Card withBorder><Group justify="space-between"><div><Title order={3}>Bağlantı ve veri görünümleri</Title><Text size="sm" c="dimmed">Firebase Console → Proje ayarları → Web uygulaması değerlerini kullanın.</Text></div><Button onClick={saveConfig} loading={busy} disabled={!configDirty}>Ayarı kaydet</Button></Group>
       <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md"><TextInput label="API key" value={configDraft.apiKey} onChange={(e) => updateConfig('apiKey', e.currentTarget.value)} /><TextInput label="Auth domain" placeholder="proje.firebaseapp.com" value={configDraft.authDomain} onChange={(e) => updateConfig('authDomain', e.currentTarget.value)} /><TextInput label="Project ID" value={configDraft.projectId} onChange={(e) => updateConfig('projectId', e.currentTarget.value)} /><TextInput label="App ID" value={configDraft.appId} onChange={(e) => updateConfig('appId', e.currentTarget.value)} /><TextInput label="Realtime Database URL" description="Yalnız RTDB kullanılıyorsa gerekir" value={configDraft.databaseURL} onChange={(e) => updateConfig('databaseURL', e.currentTarget.value)} /></SimpleGrid>
       <Stack mt="lg">
+        <Group align="end"><TextInput label="Site komite kimliği" description="Mevcut committees kaydının kimliği; Hub birim kimliğinden farklı olabilir." value={committeeId} onChange={(e) => setCommitteeId(e.currentTarget.value)} /><Button variant="light" onClick={addSiteViews}>Site yönetim görünümlerini ekle</Button></Group>
         <Group justify="space-between" wrap="wrap">
           <Text fw={600}>İzin verilen veri yolları</Text>
           <Group gap="xs">
@@ -132,7 +159,7 @@ export function ExternalFirebasePage() {
                 <TextInput label="Sıralama yolu" value={resource.leaderboardPath ?? ''} onChange={(e) => updateResource(index, { leaderboardPath: e.currentTarget.value.replace(/^\/+|\/+$/g, '') })} style={{ flex: '1 1 190px' }} />
                 <TextInput label="Denetim yolu" value={resource.auditPath ?? ''} onChange={(e) => updateResource(index, { auditPath: e.currentTarget.value.replace(/^\/+|\/+$/g, '') })} style={{ flex: '1 1 190px' }} />
               </> : <TextInput label="Tablo alanları" description="Virgülle ayırın; iç içe alan: profil.ad" value={resource.displayFields.join(', ')} onChange={(e) => updateResource(index, { displayFields: e.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean) })} style={{ flex: '2 1 280px' }} />}
-              <Checkbox label="Salt okunur" checked={resource.readOnly} onChange={(e) => updateResource(index, { readOnly: e.currentTarget.checked })} mb={8} />
+              {resource.database === 'realtime' && siteKind(resource.path) === 'committee_qrs' && <TextInput label="Puan QR bağlantı şablonu" placeholder="https://site.example/puan?qr={qrId}" description="{qrId} ve isteğe bağlı {committeeId} kullanın." value={resource.qrUrlTemplate ?? ''} onChange={(e) => updateResource(index, { qrUrlTemplate: e.currentTarget.value })} />}{resource.qrUrlTemplate !== undefined && <TextInput label="QR registry" value={resource.qrRegistryPath ?? ''} onChange={(e) => updateResource(index, { qrRegistryPath: e.currentTarget.value })} />}<Checkbox label="Salt okunur" checked={resource.readOnly} onChange={(e) => updateResource(index, { readOnly: e.currentTarget.checked })} mb={8} />
               <ActionIcon color="red" variant="subtle" mb={4} onClick={() => updateConfig('resources', configDraft.resources.filter((_, i) => i !== index))}><IconTrash size={17} /></ActionIcon>
             </Group>
           </Card>
@@ -141,12 +168,13 @@ export function ExternalFirebasePage() {
     </Card>
 
     {!configured ? <EmptyState title="Bağlantı henüz yapılandırılmadı" description="Yukarıdaki web uygulaması değerlerini ve puan verisinin koleksiyon/yolunu girin." /> : !externalUser ? <Card withBorder><Title order={3}>Uzak projede oturum aç</Title><Text size="sm" c="dimmed" mt={4}>Bu oturum Hub girişinden ayrıdır ve yalnız bu tarayıcı sekmesi boyunca saklanır.</Text><Group mt="md" align="end" wrap="wrap"><Button onClick={signInGoogle}>Google ile bağlan</Button><TextInput label="E-posta" value={email} onChange={(e) => setEmail(e.currentTarget.value)} /><PasswordInput label="Şifre" value={password} onChange={(e) => setPassword(e.currentTarget.value)} /><Button variant="default" onClick={signInEmail} disabled={!email || !password}>E-posta ile bağlan</Button></Group></Card> : <>
-      <Card withBorder><Group justify="space-between" align="flex-end" wrap="wrap"><div><Text size="sm" c="dimmed">Uzak oturum</Text><Text fw={600}>{externalUser.email ?? externalUser.displayName ?? externalUser.uid}</Text></div><Group><Select label="Veri görünümü" data={(stored.data?.resources ?? []).map((item) => ({ value: item.id, label: `${item.label} · ${item.database}` }))} value={selectedId} onChange={setSelectedId} w={280} />{selected?.preset !== 'points-users' && <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load} disabled={!selected}>Yenile</Button>}{selected && !selected.readOnly && selected.preset !== 'points-users' && <Button leftSection={<IconPlus size={16} />} onClick={() => setEditor({ originalId: null, id: '', json: '{\n  \n}' })}>Kayıt ekle</Button>}<Button color="gray" variant="subtle" onClick={() => stored.data && disconnectExternal(stored.data)}>Bağlantıyı kes</Button></Group></Group></Card>
+      <Card withBorder><Group justify="space-between" align="flex-end" wrap="wrap"><div><Text size="sm" c="dimmed">Uzak oturum</Text><Text fw={600}>{externalUser.email ?? externalUser.displayName ?? externalUser.uid}</Text></div><Group><Select label="Veri görünümü" data={(stored.data?.resources ?? []).map((item) => ({ value: item.id, label: `${item.label} · ${item.database}` }))} value={selectedId} onChange={setSelectedId} w={280} />{selected?.preset !== 'points-users' && <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load} disabled={!selected}>Yenile</Button>}{selected && !selected.readOnly && selected.preset !== 'points-users' && <Button leftSection={<IconPlus size={16} />} onClick={newRecord}>Kayıt ekle</Button>}<Button color="gray" variant="subtle" onClick={() => stored.data && disconnectExternal(stored.data)}>Bağlantıyı kes</Button></Group></Group></Card>
       <ErrorAlert error={resourceError} />
       {!selected ? <EmptyState title="Veri görünümü seçin" /> : selected.preset === 'points-users' ? <PointsPanel config={stored.data!} resource={selected} /> : loadingRecords ? <SectionLoader /> : records.length === 0 ? <EmptyState title="Kayıt bulunamadı" description="Yol boş olabilir veya uzak Firebase kuralları bu hesabın okumasına izin vermiyor olabilir." /> : <Table.ScrollContainer minWidth={700}><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Kimlik</Table.Th>{columns.map((column) => <Table.Th key={column}>{column}</Table.Th>)}<Table.Th w={90} /></Table.Tr></Table.Thead><Table.Tbody>{records.map((record) => <Table.Tr key={record.id}><Table.Td><Code>{record.id}</Code></Table.Td>{columns.map((column) => <Table.Td key={column}><Text size="sm" lineClamp={2}>{fieldValue(record.data, column) || '—'}</Text></Table.Td>)}<Table.Td><Group gap={2} wrap="nowrap"><ActionIcon variant="subtle" onClick={() => setEditor({ originalId: record.id, id: record.id, json: stringifyExternalData(record.data) })}><IconEdit size={16} /></ActionIcon>{!selected.readOnly && <ActionIcon color="red" variant="subtle" onClick={() => removeRecord(record)}><IconTrash size={16} /></ActionIcon>}</Group></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
     </>}
 
-    <Modal opened={!!editor} onClose={() => setEditor(null)} title={editor?.originalId ? 'Harici kaydı görüntüle / düzenle' : 'Harici kayıt ekle'} size="xl">{editor && <Stack><TextInput label="Kayıt kimliği" value={editor.id} onChange={(e) => setEditor({ ...editor, id: e.currentTarget.value })} disabled={!!editor.originalId} required /><Textarea label="JSON veri" value={editor.json} onChange={(e) => setEditor({ ...editor, json: e.currentTarget.value })} autosize minRows={16} styles={{ input: { fontFamily: 'monospace' } }} readOnly={!!selected?.readOnly} /><Text size="xs" c="dimmed">Firestore zamanları <Code>{'{ "$timestamp": "2026-09-27T12:00:00.000Z" }'}</Code> biçimiyle korunur.</Text><Group justify="flex-end"><Button variant="default" onClick={() => setEditor(null)}>Kapat</Button>{!selected?.readOnly && <Button onClick={saveRecord} loading={busy}>Uzak projeye kaydet</Button>}</Group></Stack>}</Modal>
+    <Modal opened={!!qrImage} onClose={() => setQrImage(null)} title="Puan QR bağlantısı"><Stack><Text size="sm">Bu QR sitenin profil sayfasını açar. Üyeler telefondan okutarak siteye gider.</Text>{qrImage && <><img src={qrImage} alt="Etkinlik puan QR’ı" /><Button component="a" href={qrImage} download="etkinlik-qr.png">PNG indir</Button></>}</Stack></Modal>
+    <Modal opened={!!editor} onClose={() => setEditor(null)} title={editor?.originalId ? 'Harici kaydı görüntüle / düzenle' : 'Harici kayıt ekle'} size="xl">{editor && <Stack><TextInput label="Kayıt kimliği" value={editor.id} onChange={(e) => setEditor({ ...editor, id: e.currentTarget.value })} disabled={!!editor.originalId} required /><>{formKind ? <SiteRecordFields kind={formKind} data={parseExternalData(editor.json)} onChange={(data) => setEditor({ ...editor, json: stringifyExternalData(data) })} readOnly={!!selected?.readOnly} /> : <Textarea label="JSON veri" value={editor.json} onChange={(e) => setEditor({ ...editor, json: e.currentTarget.value })} autosize minRows={16} styles={{ input: { fontFamily: 'monospace' } }} readOnly={!!selected?.readOnly} />}</><Text size="xs" c="dimmed">Firestore zamanları <Code>{'{ "$timestamp": "2026-09-27T12:00:00.000Z" }'}</Code> biçimiyle korunur.</Text><Group justify="flex-end">{formKind === 'committee_qrs' && editor.originalId && <Button variant="light" onClick={async () => { try { const template = selected?.qrUrlTemplate ?? ''; if (!template.includes('{qrId}')) throw new Error('Önce bu görünümün puan QR bağlantı şablonunu ayarlayın.'); const url = new URL(template.replaceAll('{qrId}', encodeURIComponent(editor.id)).replaceAll('{committeeId}', encodeURIComponent(selected!.path.split('/')[1]))); if (!['https:', 'http:'].includes(url.protocol)) throw new Error('QR bağlantısı HTTP veya HTTPS olmalıdır.'); setQrImage(await QRCode.toDataURL(url.href)); } catch (error) { notifyError(error); } }}>Puan QR’ını görüntüle</Button>}<Button variant="default" onClick={() => setEditor(null)}>Kapat</Button>{!selected?.readOnly && <Button onClick={saveRecord} loading={busy}>Uzak projeye kaydet</Button>}</Group></Stack>}</Modal>
   </Stack>;
 }
 

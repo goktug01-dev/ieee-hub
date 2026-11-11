@@ -4,6 +4,7 @@ import { IconBulb, IconFileDownload, IconLifebuoy, IconSearch } from '@tabler/ic
 import { addDoc, collection, doc, orderBy, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { AppInstallButton } from '../components/AppInstall';
 import { EmptyState, PageHeader, notifyError, notifySuccess } from '../components/ui';
 import { db } from '../firebase';
 import { hasPermission } from '../lib/access';
@@ -76,6 +77,7 @@ export function HelpPage() {
   return (
     <Stack>
       <PageHeader title="Yardım" description="Kullanma kılavuzu, rolünüze göre kısa ipuçları ve sorun bildirimi." />
+      <Group><AppInstallButton /></Group>
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="el-kitabi">Kullanma kılavuzu</Tabs.Tab>

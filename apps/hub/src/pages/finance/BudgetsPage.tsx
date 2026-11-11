@@ -43,7 +43,7 @@ export function BudgetsPage() {
     actualTotal: 0,
     sheetLink: '',
     docsLink: '',
-    status: 'draft',
+    status: 'draft', governanceCaseId:'',
     updatedAt: null as never,
   });
 
@@ -213,7 +213,8 @@ function BudgetModal({ edit, onClose }: { edit: { id: string | null; data: Budge
           )}
           <TextInput label="Sheets bağlantısı" value={cur.sheetLink} onChange={(e) => set({ sheetLink: e.currentTarget.value })} />
           <TextInput label="Finansal belgeler (Drive)" value={cur.docsLink} onChange={(e) => set({ docsLink: e.currentTarget.value })} />
-          <Select label="Durum" data={Object.entries(STATUS).map(([value, m]) => ({ value, label: m.label }))} value={cur.status} onChange={(v) => set({ status: (v ?? 'draft') as Budget['status'] })} />
+          <TextInput label="Onaylı bütçe süreç dosyası kimliği" description="Tüzük politikası etkinse Finansal Direktör, YK ve Danışman onayları tamamlanmış dosya gerekir." value={cur.governanceCaseId||''} onChange={e=>set({governanceCaseId:e.currentTarget.value})}/>
+          <TextInput label="Onayli butce surec dosyasi kimligi" description="Tuzuk politikasi etkinse Finansal Direktor, YK ve Danisman onaylari tamamlanmis dosya gerekir." value={cur.governanceCaseId||''} onChange={e=>set({governanceCaseId:e.currentTarget.value})}/><Select label="Durum" data={Object.entries(STATUS).map(([value, m]) => ({ value, label: m.label }))} value={cur.status} onChange={(v) => set({ status: (v ?? 'draft') as Budget['status'] })} />
         </SimpleGrid>
         <Table>
           <Table.Thead>

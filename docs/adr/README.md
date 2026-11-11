@@ -44,5 +44,9 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0036](0036-onaylanan-etkinliklerin-takvim-gorunumu.md) | Onaylanan etkinlikler canlı takvim görünümüne otomatik yansır | Kabul Edildi | ✓ | WP-06, WP-11 |
 | [0037](0037-donemler-arasi-etkinlik-kisitlamalari.md) | Etkinlik kısıtlamaları dönemlerden bağımsız ve denetlenebilir tutulur | Kabul Edildi | ✓ | WP-04, WP-06, WP-11 |
 | [0038](0038-oda-rezervasyonu-dilim-belgeleriyle-cakismasiz.md) | Oda rezervasyonu yarım saatlik dilim belgeleriyle çakışmasız tutulur | Kabul Edildi | ✓ | WP-05, WP-11 |
+| [0039](0039-site-firebase-yonetim-formlari.md) | Site komiteleri, duyuruları, etkinlikleri ve puan QR kayıtları Hub formlarıyla yönetilir | Yerini Aldı (0040) | ✓ | WP-01, WP-04, WP-11 |
+| [0040](0040-hub-site-otomasyonu-ve-actor-dogrulamasi.md) | Hub onayları ve duyuruları siteye aktarılır; puan QR’ını ACTOR doğrular | Kabul Edildi | ✓ | WP-01, WP-04, WP-06, WP-11 |
+| [0041](0041-tuzuk-surecleri-ve-yillik-aktiflik.md) | Tüzük dosyaları makam onayları, yıllık aktiflik ve süre takibiyle yürütülür | Kabul Edildi | ✓ | WP-04, WP-09, WP-10, WP-11 |
+| [0042](0042-telefona-kurulabilen-web-uygulamasi.md) | Hub telefona kurulabilen web uygulaması olarak sunulur | Kabul Edildi | ✓ | WP-10, WP-11 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

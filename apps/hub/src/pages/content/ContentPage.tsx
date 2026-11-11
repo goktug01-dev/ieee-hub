@@ -39,6 +39,8 @@ import type { ContentRequest, ContentStatus, HubEvent } from '../../lib/opsTypes
 import { useOrg } from '../../lib/org';
 import type { WithId } from '../../lib/types';
 import { BRANCH } from '../../lib/types';
+import { SiteAnnouncementsPanel } from '../../components/SiteWorkflows';
+import { siteAnnouncementManager } from '../../lib/siteWorkflow';
 
 const BOARD: ContentStatus[] = ['requested', 'accepted', 'in_production', 'awaiting_approval', 'scheduled', 'published'];
 
@@ -48,7 +50,8 @@ export function ContentPage() {
   const [params] = useSearchParams();
   const requests = useCollection<ContentRequest>('contentRequests', [orderBy('createdAt', 'desc')], 'content');
   const isComms = hasPermission(access, 'content.manage');
-  const [tab, setTab] = useState<string | null>(isComms ? 'pano' : 'talepler');
+  const canSite = siteAnnouncementManager(access);
+  const [tab, setTab] = useState<string | null>(canSite ? 'site' : isComms ? 'pano' : 'talepler');
   const [newOpen, setNewOpen] = useState(!!params.get('etkinlik') || params.get('yeni') === '1');
   const [sel, setSel] = useState<string | null>(null);
 
@@ -76,6 +79,7 @@ export function ContentPage() {
       />
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
+          {canSite && <Tabs.Tab value="site">Web sitesi duyuruları</Tabs.Tab>}
           {isComms && <Tabs.Tab value="pano">Üretim panosu</Tabs.Tab>}
           <Tabs.Tab value="talepler">Taleplerim ve birimim ({mine.length})</Tabs.Tab>
           <Tabs.Tab value="takvim">Yayın takvimi</Tabs.Tab>
@@ -123,6 +127,7 @@ export function ContentPage() {
           <CalendarView requests={requests.data} onOpen={setSel} />
         </Tabs.Panel>
       </Tabs>
+      {tab === 'site' && canSite && <SiteAnnouncementsPanel />}
       <NewRequest opened={newOpen} onClose={() => setNewOpen(false)} unitChoices={requestUnits} presetEventId={params.get('etkinlik')} presetUnitId={params.get('birim')} />
       <RequestDrawer r={selected} onClose={() => setSel(null)} />
     </Stack>

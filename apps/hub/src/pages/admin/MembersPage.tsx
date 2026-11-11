@@ -14,6 +14,7 @@ import { fmtDate } from '../../lib/format';
 import { useCollection } from '../../lib/hooks';
 import type { Assignment, Member, MemberStatus } from '../../lib/types';
 import { useAuth } from '../../auth/AuthContext';
+import { SiteMembersPanel } from '../../components/SiteWorkflows';
 
 const STATUS: Record<MemberStatus, { label: string; color: string }> = {
   pending: { label: 'Onay bekliyor', color: 'yellow' },
@@ -26,6 +27,7 @@ export function MembersPage() {
   const { user, orgSettings } = useAuth();
   const { units } = useOrg();
   const [filter, setFilter] = useState<string>('pending');
+  const [membershipSystem, setMembershipSystem] = useState('hub');
   const [q, setQ] = useState('');
   const [assignFor, setAssignFor] = useState<string | null>(null);
   const members = useCollection<Member>('members', [orderBy('createdAt', 'desc')], 'members');
@@ -132,6 +134,8 @@ export function MembersPage() {
   return (
     <Stack>
       <PageHeader title="Üyeler" description="Hub’a giriş yapan kişiler önce onay bekler. Onaylanan üyeler dilekçe oluşturabilir ve görev alabilir." />
+      <SegmentedControl value={membershipSystem} onChange={setMembershipSystem} data={[{ value: 'hub', label: 'Hub üyeleri' }, { value: 'site', label: 'Web sitesi üyeleri' }]} />
+      {membershipSystem === 'site' ? <SiteMembersPanel /> : <>
       <Group wrap="wrap">
         <SegmentedControl
           value={filter}
@@ -246,6 +250,7 @@ export function MembersPage() {
           </Table>
         </Table.ScrollContainer>
       )}
+      </>}
       <AssignmentModal opened={!!assignFor} onClose={() => setAssignFor(null)} presetUid={assignFor ?? undefined} />
     </Stack>
   );

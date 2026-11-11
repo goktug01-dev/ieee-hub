@@ -31,8 +31,13 @@ service cloud.firestore {
 
     function isActive() {
       return signedIn()
-        && exists(docPath('members', me()))
-        && get(docPath('members', me())).data.status == 'active';
+        && get(docPath('members', me())).data.status == 'active'
+        && !statutoryHold(me(), 'all');
+    }
+
+    function statutoryHold(uid, scope) {
+      return exists(/databases/$(database)/documents/governanceHolds/$(uid)/scopes/$(scope))
+        && get(/databases/$(database)/documents/governanceHolds/$(uid)/scopes/$(scope)).data.expiresAt > request.time;
     }
 
     function hasAccessDoc() {
@@ -59,6 +64,15 @@ service cloud.firestore {
 
     function hasRoleKey(k) {
       return hasAccessDoc() && k in acc().roleKeys && acc().roleKeys[k] > request.time;
+    }
+    function siteAnnouncementManager() {
+      return hasPerm('site.announcements.manage') || (isActive() && (hasRoleKey('branch__baskan') || hasRoleKey('branch__baskan-yardimcisi')));
+    }
+    function siteQrController() {
+      return isActive() && hasAccessDoc() && !statutoryHold(me(), 'actor') && (hasRoleKey('branch__actor') || ('site.qr.manage' in acc().perms && acc().perms['site.qr.manage'] > request.time));
+    }
+    function siteOperator() {
+      return hasPerm('external.firebase.manage') || hasPerm('events.approve') || hasPerm('members.manage') || siteAnnouncementManager() || siteQrController();
     }
 
     function myTokens() {
@@ -227,7 +241,7 @@ service cloud.firestore {
     }
 
     match /settings/{docId} {
-      allow read: if isActive();
+      allow read: if isActive() || (docId == 'statutory' && signedIn());
       // settings/public kendi eşleşmesinde doğrulanır; kurallar VEYA ile birleştiği için burada dışlanır.
       allow write: if docId != 'public' && hasPerm('org.manage');
     }
@@ -344,6 +358,7 @@ service cloud.firestore {
     match /units/{id} {
       allow read: if isActive();
       allow write: if hasPerm('org.manage');
+      allow update: if statutoryUnitEffect(id);
     }
 
     match /roles/{id} {
@@ -358,18 +373,13 @@ service cloud.firestore {
 
     match /assignments/{id} {
       allow read: if isActive();
-      allow create: if hasPerm('assignments.manage')
-                    || (hasPerm('elections.manage') && request.resource.data.source == 'election')
-                    || (request.resource.data.source == 'volunteer'
-                        && request.resource.data.status == 'active'
-                        && request.resource.data.roleId == volunteerRole()
-                        && unitManager(request.resource.data.unitId));
-      allow update: if hasPerm('assignments.manage')
+      allow create: if statutoryAssignmentCreator(request.resource.data) && statutoryAssignmentAllowed(request.resource.data);
+      allow update: if resource != null && statutoryAssignmentAllowed(request.resource.data) && (hasPerm('assignments.manage')
                     || (hasPerm('elections.manage') && request.resource.data.source == 'election')
                     || (resource.data.roleId == volunteerRole()
                         && unitManager(resource.data.unitId)
                         && request.resource.data.status == 'ended'
-                        && onlyKeys(['status', 'endedAt', 'endedBy']));
+                        && onlyKeys(['status', 'endedAt', 'endedBy'])));
       allow delete: if hasPerm('assignments.manage');
     }
 
@@ -389,13 +399,18 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && request.resource.data.positions is list
         && (
+             (resource.data.status != 'completed' || onlyKeys(['status','appliedAt','updatedAt']))
+          && (resource.data.status != 'voting' || (request.resource.data.get('activityYearId',null) == resource.data.get('activityYearId',null)
+            && request.resource.data.get('termId',null) == resource.data.get('termId',null) && request.resource.data.get('electionType','') == resource.data.get('electionType','')
+            && request.resource.data.get('votingMethod','') == resource.data.get('votingMethod','')))
+          && (
              (request.resource.data.status == resource.data.status
                && resource.data.status in ['draft', 'nominations', 'voting'])
           || (resource.data.status == 'draft' && request.resource.data.status in ['nominations', 'cancelled'])
           || (resource.data.status == 'nominations' && request.resource.data.status in ['draft', 'voting', 'cancelled'])
           || (resource.data.status == 'voting' && request.resource.data.status in ['completed', 'cancelled'])
           || (resource.data.status == 'completed' && request.resource.data.status == 'applied')
-        );
+        ));
       allow delete: if hasPerm('elections.manage') && resource.data.status in ['draft', 'cancelled'];
     }
 
@@ -1187,7 +1202,13 @@ service cloud.firestore {
     match /budgets/{id} {
       allow read: if hasPerm('finance.read') || hasPerm('finance.manage')
         || (isActive() && unitManager(resource.data.unitId));
-      allow write: if hasPerm('finance.manage');
+      allow create, update: if hasPerm('finance.manage')
+        && (!exists(docPath('settings','statutory')) || request.resource.data.status == 'draft'
+          || (get(docPath('governanceCases',request.resource.data.governanceCaseId)).data.kind == 'budget'
+            && get(docPath('governanceCases',request.resource.data.governanceCaseId)).data.status == 'approved'
+            && get(docPath('governanceCases',request.resource.data.governanceCaseId)).data.unitId == request.resource.data.unitId
+            && request.resource.data.docsLink.size() > 0));
+      allow delete: if false;
     }
 
     // ---------- Sekreterlik defteri ----------
@@ -1387,7 +1408,7 @@ service cloud.firestore {
 
     // Bağlantı ayarı gizli anahtar içermez; yine de yalnızca yetkili TechOps görevlileri görür/değiştirir.
     match /externalIntegrations/{id} {
-      allow read: if hasPerm('external.firebase.manage');
+      allow read: if siteOperator();
       allow create, update: if hasPerm('external.firebase.manage')
         && request.resource.data.updatedBy == me()
         && request.resource.data.updatedAt == request.time
@@ -1397,6 +1418,398 @@ service cloud.firestore {
         && request.resource.data.appId is string
         && request.resource.data.resources is list;
       allow delete: if hasPerm('external.firebase.manage');
+    }
+
+    match /siteAnnouncements/{id} {
+      function validAnnouncement(d) {
+        return d.keys().hasOnly(['title','content','link','pinned','status','createdBy','createdAt','updatedBy','updatedAt'])
+          && d.title is string && d.title.size() > 0 && d.title.size() <= 160
+          && d.content is string && d.content.size() > 0 && d.content.size() <= 20000
+          && d.link is string && d.link.size() <= 2000 && d.pinned is bool
+          && d.status in ['published','withdrawn'] && d.updatedBy == me() && d.updatedAt == request.time;
+      }
+      allow read: if siteAnnouncementManager();
+      allow create: if siteAnnouncementManager() && validAnnouncement(request.resource.data)
+        && request.resource.data.createdBy == me() && request.resource.data.createdAt == request.time;
+      allow update: if siteAnnouncementManager() && validAnnouncement(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+    match /eventPointRequests/{id} {
+      function event() { return get(docPath('events', id)).data; }
+      function upcoming() { return event().status in ['approved','planning','registration_open']; }
+      function validRequest(d) {
+        return d.keys().hasOnly(['eventId','unitId','points','note','status','expiresAt','requestedBy','createdAt','updatedAt','approvedBy','approvedAt'])
+          && d.eventId == id && d.unitId == event().unitId && d.points is int && d.points >= 0 && d.points <= 100000
+          && d.note is string && d.note.size() > 0 && d.note.size() <= 5000 && d.expiresAt is timestamp
+          && d.updatedAt == request.time;
+      }
+      allow read: if isActive();
+      allow create: if isActive() && (isEventOwner(event()) || eventManager(event().unitId)) && upcoming()
+        && validRequest(request.resource.data) && request.resource.data.status == 'requested'
+        && request.resource.data.requestedBy == me() && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt > request.time && !request.resource.data.keys().hasAny(['approvedBy','approvedAt']);
+      allow update: if siteQrController() && (
+        (resource.data.status == 'requested' && request.resource.data.status == 'approved' && upcoming()
+          && resource.data.expiresAt > request.time && request.resource.data.approvedBy == me()
+          && request.resource.data.approvedAt == request.time && request.resource.data.updatedAt == request.time
+          && onlyKeys(['status','approvedBy','approvedAt','updatedAt']))
+        || (resource.data.status == 'approved' && request.resource.data.status == 'closed'
+          && request.resource.data.updatedAt == request.time && onlyKeys(['status','updatedAt']))
+      );
+      allow delete: if false;
+    }
+    // Aktarım makbuzu yalnız görünür durumdur; Hub onayı veya QR doğrulaması yerine geçmez.
+    match /siteSync/{id} {
+      function validSync(d) {
+        let collectionName = d.kind == 'event' ? 'events' : (d.kind == 'announcement' ? 'siteAnnouncements' : 'eventPointRequests');
+        return d.kind in ['event','announcement','qr'] && id == d.kind + '__' + d.sourceId
+          && d.keys().hasOnly(['kind','sourceId','sourceUpdatedAt','status','error','remoteId','remoteProjectId','updatedAt','byUid'])
+          && d.status in ['synced','failed'] && d.error is string && d.error.size() <= 3000
+          && d.remoteId is string && d.remoteProjectId is string
+          && d.sourceUpdatedAt == get(docPath(collectionName, d.sourceId)).data.updatedAt
+          && d.byUid == me() && d.updatedAt == request.time;
+      }
+      allow read: if isActive();
+      allow create, update: if validSync(request.resource.data) && (
+        (request.resource.data.kind == 'event' && (hasPerm('events.approve') || hasPerm('external.firebase.manage')))
+        || (request.resource.data.kind == 'announcement' && siteAnnouncementManager())
+        || (request.resource.data.kind == 'qr' && siteQrController())
+      );
+      allow delete: if false;
+    }
+
+    // ---------- Tüzük süreçleri: sürümlü politika, ayrı makam imzaları, süre ve tedbir ----------
+    function statutoryPolicy(c) { return get(docPath('statutoryPolicies', c.policyId)).data; }
+    function statutoryRole(p, authority) {
+      return isActive() && authority in p.roles && liveRole(p.roles[authority]);
+    }
+    function liveRole(key) {
+      let keys = acc().get('roleKeys',{});
+      return key in keys && keys[key] > request.time;
+    }
+    function livePermission(key) {
+      let a = acc();
+      return a.superAdmin || (key in a.perms && a.perms[key] > request.time);
+    }
+    function statutoryOversight() {
+      return isActive() && (livePermission('governance.read') || livePermission('members.manage')
+        || livePermission('secretary.ledger.manage') || liveRole('branch__genel-sekreter') || liveRole('branch__actor'));
+    }
+    function statutoryPrivateReviewer(c) {
+      let p = get(docPath('statutoryPolicies',get(docPath('settings','statutory')).data.policyId)).data;
+      return isActive() && (liveRole(p.roles.audit) || liveRole(p.roles.advisor));
+    }
+    function statutoryCanRead(c) {
+      return signedIn() && (statutoryPrivateReviewer(c) || c.get('createdBy','') == me()
+        || (!c.get('confidential',true) && (c.get('subjectUid',null) == me() || statutoryOversight())));
+    }
+    function statutorySigner(c, stage) {
+      let p = statutoryPolicy(c);
+      let a = stage.authority;
+      return a == 'subject' ? (signedIn() && c.subjectUid == me())
+        : (isActive() && c.subjectUid != me() && (
+          (a == 'committee' && unitManager(c.unitId))
+          || (a in ['yk','ik','joint','assembly'] && (liveRole(p.roles.president) || liveRole(p.roles.secretary)))
+          || (a == 'secretary' && (liveRole(p.roles.secretary) || liveRole(p.roles.advisor)))
+          || liveRole(p.roles.get(a,''))));
+    }
+    function statutoryEvidence(c, stage, action) {
+      return (stage.proof == 'document' && (action.proofUrl.size() > 0 || stage.authority == 'subject'))
+        || (stage.proof == 'board_vote' && statutoryVoteEvidence(c, stage, action))
+        || (stage.proof == 'election' && statutoryElectionEvidence(c, action))
+        || (stage.proof == 'assembly' && statutoryAssemblyEvidence(c, stage, action));
+    }
+    function statutoryVoteEvidence(c, stage, action) {
+      let v = get(docPath('boardVotes', action.proofId)).data;
+      return v.status == 'closed' && v.result.outcome == 'accepted'
+        && v.scope == stage.authority && v.rule == stage.voteRule
+        && (c.kind != 'decree_review' || v.isDecree == true)
+        && (c.subjectUid == null || !(c.subjectUid in v.roster) || c.subjectUid in v.recusedUids);
+    }
+    function statutoryElectionEvidence(c, action) {
+      let e = get(docPath('elections', action.proofId)).data;
+      return e.status in ['completed','applied'] && e.votingMethod == 'secret_ballot'
+        && e.get('electionType','') == 'actor' && e.positions.size() == 1
+        && ('branch__' + e.positions[0].roleId) == statutoryPolicy(c).roles.actor
+        && e.positions[0].winnerUid == c.subjectUid && e.minutesUrl.size() > 0;
+    }
+    function statutoryAssemblyEvidence(c, stage, action) {
+      let a = get(docPath('assemblyRecords', action.proofId)).data;
+      return a.caseId == action.caseId && (c.kind == 'charter_change'
+        ? (a.round == stage.assemblyRound && a.attendance * 3 >= a.totalMembers * 2 && a.yes * 3 >= a.attendance * 2)
+        : (c.kind == 'general_assembly' && a.yes * 2 > a.attendance
+          && (a.round == 1 ? a.attendance * 2 > a.totalMembers : a.attendance >= statutoryPolicy(c).limits.assemblyMinimumSecond)));
+    }
+    function statutoryApprovedEffect(caseId, effect) {
+      let c = getAfter(docPath('governanceCases',caseId)).data;
+      return c.status == 'approved' && statutoryPolicy(c).flows[c.kind].effect == effect;
+    }
+    function statutoryFinalEffects(c, id) {
+      let effect = statutoryPolicy(c).flows[c.kind].effect;
+      let scope = effect == 'actor_suspend' ? 'actor' : 'all';
+      return !(effect in ['suspend','actor_suspend','candidate_ban','restore'])
+        || (effect == 'restore'
+          ? (getAfter(/databases/$(database)/documents/governanceHolds/$(c.subjectUid)/scopes/all).data.caseId == id
+            && getAfter(/databases/$(database)/documents/governanceHolds/$(c.subjectUid)/scopes/actor).data.caseId == id)
+          : (getAfter(/databases/$(database)/documents/governanceHolds/$(c.subjectUid)/scopes/$(scope)).data.caseId == id
+            && (effect != 'candidate_ban' || existsAfter(docPath('candidateBans',c.subjectUid)))));
+    }
+    function statutoryProposal(c) {
+      let p = c.proposal;
+      return p is map && p.keys().hasOnly(['termId','threshold','inclusive','spendPercent','affectedArticles'])
+        && p.termId is string && p.threshold is int && p.threshold >= 0 && p.inclusive is bool
+        && p.spendPercent is number && p.spendPercent >= 0 && p.spendPercent <= 100 && p.affectedArticles is list
+        && (c.kind != 'activity_threshold' || exists(docPath('terms',p.termId)))
+        && (c.kind != 'charter_change' || (p.affectedArticles.size() > 0
+          && !p.affectedArticles.hasAny(['3','3.a','5','6','9','10','11','42','58','81','87','88','89','90','91','92','101'])));
+    }
+    function statutoryFollowup(c, id) {
+      let source = getAfter(docPath('governanceCases',c.sourceCaseId)).data;
+      return id == c.sourceCaseId + '-review' && source.status == 'approved' && source.updatedAt == request.time
+        && c.policyId == source.policyId && c.subjectUid == source.subjectUid && c.unitId == source.unitId
+        && ((source.kind == 'precaution' && c.kind == 'precaution_review')
+          || (source.kind == 'emergency_access' && c.kind == 'emergency_ratification')
+          || (source.kind == 'actor_temporary_suspension' && c.kind == 'actor_review'));
+    }
+    function statutoryUnitEffect(unitId) {
+      let d = request.resource.data;
+      let c = getAfter(docPath('governanceCases',d.governanceCaseId)).data;
+      let effect = statutoryPolicy(c).flows[c.kind].effect;
+      return isActive() && statutoryCanRead(c) && c.status == 'approved' && c.unitId == unitId
+        && effect in ['committee_passive','committee_closed'] && d.active == false
+        && d.statutoryStatus == (effect == 'committee_passive' ? 'passive' : 'closed')
+        && d.statutoryChangedAt == request.time
+        && onlyKeys(['active','statutoryStatus','governanceCaseId','statutoryChangedAt']);
+    }
+    function statutoryAssignmentAllowed(d) {
+      return d.status == 'ended' || !exists(docPath('settings','statutory'))
+        || statutoryAssignmentWithPolicy(d, get(docPath('statutoryPolicies',get(docPath('settings','statutory')).data.policyId)).data);
+    }
+    function statutoryAssignmentCreator(d) {
+      return isActive() && (livePermission('assignments.manage')
+        || (d.source == 'election' && livePermission('elections.manage'))
+        || (d.source == 'volunteer' && d.status == 'active' && d.roleId == volunteerRole() && unitManager(d.unitId)));
+    }
+    function statutoryYkRole(p, unitId, roleId) {
+      return (unitId + '__' + roleId) in [p.roles.president,p.roles.internal,p.roles.secretary,p.roles.finance,p.roles.external,p.roles.technical];
+    }
+    function statutoryElectiveRole(p, unitId, roleId) {
+      return statutoryYkRole(p,unitId,roleId) || (unitId + '__' + roleId) in [p.roles.actor,p.roles.techops]
+        || ('*__' + roleId) in [p.roles.committeePresident,p.roles.committeeVice];
+    }
+    function statutoryAssignmentWithPolicy(d, p) {
+      return (!statutoryElectiveRole(p,d.unitId,d.roleId)
+          || (!exists(docPath('candidateBans',d.uid))
+            && (d.source != 'election' || statutoryAdmissionForAssignment(d))))
+        && (d.source != 'election' || statutoryElectionWinner(d))
+        && ((d.unitId + '__' + d.roleId) != p.roles.actor
+          || (d.get('governanceCaseId','') != '' && d.source == 'election'
+            && get(docPath('governanceCases',d.governanceCaseId)).data.subjectUid == d.uid
+            && get(docPath('governanceCases',d.governanceCaseId)).data.kind == 'actor_election'
+            && get(docPath('governanceCases',d.governanceCaseId)).data.status == 'approved'));
+    }
+    function statutoryAdmissionForAssignment(d) {
+      let admission = get(docPath('electionAdmissions',d.electionId + '__' + d.unitId + '__' + d.roleId + '__' + d.uid)).data;
+      return admission.uid == d.uid && admission.roleId == d.roleId && admission.unitId == d.unitId
+        && admission.electionId == d.electionId && admission.status == 'verified';
+    }
+    function statutoryWinnerAt(positions, index, d) {
+      return positions.size() > index && positions[index].winnerUid == d.uid
+        && positions[index].roleId == d.roleId && positions[index].unitId == d.unitId;
+    }
+    function statutoryElectionWinner(d) {
+      let e = get(docPath('elections',d.electionId)).data;
+      return e.status in ['completed','applied'] && (
+        statutoryWinnerAt(e.positions,0,d) || statutoryWinnerAt(e.positions,1,d) || statutoryWinnerAt(e.positions,2,d)
+        || statutoryWinnerAt(e.positions,3,d) || statutoryWinnerAt(e.positions,4,d) || statutoryWinnerAt(e.positions,5,d)
+        || statutoryWinnerAt(e.positions,6,d) || statutoryWinnerAt(e.positions,7,d) || statutoryWinnerAt(e.positions,8,d)
+        || statutoryWinnerAt(e.positions,9,d) || statutoryWinnerAt(e.positions,10,d) || statutoryWinnerAt(e.positions,11,d));
+    }
+    match /statutoryPolicies/{id} {
+      allow read: if signedIn();
+      allow create: if hasPerm('org.manage') && request.resource.data.publishedBy == me()
+        && request.resource.data.publishedAt == request.time && request.resource.data.roles is map
+        && request.resource.data.flows is map && request.resource.data.holidays is list;
+      allow update, delete: if false;
+    }
+    match /governanceCases/{id} {
+      function c() { return resource.data; }
+      function nc() { return request.resource.data; }
+      function newAction() { return getAfter(/databases/$(database)/documents/governanceCases/$(id)/actions/$(string(c().step))).data; }
+      function steps() { return statutoryPolicy(c()).flows[c().kind].stages; }
+      function appliedEffect() {
+        let effect = statutoryPolicy(c()).flows[c().kind].effect;
+        return effect == 'actor_elected'
+          ? (hasPerm('assignments.manage') && getAfter(docPath('assignments',nc().appliedAssignmentId)).data.governanceCaseId == id
+            && getAfter(docPath('assignments',nc().appliedAssignmentId)).data.status == 'active'
+            && getAfter(docPath('assignments',nc().appliedAssignmentId)).data.uid == c().subjectUid)
+          : (effect in ['committee_passive','committee_closed']
+            ? getAfter(docPath('units',c().unitId)).data.governanceCaseId == id
+            : (statutoryOversight() || c().createdBy == me()));
+      }
+      allow read: if statutoryCanRead(c());
+      allow create: if signedIn() && exists(docPath('members',me()))
+        && nc().keys().hasOnly(['kind','title','summary','subjectUid','unitId','proposal','policyId','confidential','step','status','createdBy','createdAt','updatedAt','stageStartedAt','sourceCaseId'])
+        && (('sourceCaseId' in nc()) ? statutoryFollowup(nc(),id) : nc().policyId == get(docPath('settings','statutory')).data.policyId)
+        && nc().kind in statutoryPolicy(nc()).flows
+        && nc().confidential == statutoryPolicy(nc()).flows[nc().kind].confidential
+        && statutoryProposal(nc())
+        && (!(statutoryPolicy(nc()).flows[nc().kind].effect in ['suspend','actor_suspend','candidate_ban','actor_elected','restore']) || nc().subjectUid is string)
+        && (!nc().confidential || nc().subjectUid == null)
+        && nc().title is string && nc().title.size() > 0 && nc().title.size() <= 200
+        && nc().summary is string && nc().summary.size() > 0 && nc().summary.size() <= 20000
+        && (nc().subjectUid == null || nc().subjectUid is string) && nc().unitId is string
+        && nc().createdBy == me() && nc().createdAt == request.time && nc().updatedAt == request.time
+        && nc().stageStartedAt == request.time && nc().step == 0 && nc().status == 'open';
+      allow update: if signedIn() && (
+        (c().status == 'open' && nc().updatedAt == request.time && nc().stageStartedAt == request.time
+          && onlyKeys(['step','status','updatedAt','stageStartedAt'])
+          && newAction().actorUid == me() && newAction().at == request.time
+          && ((newAction().decision == 'approve' && nc().step == c().step + 1
+              && nc().status == (nc().step == steps().size() ? 'approved' : 'open')
+              && (nc().status != 'approved' || statutoryFinalEffects(c(),id)))
+            || (newAction().decision == 'reject' && nc().step == c().step && nc().status == 'rejected')))
+        || (isActive() && statutoryCanRead(c()) && c().status == 'approved' && !('appliedAt' in c())
+          && nc().appliedAt == request.time && nc().appliedBy == me() && nc().updatedAt == request.time
+          && onlyKeys(['appliedAt','appliedBy','updatedAt','appliedAssignmentId']) && appliedEffect()));
+      allow delete: if false;
+      match /actions/{index} {
+        function parentCase() { return get(docPath('governanceCases',id)).data; }
+        function stage() { return statutoryPolicy(parentCase()).flows[parentCase().kind].stages[parentCase().step]; }
+        function action() { return request.resource.data; }
+        allow read: if statutoryCanRead(parentCase());
+        allow create: if signedIn() && parentCase().status == 'open' && index == string(parentCase().step)
+          && action().keys().hasOnly(['caseId','step','authority','actorUid','decision','note','proofId','proofUrl','at'])
+          && action().caseId == id && action().step == parentCase().step
+          && action().authority == stage().authority && statutorySigner(parentCase(),stage())
+          && action().actorUid == me() && action().at == request.time
+          && action().decision in ['approve','reject'] && action().note is string && action().note.size() > 0 && action().note.size() <= 10000
+          && (stage().authority != 'subject' || action().decision == 'approve')
+          && action().proofId is string && action().proofUrl is string
+          && (action().decision == 'reject' || statutoryEvidence(parentCase(),stage(),action()))
+          && (parentCase().kind != 'emergency_access' || parentCase().step == 0
+            || get(/databases/$(database)/documents/governanceCases/$(id)/actions/0).data.actorUid != me())
+          && getAfter(docPath('governanceCases',id)).data.updatedAt == request.time
+          && ((action().decision == 'approve' && getAfter(docPath('governanceCases',id)).data.step == parentCase().step + 1)
+            || (action().decision == 'reject' && getAfter(docPath('governanceCases',id)).data.status == 'rejected'));
+        allow update, delete: if false;
+      }
+    }
+    match /governanceHolds/{uid}/scopes/{scopeId} {
+      function c() { return getAfter(docPath('governanceCases',request.resource.data.caseId)).data; }
+      function effect() { return statutoryPolicy(c()).flows[c().kind].effect; }
+      allow read: if signedIn() && (me() == uid || statutoryOversight());
+      allow create, update: if isActive() && c().status == 'approved' && c().subjectUid == uid
+        && getAfter(/databases/$(database)/documents/governanceCases/$(request.resource.data.caseId)/actions/$(string(c().step - 1))).data.at == request.time
+        && getAfter(/databases/$(database)/documents/governanceCases/$(request.resource.data.caseId)/actions/$(string(c().step - 1))).data.actorUid == me()
+        && request.resource.data.keys().hasOnly(['caseId','uid','scope','expiresAt','byUid','at'])
+        && effect() in ['suspend','actor_suspend','candidate_ban','restore'] && request.resource.data.uid == uid
+        && request.resource.data.scope == scopeId && scopeId in ['all','actor']
+        && (effect() == 'restore' || request.resource.data.scope == (effect() == 'actor_suspend' ? 'actor' : 'all'))
+        && request.resource.data.expiresAt is timestamp
+        && (effect() != 'restore' || request.resource.data.expiresAt <= request.time)
+        && (effect() == 'restore' || !exists(/databases/$(database)/documents/governanceHolds/$(uid)/scopes/$(scopeId))
+          || request.resource.data.expiresAt >= resource.data.expiresAt)
+        && (c().kind != 'actor_temporary_suspension' || request.resource.data.expiresAt <= request.time + duration.value(7,'d'))
+        && request.resource.data.byUid == me() && request.resource.data.at == request.time;
+      allow delete: if false;
+    }
+    match /candidateBans/{uid} {
+      allow read: if signedIn() && (me() == uid || statutoryOversight() || hasPerm('elections.manage'));
+      allow create: if isActive() && request.resource.data.uid == uid && request.resource.data.byUid == me() && request.resource.data.at == request.time
+        && request.resource.data.keys().hasOnly(['uid','caseId','byUid','at'])
+        && getAfter(docPath('governanceCases',request.resource.data.caseId)).data.subjectUid == uid
+        && statutoryApprovedEffect(request.resource.data.caseId,'candidate_ban');
+      allow update, delete: if false;
+    }
+    match /activityYears/{id} {
+      allow read: if signedIn();
+      allow create: if isActive() && request.resource.data.termId == id && request.resource.data.status == 'published'
+        && request.resource.data.threshold is int && request.resource.data.threshold >= 0 && request.resource.data.inclusive is bool
+        && request.resource.data.spendPercent is number && request.resource.data.spendPercent >= 0 && request.resource.data.spendPercent <= 100
+        && request.resource.data.startsAt is timestamp && request.resource.data.endsAt is timestamp && request.resource.data.endsAt > request.resource.data.startsAt
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == me()
+        && get(docPath('governanceCases',request.resource.data.caseId)).data.status == 'approved'
+        && get(docPath('governanceCases',request.resource.data.caseId)).data.kind == 'activity_threshold'
+        && request.resource.data.keys().hasOnly(['title','termId','threshold','inclusive','spendPercent','caseId','status','startsAt','endsAt','createdBy','createdAt'])
+        && request.resource.data.title is string
+        && request.resource.data.termId == get(docPath('governanceCases',request.resource.data.caseId)).data.proposal.termId
+        && request.resource.data.threshold == get(docPath('governanceCases',request.resource.data.caseId)).data.proposal.threshold
+        && request.resource.data.inclusive == get(docPath('governanceCases',request.resource.data.caseId)).data.proposal.inclusive
+        && request.resource.data.spendPercent == get(docPath('governanceCases',request.resource.data.caseId)).data.proposal.spendPercent
+        && request.resource.data.startsAt == get(docPath('terms',id)).data.startsAt
+        && request.resource.data.endsAt == get(docPath('terms',id)).data.endsAt;
+      allow update, delete: if false;
+    }
+    function statutoryCurrentRole(authority) {
+      return statutoryRole(get(docPath('statutoryPolicies',get(docPath('settings','statutory')).data.policyId)).data,authority);
+    }
+    match /electionAdmissions/{id} {
+      function d() { return request.resource.data; }
+      function year() { return get(docPath('activityYears',d().yearId)).data; }
+      function annual() { return get(/databases/$(database)/documents/annualActivity/$(d().yearId)/members/$(d().uid)).data; }
+      function policy() { return get(docPath('statutoryPolicies',get(docPath('settings','statutory')).data.policyId)).data; }
+      allow read: if signedIn() && (resource.data.uid == me() || hasPerm('elections.manage') || statutoryCurrentRole('audit'));
+      allow create: if statutoryCurrentRole('audit')
+        && id == d().electionId + '__' + d().unitId + '__' + d().roleId + '__' + d().uid
+        && d().keys().hasOnly(['electionId','uid','unitId','roleId','yearId','annualXp','status','byUid','at','exceptionCaseId'])
+        && d().status == 'verified' && d().byUid == me() && d().at == request.time
+        && d().yearId == get(docPath('elections',d().electionId)).data.activityYearId
+        && get(docPath('elections',d().electionId)).data.status in ['draft','nominations']
+        && !exists(docPath('candidateBans',d().uid)) && annual().status == 'final' && annual().registered && annual().reachable
+        && d().annualXp == annual().annualXp
+        && (year().inclusive ? d().annualXp >= year().threshold : d().annualXp > year().threshold)
+        && (!statutoryYkRole(policy(),d().unitId,d().roleId) || (annual().ieeeActive
+          && (annual().priorAdministrativeTerm || (d().get('exceptionCaseId','') != ''
+            && get(docPath('governanceCases',d().exceptionCaseId)).data.kind == 'candidate_exception'
+            && get(docPath('governanceCases',d().exceptionCaseId)).data.subjectUid == d().uid
+            && get(docPath('governanceCases',d().exceptionCaseId)).data.status == 'approved'))));
+      allow update, delete: if false;
+    }
+    match /annualActivity/{yearId}/members/{uid} {
+      allow read: if signedIn() && (me() == uid || statutoryCurrentRole('actor') || statutoryCurrentRole('audit') || statutoryCurrentRole('president') || statutoryCurrentRole('secretary') || statutoryCurrentRole('finance') || statutoryCurrentRole('external') || statutoryCurrentRole('technical') || statutoryCurrentRole('internal'));
+      allow create: if statutoryCurrentRole('actor') && !statutoryHold(me(),'actor')
+        && request.resource.data.keys().hasOnly(['uid','yearId','siteUid','annualXp','balance','registered','reachable','priorAdministrativeTerm','ieeeActive','status','actorUid','actorAt','note'])
+        && exists(docPath('activityYears',yearId)) && request.resource.data.uid == uid && request.resource.data.yearId == yearId
+        && request.resource.data.annualXp is int && request.resource.data.annualXp >= 0 && request.resource.data.balance is int && request.resource.data.balance >= 0
+        && request.resource.data.registered is bool && request.resource.data.reachable is bool && request.resource.data.priorAdministrativeTerm is bool && request.resource.data.ieeeActive is bool
+        && request.resource.data.siteUid is string && request.resource.data.note is string
+        && request.resource.data.status == 'actor_verified' && request.resource.data.actorUid == me() && request.resource.data.actorAt == request.time;
+      allow update: if statutoryCurrentRole('audit') && me() != resource.data.actorUid && resource.data.status == 'actor_verified'
+        && request.resource.data.status == 'final' && request.resource.data.auditUid == me() && request.resource.data.auditAt == request.time
+        && onlyKeys(['status','auditUid','auditAt']);
+      allow delete: if false;
+    }
+    match /backupReceipts/{id} {
+      allow read: if statutoryOversight();
+      allow create: if (statutoryCurrentRole('techops') || statutoryCurrentRole('president'))
+        && request.resource.data.keys().hasOnly(['digest','scope','locations','byUid','at'])
+        && request.resource.data.digest is string && request.resource.data.digest.size() == 64
+        && request.resource.data.scope == 'site-rtdb-full' && request.resource.data.locations is list && request.resource.data.locations.size() == 2
+        && request.resource.data.locations[0] is string && request.resource.data.locations[1] is string
+        && request.resource.data.locations[0] != request.resource.data.locations[1]
+        && request.resource.data.byUid == me() && request.resource.data.at == request.time;
+      allow update, delete: if false;
+    }
+    match /assemblyRecords/{id} {
+      function d() { return request.resource.data; }
+      function c() { return get(docPath('governanceCases',d().caseId)).data; }
+      function previous() { return get(docPath('assemblyRecords',d().previousId)).data; }
+      allow read: if signedIn();
+      allow create: if isActive() && (statutoryCurrentRole('secretary') || statutoryCurrentRole('president'))
+        && c().kind in ['charter_change','general_assembly'] && c().status == 'open'
+        && d().round in [1,2] && d().heldAt is timestamp && d().heldAt <= request.time
+        && d().totalMembers is int && d().totalMembers > 0 && d().attendance is int && d().attendance >= 0 && d().attendance <= d().totalMembers
+        && d().yes is int && d().no is int && d().abstain is int && d().yes >= 0 && d().no >= 0 && d().abstain >= 0
+        && d().yes + d().no + d().abstain == d().attendance && d().minutesUrl is string && d().minutesUrl.size() > 0
+        && (d().round == 1 || (previous().caseId == d().caseId && previous().round == 1
+          && (c().kind == 'general_assembly' ? d().heldAt > previous().heldAt
+            : (c().step == 2 && d().previousId == get(/databases/$(database)/documents/governanceCases/$(d().caseId)/actions/1).data.proofId
+              && d().heldAt >= previous().heldAt + duration.value(15,'d')
+              && previous().attendance * 3 >= previous().totalMembers * 2 && previous().yes * 3 >= previous().attendance * 2))))
+        && d().createdBy == me() && d().createdAt == request.time;
+      allow update, delete: if false;
     }
 
     // ---------- Fiziksel demirbaş, zimmet ve değiştirilemez hareket geçmişi ----------

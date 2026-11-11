@@ -18,6 +18,7 @@ import type { HubEvent } from '../../lib/opsTypes';
 import { useOrg } from '../../lib/org';
 import type { WithId } from '../../lib/types';
 import { approvedEventsIcs, isApprovedCalendarEvent } from '../../lib/eventExports';
+import { SiteConnection } from '../../lib/siteIntegration';
 
 export function fmtEventDate(s: string | null) {
   return s ? dayjs(s).format('DD MMM YYYY, HH:mm') : 'Tarih belirlenmedi';
@@ -67,6 +68,7 @@ export function EventsPage() {
 
   return (
     <Stack>
+      {canApprove && <SiteConnection />}
       <PageHeader
         title="Etkinlikler"
         description="Öneriden kapanış raporuna kadar tüm etkinlikler. Etkinlik, YK kararıyla veya onaylanmış etkinlik izin dilekçesiyle onaylanır."

@@ -14,11 +14,12 @@ import type { ApprovalStep, Role, TemplateContent, Unit } from './types';
 import { BRANCH } from './types';
 
 export const DEFAULT_ROLES: Record<string, Role> = {
+  actor: { name: 'ACTOR (Activity Controller)', scope: 'branch', description: 'Tüzük Madde 22, 28–37: komiteyle belirlenen aktiflik puanını doğrular ve puan QR kayıtlarını yönetir. Seçim sonucu ayrıca kaydedilir.', permissions: ['site.qr.manage'], active: true, order: 11 },
   baskan: {
     name: 'Öğrenci Kolu Başkanı',
     scope: 'branch',
     description: 'Nihai onay makamı. Tüm yönetim yetkilerine sahiptir.',
-    permissions: PERMISSIONS.filter((p) => p.scope === 'branch').map((p) => p.id),
+    permissions: PERMISSIONS.filter((p) => p.scope === 'branch' && p.id !== 'site.qr.manage').map((p) => p.id),
     active: true,
     order: 1,
   },

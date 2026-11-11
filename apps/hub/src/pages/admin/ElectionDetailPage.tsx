@@ -1,3 +1,5 @@
+import { ElectionEligibilityPanel, type ElectionAdmission } from '../../components/ElectionEligibilityPanel';
+import type { ActivityYear } from '../../lib/statutoryTypes';
 import {
   ActionIcon,
   Alert,
@@ -37,6 +39,7 @@ import { BRANCH } from '../../lib/types';
 import { ELECTION_STATUS } from './ElectionsPage';
 
 const ELECTION_TYPES = [
+  { value: 'actor', label: 'ACTOR: YK + IK gizli ortak secimi' },
   { value: 'general_assembly', label: 'Olağan / olağanüstü genel kurul' },
   { value: 'board', label: 'Yönetim kurulu içi seçim' },
   { value: 'unit', label: 'Komite / birim seçimi' },
@@ -78,6 +81,8 @@ export function ElectionDetailPage() {
   const { can } = useAuth();
   const { roles, terms, unitOptions, unitName, roleName } = useOrg();
   const { data: election, loading } = useDoc<Election>(`elections/${id}`);
+  const years=useCollection<ActivityYear>('activityYears');
+  const admissions=useCollection<ElectionAdmission>('electionAdmissions',[where('electionId','==',id||'')],`admissions-${id}`);
   const members = useCollection<Member>('members', [where('status', '==', 'active')], 'active-members');
   const [draft, setDraft] = useState<Election | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -118,7 +123,7 @@ export function ElectionDetailPage() {
     try {
       const {
         title, termId, date, description, positions, eligibleVoters, totalVotes, quorumRequired, status,
-        electionType, votingMethod, minutesUrl, decisionNo, electionChair, electionClerk, resultNote,
+        electionType, activityYearId, votingMethod, minutesUrl, decisionNo, electionChair, electionClerk, resultNote,
       } = draft;
       await updateDoc(doc(db, 'elections', id!), {
         title,
@@ -129,7 +134,7 @@ export function ElectionDetailPage() {
         eligibleVoters: eligibleVoters ?? null,
         totalVotes: totalVotes ?? null,
         quorumRequired: quorumRequired ?? null,
-        electionType: electionType ?? 'general_assembly',
+        electionType: electionType ?? 'general_assembly', activityYearId:activityYearId||null,
         votingMethod: votingMethod ?? 'secret_ballot',
         minutesUrl: minutesUrl ?? '',
         decisionNo: decisionNo ?? '',
@@ -152,9 +157,10 @@ export function ElectionDetailPage() {
     const baseIssues = electionIssues({ ...draft, status: 'voting' });
     if (baseIssues.length) return notifyError(new Error(baseIssues.join('\n')), 'Sonuçlar kesinleştirilemedi');
     const positions = draft.positions.map((p) => {
-        const sorted = [...p.candidates].sort((a, b) => b.votes - a.votes);
-        const tie = sorted.length > 1 && sorted[0].votes === sorted[1].votes;
-        return { ...p, winnerUid: sorted.length && !tie ? sorted[0].uid : p.winnerUid };
+        const xp=(uid:string)=>admissions.data.find(a=>a.uid===uid&&a.roleId===p.roleId&&a.unitId===p.unitId)?.annualXp??0;
+        const sorted = [...p.candidates].sort((a, b) => b.votes - a.votes || xp(b.uid)-xp(a.uid));
+        const tie = sorted.length > 1 && sorted[0].votes === sorted[1].votes && xp(sorted[0].uid)===xp(sorted[1].uid);
+        return { ...p, winnerUid: sorted.length && !tie ? sorted[0].uid : p.winnerUid, tieBreakNote: sorted.length>1&&sorted[0].votes===sorted[1].votes&&!tie?'Yillik XP ustunlugu (Md. 84-EK.b / 86).':p.tieBreakNote };
     });
     const unresolved = positions.filter((p) => !p.winnerUid);
     update({ positions, status: unresolved.length ? 'voting' : 'completed' });
@@ -162,6 +168,7 @@ export function ElectionDetailPage() {
   };
 
   const apply = () => {
+    if(draft.electionType==='actor') return notifyError(new Error('ACTOR icin Tuzuk surecleri ekraninda ACTOR secimi ve guven oyu dosyasi acin; Denetleme onayi ve ayri YK/IK guven oylari tamamlanmali.'));
     const winners = draft.positions.filter((p) => p.winnerUid);
     if (!winners.length) return notifyError(new Error('Kazananı belirlenmiş pozisyon yok.'));
     const term = terms.find((t) => t.id === draft.termId);
@@ -297,6 +304,7 @@ export function ElectionDetailPage() {
             />
           </Group>
           <Group grow wrap="wrap">
+            <Select label="İlan edilmiş aktiflik yılı" data={years.data.map(y=>({value:y.id,label:y.title}))} value={draft.activityYearId||null} onChange={v=>update({activityYearId:v})} disabled={setupLocked}/>
             <Select label="Seçim türü" data={ELECTION_TYPES} value={draft.electionType ?? 'general_assembly'} onChange={(v) => update({ electionType: (v ?? 'general_assembly') as Election['electionType'] })} disabled={setupLocked} />
             <Select label="Oylama yöntemi" data={VOTING_METHODS} value={draft.votingMethod ?? 'secret_ballot'} onChange={(v) => update({ votingMethod: (v ?? 'secret_ballot') as Election['votingMethod'] })} disabled={setupLocked} />
           </Group>
@@ -324,7 +332,7 @@ export function ElectionDetailPage() {
         </Alert>
       )}
 
-      <Group justify="space-between">
+      <ElectionEligibilityPanel id={id!} election={draft}/><Group justify="space-between">
         <Title order={4}>Pozisyonlar ve adaylar</Title>
         {draft.status === 'voting' && draft.positions.length > 0 && (
           <Button variant="light" leftSection={<IconTrophy size={16} />} onClick={autoWinners}>

@@ -270,4 +270,32 @@ run('uçtan uca dilekçe akışı', () => {
       decidePetition({ petitionId: id, decision: 'approve', roleId: 'birim-baskani', roleName: 'Başkan', unitName: 'CS', comment: '' }),
     ).rejects.toThrow();
   });
+
+  it('tüzük: gerçek istemciyle atomik tedbir, otomatik takip dosyası, gizli itiraz ve açık erişim iadesi', async()=>{
+    const { Timestamp }=await import('firebase/firestore');
+    const { initialStatutoryPolicy,publishStatutoryPolicy,createStatutoryCase,decideStatutoryCase }=await import('../lib/statutory');
+    await as('baskan');
+    for(const [roleId,name] of [['denetleme-baskani','Denetleme'],['akademik-danisman','Danışman']]) await setDoc(doc(db,'roles',roleId),{name,scope:'branch',permissions:['governance.read'],active:true,order:12});
+    await createAssignments([
+      {uid:uids.cs,memberName:'Denetleme',roleId:'denetleme-baskani',roleName:'Denetleme',unitId:'branch',unitName:'Kol',startsAt:Timestamp.now(),endsAt:null,termId:null},
+      {uid:uids.gs,memberName:'Danışman',roleId:'akademik-danisman',roleName:'Danışman',unitId:'branch',unitName:'Kol',startsAt:Timestamp.now(),endsAt:null,termId:null},
+    ]);
+    const policy=initialStatutoryPolicy();await publishStatutoryPolicy(policy);
+    const policyId=(await getDoc(doc(db,'settings','statutory'))).data()!.policyId;
+    const proposal={termId:'',threshold:0,inclusive:false,spendPercent:0,affectedArticles:[]};
+    const id=await createStatutoryCase({kind:'emergency_access',title:'Acil erişim',summary:'İspat ve tebliğ kaydı',subjectUid:uids.uye,unitId:'branch',proposal},policyId,policy as never);
+    await decideStatutoryCase(id,true,'Başkan kararı','','https://example.org/teblig');
+    await as('gs');await decideStatutoryCase(id,true,'Ayrı ortak onay','','https://example.org/onay');
+    expect((await getDoc(doc(db,'governanceCases',`${id}-review`))).data()!.kind).toBe('emergency_ratification');
+    await as('uye');
+    expect((await getDoc(doc(db,'governanceHolds',uids.uye,'scopes','all'))).data()!.caseId).toBe(id);
+    await expect(getDocs(collection(db,'events'))).rejects.toThrow();
+    const appeal=await createStatutoryCase({kind:'confidential_complaint',title:'Bağımsız itiraz',summary:'Gizlilik şartıyla yazılı başvuru',subjectUid:null,unitId:'branch',proposal},policyId,policy as never);
+    expect((await getDocs(query(collection(db,'governanceCases'),where('createdBy','==',uids.uye)))).docs.some(d=>d.id===appeal)).toBe(true);
+    await as('baskan');await expect(getDoc(doc(db,'governanceCases',appeal))).rejects.toThrow();
+    const restore=await createStatutoryCase({kind:'access_restore',title:'Tedbir iadesi',summary:'İtirazın gerekçeli değerlendirilmesi',subjectUid:uids.uye,unitId:'branch',proposal},policyId,policy as never);
+    await as('cs');await decideStatutoryCase(restore,true,'Denetleme görüşü','','https://example.org/dk');
+    await as('gs');await decideStatutoryCase(restore,true,'Danışman açık onayı','','https://example.org/danisman');
+    await as('uye');await expect(getDocs(collection(db,'events'))).resolves.toBeDefined();
+  });
 });

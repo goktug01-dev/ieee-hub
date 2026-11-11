@@ -33,6 +33,12 @@ npm run dev            # 2. terminal: http://localhost:5173
 
 `.env.development` varsayılan olarak emülatöre bağlanır. İzin verilen kurucu hesabı ilk kurulumu üstlenir ve kurulum sihirbazı açılır. Sihirbaz varsayılan rolleri, isteğe bağlı örnek komiteleri ve iki örnek dilekçe şablonunu oluşturur.
 
+## Telefon veya bilgisayara kurulum
+
+Hub, HTTPS üzerinden telefona veya bilgisayara kurulabilen bir web uygulamasıdır (PWA). Giriş ekranı, kullanıcı menüsü veya Yardım ekranından **Uygulamayı yükle** seçeneğini açın. Android/masaüstünde Chrome veya Edge kurulum penceresini kullanın; iPhone/iPad'de Safari → Paylaş → Ana Ekrana Ekle adımlarını izleyin. Kurulum için uygulama mağazası gerekmez.
+
+Güncel kayıtlar, giriş ve onay işlemleri internet gerektirir. Bağlantı kesildiğinde yeniden deneme ekranı gösterilir; servis çalışanı yalnız bu statik ekranı saklar. Kurulum e-posta/push bildirimlerini etkinleştirmez. Bkz. [ADR-0042](docs/adr/0042-telefona-kurulabilen-web-uygulamasi.md).
+
 ## Testler
 
 ```bash
@@ -40,6 +46,8 @@ npm run typecheck
 npm test               # birim testleri
 npm run test:rules     # güvenlik kuralı testleri (emülatör)
 npm run test:e2e       # uçtan uca: gerçek istemci kodu + gerçek kurallar (emülatör)
+npm run test:site      # harici site RTDB kuralları (ayrı demo emülatörü)
+npm run smoke:pwa      # üretim worker'ı: mobil kurulum yardımı ve bağlantısız yeniden deneme (Edge)
 ```
 
 Uçtan uca test şu akışı baştan sona çalıştırır: kurulum, üye onayı, görev atama, komite dilekçesi, sahte onay girişimlerinin reddi, üç adımlı onay, belge içeriğinin kontrolü, doğrulama kaydı, iade ve yeniden gönderim, görevi sona eren kişinin onay yetkisini kaybetmesi. GitHub Actions bu testleri her push'ta çalıştırır.

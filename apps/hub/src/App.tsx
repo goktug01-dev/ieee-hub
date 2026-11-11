@@ -5,6 +5,7 @@ import { AppLayout } from './components/AppLayout';
 import { FullPageLoader } from './components/ui';
 import { OrgProvider } from './lib/org';
 import { UnitScopeProvider } from './lib/unitScope';
+import { SiteIntegrationProvider } from './lib/siteIntegration';
 import type { PermissionId } from './lib/permissions';
 import { LoginPage } from './pages/public/LoginPage';
 import { PendingPage } from './pages/public/PendingPage';
@@ -55,6 +56,9 @@ const BoardVotePage = lazy(() => import('./pages/boards/BoardVotePage').then((m)
 const ExternalFirebasePage = lazy(() => import('./pages/admin/ExternalFirebasePage').then((m) => ({ default: m.ExternalFirebasePage })));
 const RoomsPage = lazy(() => import('./pages/rooms/RoomsPage').then((m) => ({ default: m.RoomsPage })));
 const AssetsPage = lazy(() => import('./pages/assets/AssetsPage').then((m) => ({ default: m.AssetsPage })));
+const ActorPage = lazy(() => import('./pages/ActorPage').then((m) => ({ default: m.ActorPage })));
+const StatutoryPage = lazy(() => import('./pages/StatutoryPage').then((m) => ({ default: m.StatutoryPage })));
+const StatutoryPersonalPage = lazy(() => import('./pages/public/StatutoryPersonalPage').then((m) => ({ default: m.StatutoryPersonalPage })));
 
 function RequirePerm({ perm, children }: { perm: PermissionId; children: React.ReactElement }) {
   const { can } = useAuth();
@@ -87,6 +91,7 @@ export function App() {
       <Route path="/dogrula" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />
       <Route path="/dogrula/:code" element={<Suspense fallback={<FullPageLoader />}><VerifyPage /></Suspense>} />
       <Route path="/tuzuk" element={<Suspense fallback={<FullPageLoader />}><StatutePage /></Suspense>} />
+      <Route path="/itirazlar" element={<Suspense fallback={<FullPageLoader />}><StatutoryPersonalPage /></Suspense>} />
       <Route path="/kariyer" element={<Suspense fallback={<FullPageLoader />}><CareerPage /></Suspense>} />
       <Route path="*" element={<Gate phase={phase} />} />
     </Routes>
@@ -111,7 +116,7 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
       return <PendingPage />;
     default:
       return (
-        <OrgProvider>
+        <SiteIntegrationProvider><OrgProvider>
           <UnitScopeProvider>
             <Routes>
               <Route element={<AppLayout />}>
@@ -126,6 +131,8 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               <Route path="gonulluluk" element={<VolunteerPage />} />
               <Route path="basvuru-yonetimi" element={<RecruitmentPage />} />
               <Route path="etkinlikler" element={<EventsPage />} />
+              <Route path="actor" element={<ActorPage />} />
+              <Route path="surecler" element={<StatutoryPage />} />
               <Route path="etkinlikler/:id" element={<EventDetailPage />} />
               <Route path="toplantilar" element={<MeetingsPage />} />
               <Route path="toplantilar/:id" element={<MeetingDetailPage />} />
@@ -159,7 +166,7 @@ function Gate({ phase }: { phase: ReturnType<typeof useAuth>['phase'] }) {
               </Route>
             </Routes>
           </UnitScopeProvider>
-        </OrgProvider>
+        </OrgProvider></SiteIntegrationProvider>
       );
   }
 }

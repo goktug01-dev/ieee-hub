@@ -26,7 +26,7 @@ import { modals } from '@mantine/modals';
 import { IconArrowLeft, IconArrowRight, IconCheck, IconDownload, IconFileTypeCsv, IconPlus, IconPrinter } from '@tabler/icons-react';
 import { orderBy, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { MetaBadge, dueInfo } from '../../components/MetaBadge';
 import { TaskDrawer } from '../../components/TaskDrawer';
@@ -52,12 +52,14 @@ import type { Petition } from '../../lib/types';
 import { fmtEventDate } from './EventsPage';
 import { printArea } from '../../lib/print';
 import { findParticipantRestrictions, type RestrictionMatch } from '../../lib/eventRestrictions';
+import { EventPointsPanel, SitePublicationStatus } from '../../components/SiteWorkflows';
 
 export function EventDetailPage() {
   const { id } = useParams();
+  const [params] = useSearchParams();
   const { user, access } = useAuth();
   const { data: e, loading } = useDoc<HubEvent>(`events/${id}`);
-  const [tab, setTab] = useState<string | null>('genel');
+  const [tab, setTab] = useState<string | null>(params.get('sekme') === 'puan' ? 'puan' : 'genel');
 
   if (loading) return <SectionLoader />;
   if (!e || !id) return <EmptyState title="Etkinlik bulunamadı" />;
@@ -93,6 +95,7 @@ export function EventDetailPage() {
           <Group gap="sm">
             <Title order={2}>{e.name}</Title>
             <MetaBadge map={EVENT_STATUS} value={e.status} />
+            {e.status !== 'proposed' && <SitePublicationStatus kind="event" id={id} version={e.updatedAt} />}
           </Group>
           <Text c="dimmed" size="sm">
             {e.code} · {e.unitName} · {e.type} · {fmtEventDate(e.startsAt)}
@@ -143,6 +146,7 @@ export function EventDetailPage() {
 
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
+          <Tabs.Tab value="puan">Aktiflik puanı ve QR</Tabs.Tab>
           <Tabs.Tab value="genel">Genel</Tabs.Tab>
           <Tabs.Tab value="gorevler">Görev planı</Tabs.Tab>
           {canParticipants && <Tabs.Tab value="katilimci">Katılımcılar (HeptaCert)</Tabs.Tab>}
@@ -167,6 +171,7 @@ export function EventDetailPage() {
           <EventContent id={id} />
         </Tabs.Panel>
       </Tabs>
+      {tab === 'puan' && <EventPointsPanel id={id} event={e} canManage={canManage} />}
     </Stack>
   );
 }

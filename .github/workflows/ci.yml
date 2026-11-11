@@ -30,6 +30,8 @@ jobs:
         run: npm run test:rules
       - name: Uçtan uca testler (istemci + kurallar)
         run: npm run test:e2e
+      - name: Harici site RTDB kuralı testleri
+        run: npm run test:site
 
   deploy:
     name: Canlıya dağıt
