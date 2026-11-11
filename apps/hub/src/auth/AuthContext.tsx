@@ -7,6 +7,7 @@ import { useDoc } from '../lib/hooks';
 import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 import type { Access, Member, OrgSettings, PublicSettings } from '../lib/types';
 import type { PermissionId } from '../lib/permissions';
+import type { GovernanceHold } from '../lib/statutoryTypes';
 
 export type AuthPhase =
   | 'loading'
@@ -55,8 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const uid = user?.uid ?? null;
   const memberState = useDoc<Member>(uid ? `members/${uid}` : null);
   const accessState = useDoc<Access>(uid ? `access/${uid}` : null);
+  const holdState = useDoc<GovernanceHold>(uid ? `governanceHolds/${uid}/scopes/all` : null);
+  const actorHoldState = useDoc<GovernanceHold>(uid ? `governanceHolds/${uid}/scopes/actor` : null);
+  const [clockNow,setClockNow]=useState(Date.now());
+  useEffect(()=>{const timer=window.setInterval(()=>setClockNow(Date.now()),30000);return()=>window.clearInterval(timer);},[]);
+  const accessHeld=!!holdState.data?.expiresAt && holdState.data.expiresAt.toMillis()>clockNow;
+  const actorHeld=!!actorHoldState.data?.expiresAt && actorHoldState.data.expiresAt.toMillis()>clockNow;
   const publicState = useDoc<PublicSettings>('settings/public');
-  const isActive = memberState.data?.status === 'active';
+  const isActive = !holdState.loading && memberState.data?.status === 'active' && !accessHeld;
   const orgState = useDoc<OrgSettings>(isActive ? 'settings/org' : null);
   const setupState = useDoc<{ done: boolean }>(isActive ? 'settings/setup' : null);
 
@@ -90,20 +97,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch((e) => console.error('Üyelik kaydı oluşturulamadı', e));
   }, [user, memberState.loading, memberState.data, bootstrapped, careerMode]);
 
-  const access = accessState.data;
+  const access = useMemo(()=>!actorHeld || !accessState.data ? accessState.data : {...accessState.data,perms:Object.fromEntries(Object.entries(accessState.data.perms).filter(([key])=>key!=='site.qr.manage')),roleKeys:Object.fromEntries(Object.entries(accessState.data.roleKeys).filter(([key])=>!key.endsWith('__actor')))},[actorHeld,accessState.data]);
 
   const phase: AuthPhase = useMemo(() => {
     if (!authReady) return 'loading';
     if (!user) return 'signedOut';
-    if (bootstrapped === null || memberState.loading) return 'loading';
+    if (bootstrapped === null || memberState.loading || holdState.loading || actorHoldState.loading) return 'loading';
     if (!bootstrapped) return 'needsFounder';
     const m = memberState.data;
     if (!m || m.status === 'pending') return 'pending';
-    if (m.status === 'suspended' || m.status === 'left') return 'suspended';
+    if (m.status === 'suspended' || m.status === 'left' || accessHeld) return 'suspended';
     if (setupState.loading || accessState.loading) return 'loading';
     if (!setupState.data?.done && access?.superAdmin) return 'needsSeed';
     return 'active';
-  }, [authReady, user, bootstrapped, memberState, setupState, accessState.loading, access?.superAdmin]);
+  }, [authReady, user, bootstrapped, memberState, setupState, accessState.loading, access?.superAdmin, accessHeld, holdState.loading, actorHoldState.loading]);
 
   const value = useMemo<AuthValue>(
     () => ({

@@ -122,6 +122,7 @@ export async function rebuildAccessMany(uids: Iterable<string>): Promise<{ ok: n
 
 export function hasPermission(access: Access | null, perm: string): boolean {
   if (!access) return false;
+  if (perm === 'site.announcements.manage' && (hasRoleKey(access, 'branch__baskan') || hasRoleKey(access, 'branch__baskan-yardimcisi'))) return true;
   if (access.superAdmin) return true;
   // Eski kurulumlarda rol belgesi yeni izin kataloğundan önce oluşturulmuş olabilir.
   // Genel Sekreterin deftere erişimi rol anahtarıyla geriye dönük uyumlu kalır.

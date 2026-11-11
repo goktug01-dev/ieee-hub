@@ -253,6 +253,7 @@ export interface BudgetLine {
 export interface Budget {
   title: string;
   scope: 'event' | 'unit';
+  governanceCaseId?: string;
   unitId: string;
   unitName: string;
   eventId: string | null;
@@ -486,6 +487,7 @@ export interface MeetingDecision {
 }
 
 export interface Meeting {
+  excusedUids?: string[];
   unitId: string;
   unitName: string;
   title: string;
@@ -528,6 +530,9 @@ export interface ExternalFirebaseResource {
   readOnly: boolean;
   /** Hazır yönetim arayüzü; boşsa genel JSON tablosu kullanılır. */
   preset?: 'points-users';
+  /** Site puan tarayıcısının URL şablonu; {qrId} kayıt kimliğiyle değiştirilir. */
+  qrUrlTemplate?: string;
+  qrRegistryPath?: string;
   /** Puan görünümünün RTDB sıralama önbelleği yolu. */
   leaderboardPath?: string;
   /** Yönetim işlemlerinin uzak RTDB içindeki denetim kaydı yolu. */
@@ -567,6 +572,11 @@ export interface EventRestrictionIndex {
 }
 
 export interface ExternalFirebaseConfig {
+  siteEventsPath?: string;
+  siteAnnouncementsPath?: string;
+  siteQrPath?: string;
+  siteQrUrlTemplate?: string;
+  siteUnitMap?: Record<string, string>;
   apiKey: string;
   authDomain: string;
   projectId: string;

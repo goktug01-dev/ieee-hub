@@ -1,0 +1,4 @@
+{
+  "database": { "rules": "site.database.rules.json" },
+  "emulators": { "database": { "port": 9006 }, "singleProjectMode": true }
+}

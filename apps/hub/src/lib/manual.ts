@@ -23,6 +23,28 @@ export interface ManualSection {
 }
 
 export const MANUAL: ManualSection[] = [
+  {
+    id: 'tuzuk-surecleri',
+    audiences: ['member', 'manager', 'admin'],
+    title: 'Tüzük süreçleri ve yıllık aktiflik',
+    where: 'Tüzük süreçleri',
+    summary: 'Tüzükteki kararlar makam imzaları, kurul oylamaları ve değişmez işlem geçmişiyle takip edilir. Süre uyarıları kendi başına karar oluşturmaz.',
+    steps: [
+      'İlk kurulumda organizasyon yöneticisi makam rol eşlemelerini, kurul koltuklarını, resmî tatilleri ve süreleri kontrol ederek süreç politikasını yayımlar. Açık dosyalar oluşturulduğu sürüme bağlı kalır.',
+      'Süreç dosyaları › Yeni süreç / başvuru üzerinden türü, gerekçeyi, ilgili kişiyi ve birimi belirtin. Gerekli makamlar sırayla belge veya kesinleşmiş Hub oylaması kimliğiyle görüşlerini kaydeder.',
+      'Tedbir son onayla Hub erişimine uygulanır. Savunma ve inceleme takip dosyası açılır; erişimi kapatılan üye /itirazlar adresinden kendi dosyasına ulaşır. Gizli başvuruyu yalnız başvuran, Denetleme ve Danışman okuyabilir.',
+      'Aktif üyelik ve yıl sekmesinde baraj ve harcama oranı onaylı öneriyle aynı olarak yayımlanır. ACTOR yıllık XP kaydını doğrular; farklı bir Denetleme görevlisi kesinleştirir. Harcanabilir bakiye oy hakkını azaltmaz.',
+      'ACTOR, site bağlantısı açıkken onaylı eğitim yılını bir kez açabilir: önceki puanlar arşivlenir, güncel bakiye sıfırlanır, yıllık XP başlangıcı kaydedilir. Uzak site hesabına süreli activity yetkisi verilmiş olmalıdır.',
+      'Süre ve yükümlülük takibi sekmesinde arşiv, haftalık rapor, toplantı, devamsızlık, yıllık teslim, devir ve zimmet eksiklerini inceleyin. Eksik erişim olan kaynakların kontrolleri tamamlanmış sayılmaz.',
+      'Seçim ekranında ilan edilmiş aktiflik yılını seçin. Denetleme aday uygunluğunu doğrular. ACTOR sonucu ayrıca Denetleme onayı ile ayrı YK ve İK güven oylarından sonra süreç dosyası üzerinden göreve işlenir.',
+      'Yedek ve yıllık arşiv sekmesinde TechOps / Başkan, süreli site backup yetkisiyle şifreli yedek indirip iki ayrı ortama teslim kaydı tutar. Şifreli dosya aynı ekrandan yerel olarak çözülebilir.',
+    ],
+    tips: [
+      'Islak imza, fiziksel gizli oy, SKS işlemi ve dış sistemlerde hesap devri resmî belgeyle ayrıca tamamlanır. Hub bunların yerine geçmez.',
+      'Spark üzerinde kapalı tarayıcıda zamanlanmış işlem çalışmaz; site aktarımı yetkili bağlantı açıkken yapılır. Günlük yedek ekranı teslimi izler, kesintisiz yedek servisi değildir.',
+      'Sitenin yıllık XP hesabı yaşam boyu kazanım ile yıl başlangıcı arasındaki farktır. ACTOR ve Denetleme kaynak kayıtları kontrol etmeden puanı kesinleştirmemelidir.',
+    ],
+  },
   // ---------- Üye ve gönüllüler ----------
   {
     id: 'giris',
@@ -521,6 +543,40 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'site-otomasyon',
+    audiences: ['manager', 'admin'],
+    title: 'Web sitesine etkinlik ve duyuru aktarımı',
+    where: 'Etkinlikler · İletişim › Web sitesi duyuruları · Üyeler › Web sitesi üyeleri',
+    summary: 'YK / izin dilekçesi onayı tamamlanan etkinlikler site takvimine, YK başkanı veya yardımcısının duyuruları siteye otomatik aktarılır.',
+    steps: [
+      '“Web sitesi bağlantısı” kutusundan kendi site hesabınızla bağlanın. Site projesinde ilgili işlem yetkiniz ayrıca tanımlanmış olmalı.',
+      'Etkinliği Hub’da oluşturun ve mevcut onay sürecini tamamlayın. Başlangıç tarihi, açıklama ve yer site takvimine aktarılır; bütçe, katılımcılar ve iç raporlar aktarılmaz.',
+      'Etkinlikteki “Siteye aktarıldı” rozeti güncel sürümün aktarımını gösterir. İptal edilen etkinlik sitedeki takvimden kaldırılır.',
+      'YK başkanı veya yardımcısı “İletişim › Web sitesi duyuruları”ndan başlık, metin ve isteğe bağlı bağlantı girer. Düzenlemeler ve yayından kaldırma siteye aktarılır.',
+      'Üyelik sorumlusu “Üyeler › Web sitesi üyeleri”nden site başvurularını gerekçe yazarak onaylar veya askıya alır. Hub ve site üyeliği ayrı tutulur.',
+      'Aktarım başarısızsa bağlantı kutusundaki hatayı kontrol edip “Yeniden dene”ye basın. Kaynak kayıtlar Hub’da kalır ve yetkili site oturumu yeniden açılınca tekrar aktarılır.',
+    ],
+    tips: [
+      'Spark planında sunucu veya zamanlanmış görev yoktur. Aktarım yetkili kişinin Hub ve site oturumu açıkken çalışır; kapalı tarayıcıda anında aktarım yapılmaz.',
+      'Ana sayfanın mevcut duyuru alanı WordPress yazılarını okur. TechOps bir kez firebase/site-home-integration.html bağlantısını ana sayfanın HTML içeriğine eklemelidir.',
+    ],
+  },
+  {
+    id: 'actor-puan-qr',
+    audiences: ['manager', 'admin'],
+    title: 'ACTOR doğrulaması ve etkinlik puan QR’ı',
+    where: 'Etkinlik detayı › Aktiflik puanı ve QR · ACTOR · Puan ve QR',
+    summary: 'ACTOR, tüzükteki bağımsız Aktiflik Denetleyicisidir. Komite puan önerisini yapar; ACTOR doğrulayınca siteye puan QR’ı oluşturulur.',
+    steps: [
+      'Komite, onayı tamamlanmış ve henüz bitmemiş etkinlikte puanı, gerekçeyi ve QR son kullanım zamanını girip “ACTOR doğrulamasına gönder”e basar.',
+      'Tüzükteki seçim süreciyle belirlenen kişinin ACTOR görevi Hub’da tanımlanır. Teknik yönetici olmak tek başına ACTOR doğrulaması yetkisi vermez.',
+      'ACTOR menüsünden bekleyen öneriyi açar; “Puanı doğrula ve QR oluştur” ile doğrulamayı kaydeder. Kendi site hesabının QR işlem yetkisi bulunmalıdır.',
+      'Siteye aktarım tamamlanınca “Puan QR’ını görüntüle”den PNG indirin. Bağlantı sitedeki profile/?qr_id= biçimini kullanır.',
+      'Onaylanan puan değiştirilemez; ACTOR gerektiğinde “QR’ı kapat”abilir. Süresi dolan yeni QR üyelere puan kazandırmak için okunamaz.',
+    ],
+    tips: ['Hub biriminin site komite kimliğiyle eşlenmesi ve güncel site RTDB kurallarının yayımlanması gerekir. Puan onayı Hub’da, okutma ve üye puanları site veritabanında tutulur.'],
+  },
+  {
     id: 'harici-firebase-puan',
     audiences: ['admin'],
     title: 'IEEE Puan ve harici Firebase yönetimi',
@@ -528,6 +584,9 @@ export const MANUAL: ManualSection[] = [
     summary: 'IEEE Puan verisi Hub’a kopyalanmadan, uzak projenin kendi hesabı ve güvenlik kurallarıyla görüntülenir ve yönetilir.',
     steps: [
       'Firebase Console’daki web uygulaması değerlerini ve Realtime Database URL’sini bağlantı alanlarına girin; servis hesabı veya özel anahtar kullanmayın.',
+      '“Hub → Web sitesi otomasyonu” bölümünde takvim, duyuru ve QR yollarını kontrol edin; Hub birimlerini site komite kimlikleriyle eşleyip ayarı kaydedin.',
+      'Site yöneticisi hesabıyla bağlanıp kişinin site Authentication UID’sine görev bitiş tarihine kadar işlem yetkisi verin: ACTOR için QR, YK başkanı/yardımcısı için takvim ve duyuru, üyelik sorumlusu için üyelik.',
+      'Site Realtime Database kurallarını site_firebase_rules.json dosyasının güncel içeriğiyle yayımlayın. Ana sayfaya firebase/site-home-integration.html içeriğini bir kez ekleyin.',
       '“IEEE Puan görünümü ekle” deyin. Varsayılan users, leaderboard_public ve admin_point_audit yollarını uzak projenize göre kontrol edip ayarı kaydedin.',
       'Uzak projede kendi Google veya e-posta hesabınızla ayrıca oturum açın. Üye arayarak güncel puanı, yaşam boyu kazanılanı ve harcananı gerekçe yazarak düzenleyin.',
       'Onaylı, onaysız, veri uyarılı veya teknik kilitli üyeleri filtreleyin. Tekil ya da toplu seçimle üyelikleri gerekçe yazarak onaylayın veya askıya alın; askıya alınan kayıt silinmez ve sıralamadan çıkarılır.',

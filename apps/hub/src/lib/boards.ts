@@ -50,7 +50,8 @@ export const DEFAULT_BOARDS: BoardsSettings = {
       { roleId: 'baskan-yardimcisi', unitId: BRANCH },
       { roleId: 'genel-sekreter', unitId: BRANCH },
       { roleId: 'sayman', unitId: BRANCH },
-      { roleId: 'yk-uyesi', unitId: BRANCH },
+      { roleId: 'dis-isler-yardimcisi', unitId: BRANCH },
+      { roleId: 'teknik-projeler-yardimcisi', unitId: BRANCH },
     ],
     fullSize: 6,
   },
@@ -60,6 +61,7 @@ export const DEFAULT_BOARDS: BoardsSettings = {
     seats: [
       { roleId: 'birim-baskani', unitId: null },
       { roleId: 'birim-baskan-yardimcisi', unitId: null },
+      { roleId: 'techops-baskani', unitId: BRANCH },
     ],
     fullSize: null,
   },

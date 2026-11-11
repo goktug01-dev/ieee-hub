@@ -1,6 +1,7 @@
 import { Button, Center, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconHourglass, IconLock } from '@tabler/icons-react';
 import { useAuth } from '../../auth/AuthContext';
+import { Link } from 'react-router';
 
 export function PendingPage() {
   const { phase, member, user, signOut } = useAuth();
@@ -26,6 +27,7 @@ export function PendingPage() {
           <Button variant="default" onClick={() => void signOut()}>
             Farklı hesapla giriş yap
           </Button>
+          {suspended && <Button component={Link} to="/itirazlar" variant="light">Dosyalarım, yazılı savunma ve itiraz</Button>}
         </Stack>
       </Paper>
     </Center>

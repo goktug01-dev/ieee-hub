@@ -62,7 +62,10 @@ flowchart LR
 | `boardVotes/{id}` + `ballots/{uid}` | Dondurulmuş kurul listesiyle açık oylama ve kişiye ait pusula | İlgili kurul üyeleri ve kurul yöneticisi | Kurul yöneticisi; pusulayı yalnız sahibi ve geçerli rolü varken |
 | `boardDecisions/{id}` | Numaralı, kaynak bağlantılı YK/İK/ortak karar defteri | Görünürlük politikasına göre aktif üyeler/kurul | Kurul yöneticisi; yalnız oluşturma |
 | `decisionCounters/{kurul_yıl}` | Kurul ve yıl bazlı boşluksuz karar sayacı | Aktif üye | Kararla aynı işlemde yalnız +1 |
-| `externalIntegrations/firebase` | Harici Firebase web yapılandırması ve izin verilen veri yolları; gizli anahtar içermez | `external.firebase.manage` | `external.firebase.manage` |
+| `externalIntegrations/firebase` | Harici Firebase web yapılandırması, site yolları ve birim/komite eşlemesi; gizli anahtar içermez | Site işlem yetkilileri | `external.firebase.manage` |
+| `siteAnnouncements/{id}` | Hub kaynaklı site duyurusu, geri çekme ve değişmez ilk yazar | YK başkanı/yardımcısı veya duyuru yetkilisi | Aynı yetkili; silinmez |
+| `eventPointRequests/{eventId}` | Komitenin puan önerisi ve ACTOR doğrulaması | Aktif üye | Etkinlik sahibi/yöneticisi önerir; ACTOR doğrular/kapatır; puan değişmez |
+| `siteSync/{kind__id}` | Kaynak sürümüne bağlı site aktarım makbuzu; onay yerine geçmez | Aktif üye | İlgili site işlem yetkilisi |
 | `statutes/current` | Herkese açık güncel tüzük üstverisi | Herkes | Organizasyon yöneticisi / Genel Sekreter |
 | `statuteVersions/{id}` + `chunks` | Değiştirilemez PDF/Word tüzük sürümü ve dosya parçaları | Herkes | Organizasyon yöneticisi / Genel Sekreter; yalnız oluşturma |
 | `assets/{id}` | Fiziksel demirbaş, konum, kondisyon ve zimmet durumu | Envanter/finans/sekreterlik/operasyon yetkilileri | Envanter, finans veya sekreterlik yöneticisi |

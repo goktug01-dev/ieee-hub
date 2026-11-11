@@ -1,0 +1,48 @@
+import { Alert, Badge, Button, Card, Group, Modal, MultiSelect, NumberInput, Checkbox, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { where } from 'firebase/firestore';
+import { useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
+import { useCollection, useDoc } from '../lib/hooks';
+import { canSignStatutoryStage, caseDeadline, createStatutoryCase, decideStatutoryCase, applyStatutoryCase } from '../lib/statutory';
+import type { StatutoryAction, StatutoryCase, StatutoryPolicy } from '../lib/statutoryTypes';
+import { AUTHORITY_LABELS } from '../lib/statuteCatalog';
+import { EmptyState, ErrorAlert, SectionLoader, notifyError, notifySuccess } from './ui';
+
+export function StatutoryCasePanel({policy,policyId,oversight,privateReview=false,initialId,terms=[]}: {policy:StatutoryPolicy;policyId:string;oversight:boolean;privateReview?:boolean;initialId?:string|null;terms?:{id:string;name:string}[]}) {
+  const {user}=useAuth();
+  const mine=useCollection<StatutoryCase>('governanceCases',[where('createdBy','==',user!.uid)],`case-mine-${user!.uid}`);
+  const related=useCollection<StatutoryCase>('governanceCases',[where('subjectUid','==',user!.uid),where('confidential','==',false)],`case-subject-${user!.uid}`);
+  const all=useCollection<StatutoryCase>(oversight?'governanceCases':null,[where('confidential','==',false)],'case-public');
+  const confidential=useCollection<StatutoryCase>(privateReview?'governanceCases':null,[where('confidential','==',true)],'case-confidential');
+  const [selected,setSelected]=useState<string|null>(initialId||null),[opened,setOpened]=useState(false),[busy,setBusy]=useState(false);
+  const [input,setInput]=useState({kind:'appeal',title:'',summary:'',subjectUid:user!.uid as string|null,unitId:'branch',proposal:{termId:'',threshold:0,inclusive:false,spendPercent:0,affectedArticles:[] as string[]}});
+  const items=[...new Map([...all.data,...mine.data,...related.data,...confidential.data].map(c=>[c.id,c])).values()].sort((a,b)=>(b.updatedAt?.toMillis()||0)-(a.updatedAt?.toMillis()||0));
+  return <Stack><Group justify="space-between"><Text fw={600}>Süreç dosyaları</Text><Button onClick={()=>setOpened(true)}>Yeni süreç / başvuru</Button></Group><ErrorAlert error={mine.error||related.error||all.error||confidential.error}/>
+    {mine.loading?<SectionLoader/>:!items.length?<EmptyState title="Süreç dosyası yok"/>:items.map(c=><Card key={c.id} withBorder><Group justify="space-between"><div><Text fw={600}>{c.title}</Text><Text size="sm">{policy.flows[c.kind]?.label||c.kind}{c.confidential?' · Gizli başvuru':''}</Text></div><Group><Badge color={c.status==='approved'?'teal':c.status==='rejected'?'red':'yellow'}>{c.status==='approved'?'Onayları tamamlandı':c.status==='rejected'?'Reddedildi':`Aşama ${c.step+1}`}</Badge><Button size="xs" variant="light" onClick={()=>setSelected(c.id)}>Dosyayı aç</Button></Group></Group></Card>)}
+    <Modal opened={opened} onClose={()=>setOpened(false)} title="Tüzük süreci / başvuru" size="lg"><Stack><Select label="Süreç" searchable data={Object.entries(policy.flows).map(([value,f])=>({value,label:`${f.label} · Md. ${f.articles}`}))} value={input.kind} onChange={value=>value&&setInput({...input,kind:value,subjectUid:['appeal','media_objection','handover','consent_transfer'].includes(value)?user!.uid:null})}/><Alert>{policy.flows[input.kind]?.description}</Alert><TextInput label="Başlık" maxLength={200} value={input.title} onChange={e=>setInput({...input,title:e.currentTarget.value})}/><Textarea label="Gerekçe / yazılı başvuru" autosize minRows={5} maxLength={20000} value={input.summary} onChange={e=>setInput({...input,summary:e.currentTarget.value})}/>{!policy.flows[input.kind]?.confidential&&<><TextInput label="İlgili üyenin Hub UID’si (varsa)" value={input.subjectUid||''} onChange={e=>setInput({...input,subjectUid:e.currentTarget.value||null})}/><TextInput label="Birim kimliği" value={input.unitId} onChange={e=>setInput({...input,unitId:e.currentTarget.value})}/></>}{input.kind==='activity_threshold'&&<><Select label="Egitim yili" data={terms.map(t=>({value:t.id,label:t.name}))} value={input.proposal.termId} onChange={v=>setInput({...input,proposal:{...input.proposal,termId:v||''}})}/><NumberInput label="Yillik XP baraji" min={0} allowDecimal={false} value={input.proposal.threshold} onChange={v=>setInput({...input,proposal:{...input.proposal,threshold:Number(v)}})}/><NumberInput label="Harcama orani (%)" min={0} max={100} value={input.proposal.spendPercent} onChange={v=>setInput({...input,proposal:{...input.proposal,spendPercent:Number(v)}})}/><Checkbox label="Baraja ulasmak yeterli" checked={input.proposal.inclusive} onChange={e=>setInput({...input,proposal:{...input.proposal,inclusive:e.currentTarget.checked}})}/></>}{input.kind==='charter_change'&&<MultiSelect label="Degistirilmesi onerilen maddeler" data={Array.from({length:104},(_,i)=>String(i+1)).concat('3.a')} value={input.proposal.affectedArticles} onChange={v=>setInput({...input,proposal:{...input.proposal,affectedArticles:v}})}/>}<Button loading={busy} disabled={!input.title.trim()||!input.summary.trim()} onClick={async()=>{setBusy(true);try{const id=await createStatutoryCase(input,policyId,policy);setOpened(false);setSelected(id);}catch(e){notifyError(e);}finally{setBusy(false);}}}>Dosyayı oluştur</Button></Stack></Modal>
+    <Modal opened={!!selected} onClose={()=>setSelected(null)} title="Tüzük süreç dosyası" size="xl">{selected&&<StatutoryCaseDetail id={selected}/>}</Modal>
+  </Stack>;
+}
+
+export function StatutoryCaseDetail({id}:{id:string}) {
+  const {user,access}=useAuth();
+  const source=useDoc<StatutoryCase>(`governanceCases/${id}`);
+  const version=useDoc<StatutoryPolicy>(source.data?`statutoryPolicies/${source.data.policyId}`:null);
+  const actions=useCollection<StatutoryAction>(source.data?`governanceCases/${id}/actions`:null);
+  const [note,setNote]=useState(''),[proofId,setProofId]=useState(''),[proofUrl,setProofUrl]=useState(''),[busy,setBusy]=useState(false);
+  const c=source.data,p=version.data;
+  if(source.loading||version.loading)return <SectionLoader/>;
+  if(!c||!p)return <ErrorAlert error={source.error||version.error||new Error('Dosya bulunamadı veya erişim yetkiniz yok.')}/>;
+  const f=p.flows[c.kind],stage=f.stages[c.step],deadline=caseDeadline(c,p);
+  const sign=stage&&canSignStatutoryStage(access,p,c,stage,user!.uid);
+  const decide=async(approve:boolean)=>{setBusy(true);try{await decideStatutoryCase(id,approve,note,proofId,proofUrl);setNote('');setProofId('');setProofUrl('');notifySuccess(approve?'Aşama kaydedildi.':'Gerekçeli ret kaydedildi.');}catch(e){notifyError(e);}finally{setBusy(false);}};
+  return <Stack><Text fw={700}>{c.title}</Text><Text style={{whiteSpace:'pre-wrap'}}>{c.summary}</Text><Alert title={`Tüzük Madde ${f.articles}`}>{f.description}</Alert><ErrorAlert error={actions.error}/>
+    <Text size="sm">{c.kind==='activity_threshold'&&`Yil: ${c.proposal.termId} | Baraj: ${c.proposal.threshold} XP | Harcama: %${c.proposal.spendPercent} | ${c.proposal.inclusive?'Dahil':'Asmak gerekir'}`}</Text><Text size="sm">Onayların kaynağı: {p.name}. Bu dosya oluşturulduğu politika sürümüne bağlıdır.</Text>
+    {f.stages.map((s,i)=><Group key={i}><Badge color={i<c.step?'teal':i===c.step?'blue':'gray'}>{i+1}</Badge><Text>{s.label} · {AUTHORITY_LABELS[s.authority]}</Text></Group>)}
+    {deadline&&<Alert color={deadline<Date.now()?'orange':'blue'}>İlgili aşamanın takip tarihi: {new Date(deadline).toLocaleString('tr-TR')}. Süre aşımı dosyayı kendiliğinden onaylamaz.</Alert>}
+    {actions.data.sort((a,b)=>a.step-b.step).map(a=><Card key={a.id} withBorder><Text fw={600}>{a.decision==='approve'?'Onay / görüş':'Ret'} · {AUTHORITY_LABELS[a.authority]}</Text><Text>{a.note}</Text><Text size="xs">{a.actorUid} · {a.at?.toDate().toLocaleString('tr-TR')}{a.proofId?` · Kaynak: ${a.proofId}`:''}</Text></Card>)}
+    {c.status==='open'&&sign&&<Card withBorder><Stack><Text fw={600}>{stage.label}</Text><Textarea label={stage.authority==='subject'?'Yazılı savunmanız / beyanınız':'Gerekçeli görüş / karar notu'} autosize minRows={4} value={note} onChange={e=>setNote(e.currentTarget.value)}/>{stage.proof!=='document'&&<TextInput label={stage.proof==='board_vote'?'Kesinleşmiş Hub kurul oylaması kimliği':stage.proof==='election'?'Gizli ACTOR seçim kaydı kimliği':'Genel Kurul tutanak kaydı kimliği'} value={proofId} onChange={e=>setProofId(e.currentTarget.value)}/>}<TextInput label="Resmî belge / tebliğ / imzalı tutanak bağlantısı" value={proofUrl} onChange={e=>setProofUrl(e.currentTarget.value)}/><Group><Button loading={busy} disabled={!note.trim()} onClick={()=>void decide(true)}>{stage.authority==='subject'?'Savunmayı / beyanı gönder':'Görüşü / onayı kaydet'}</Button>{stage.authority!=='subject'&&<Button color="red" variant="light" loading={busy} disabled={!note.trim()} onClick={()=>void decide(false)}>Gerekçeli ret</Button>}</Group></Stack></Card>}
+    {c.status==='approved'&&!c.appliedAt&&<Button loading={busy} onClick={async()=>{setBusy(true);try{await applyStatutoryCase(id,access);notifySuccess('Kesinleşmiş karar kayda işlendi.');}catch(e){notifyError(e);}finally{setBusy(false);}}}>{f.effect==='actor_elected'?'Seçilen ACTOR’ü göreve işle':f.effect.startsWith('committee_')?'Komite kararını uygula':'Uygulama kaydını tamamla'}</Button>}
+    {c.status==='approved'&&['suspend','actor_suspend','candidate_ban','restore'].includes(f.effect)&&<Alert color="teal">Hub erişim tedbiri son gerekli onayla birlikte işlendi. Web sitesi ve diğer sistemlerin erişimleri ilgili sistem yöneticisi tarafından ayrıca yönetilir.</Alert>}
+  </Stack>;
+}

@@ -27,6 +27,7 @@ import { slugify } from '../../lib/format';
 import { useOrg } from '../../lib/org';
 import { PERMISSIONS, PERMISSION_MAP, type PermissionId } from '../../lib/permissions';
 import type { Role, RoleScope, WithId } from '../../lib/types';
+import { DEFAULT_ROLES } from '../../lib/setup';
 
 const EMPTY: Role = { name: '', scope: 'unit', description: '', permissions: [], active: true, order: 20 };
 
@@ -108,6 +109,7 @@ export function RolesPage() {
         }
       />
       <Text fw={600}>Kol geneli roller</Text>
+      {!roles.some(r => r.id === 'actor') && <Button variant="light" onClick={() => setEditing({ id: 'actor', data: DEFAULT_ROLES.actor })}>ACTOR rolünü ekle</Button>}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
         {roles.filter((r) => r.scope === 'branch').map((r) => (
           <RoleCard key={r.id} r={r} />

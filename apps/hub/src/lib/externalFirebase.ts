@@ -309,19 +309,34 @@ export async function writeExternalMembershipChanges(
 }
 
 export async function writeExternalRecord(config: ExternalFirebaseConfig, resource: ExternalFirebaseResource, id: string, data: Record<string, unknown>) {
+  if (resource.readOnly) throw new Error('Bu veri görünümü salt okunur.');
   const services = externalServices(config);
   if (!services.auth.currentUser) throw new Error('Harici Firebase oturumu kapalı.');
-  if (!id.trim() || id.includes('/')) throw new Error('Kayıt kimliği boş olamaz ve “/” içeremez.');
+  if (!id.trim() || /[.#$\[\]/]/.test(id)) throw new Error('Geçersiz kayıt kimliği.');
   if (resource.database === 'firestore') return setDoc(doc(services.firestore, resource.path, id), data);
   if (!services.realtime) throw new Error('Realtime Database URL yapılandırılmamış.');
+  if (resource.qrRegistryPath) {
+    const parts = cleanPath(resource.path, '').split('/');
+    if (parts.length !== 2) throw new Error('Komite QR yolu komite kimliğini içermelidir.');
+    return updateRealtime(ref(services.realtime), {
+      [`${resource.path}/${id}`]: data,
+      [`${cleanPath(resource.qrRegistryPath, 'valid_qrs')}/${id}`]: { ...data, committeeId: parts[1] },
+    });
+  }
   return setRealtime(ref(services.realtime, `${resource.path}/${id}`), data);
 }
 
 export async function deleteExternalRecord(config: ExternalFirebaseConfig, resource: ExternalFirebaseResource, id: string) {
+  if (resource.readOnly) throw new Error('Bu veri görünümü salt okunur.');
+  if (!id.trim() || /[.#$\[\]/]/.test(id)) throw new Error('Geçersiz kayıt kimliği.');
   const services = externalServices(config);
   if (!services.auth.currentUser) throw new Error('Harici Firebase oturumu kapalı.');
   if (resource.database === 'firestore') return deleteDoc(doc(services.firestore, resource.path, id));
   if (!services.realtime) throw new Error('Realtime Database URL yapılandırılmamış.');
+  if (resource.qrRegistryPath) return updateRealtime(ref(services.realtime), {
+    [`${resource.path}/${id}`]: null,
+    [`${cleanPath(resource.qrRegistryPath, 'valid_qrs')}/${id}`]: null,
+  });
   return removeRealtime(ref(services.realtime, `${resource.path}/${id}`));
 }
 

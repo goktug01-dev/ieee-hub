@@ -26,6 +26,9 @@ export type PermissionId =
   | 'inventory.manage'
   | 'handover.manage'
   | 'external.firebase.manage'
+  | 'site.announcements.manage'
+  | 'site.qr.manage'
+  | 'governance.read'
   // Birim kapsamlı
   | 'unit.petitions.read'
   | 'unit.manage'
@@ -46,6 +49,9 @@ export interface PermissionDef {
 }
 
 export const PERMISSIONS: PermissionDef[] = [
+  { id: 'governance.read', group: 'Raporlama ve denetim', scope: 'branch', label: 'Tüzük süreçlerini ve sürelerini izle', description: 'Genel süreç dosyalarını, yükümlülükleri ve seçim uygunluğunu görür. Gizli başvurulara erişim vermez.' },
+  { id: 'site.announcements.manage', group: 'İletişim', scope: 'branch', label: 'Web sitesi duyurularını yayımla', description: 'Hub’dan site duyurusu oluşturur, düzenler ve yayından kaldırır.' },
+  { id: 'site.qr.manage', group: 'Görev ve etkinlik', scope: 'branch', critical: true, label: 'ACTOR puan ve QR doğrulaması', description: 'Komitenin etkinlik puanı önerisini doğrular, puan QR’ını oluşturur ve kapatır.' },
   { id: 'org.manage', group: 'Organizasyon', scope: 'branch', critical: true, label: 'Organizasyonu yönet', description: 'Birimler, roller, dönemler ve kurum ayarlarını düzenler.' },
   { id: 'members.manage', group: 'Organizasyon', scope: 'branch', label: 'Üyeleri yönet', description: 'Üyelik başvurularını onaylar, üyeliği askıya alır, ayrılış işlemini yapar.' },
   { id: 'assignments.manage', group: 'Organizasyon', scope: 'branch', critical: true, label: 'Görev atamalarını yönet', description: 'Kişilere rol atar, görevleri sonlandırır, erişimleri yeniden hesaplar.' },

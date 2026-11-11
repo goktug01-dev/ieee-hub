@@ -82,6 +82,7 @@ export interface Assignment {
   source: 'manual' | 'election' | 'volunteer';
   electionId?: string | null;
   note?: string;
+  governanceCaseId?: string;
   createdBy: string;
   createdAt: Timestamp;
   endedAt?: Timestamp | null;
@@ -106,7 +107,7 @@ export interface ElectionPosition {
 }
 
 export type ElectionStatus = 'draft' | 'nominations' | 'voting' | 'completed' | 'applied' | 'cancelled';
-export type ElectionType = 'general_assembly' | 'board' | 'unit' | 'by_election';
+export type ElectionType = 'general_assembly' | 'board' | 'unit' | 'by_election' | 'actor';
 export type VotingMethod = 'secret_ballot' | 'open_vote' | 'appointment';
 
 export interface Election {
@@ -116,6 +117,7 @@ export interface Election {
   description?: string;
   status: ElectionStatus;
   electionType?: ElectionType;
+  activityYearId?: string | null;
   votingMethod?: VotingMethod;
   positions: ElectionPosition[];
   eligibleVoters?: number | null;

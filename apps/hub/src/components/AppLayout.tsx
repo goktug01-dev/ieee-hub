@@ -64,6 +64,7 @@ import { useInbox } from '../lib/inbox';
 import { SectionLoader } from './ui';
 import type { PermissionId } from '../lib/permissions';
 import { useUnitScope } from '../lib/unitScope';
+import { siteQrController } from '../lib/siteWorkflow';
 
 interface NavItem {
   to: string;
@@ -111,6 +112,8 @@ export function AppLayout() {
       label: 'Operasyon',
       items: [
         { to: '/etkinlikler', label: 'Etkinlikler', icon: <IconCalendarStar size={18} /> },
+        { to: '/surecler', label: 'Tüzük süreçleri', icon: <IconShieldLock size={18} /> },
+        ...(siteQrController(access) ? [{ to: '/actor', label: 'ACTOR · Puan ve QR', icon: <IconShieldLock size={18} /> }] : []),
         { to: '/toplantilar', label: 'Toplantılar', icon: <IconUsersGroup size={18} /> },
         { to: '/iletisim', label: 'İletişim', icon: <IconSpeakerphone size={18} /> },
         { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
@@ -237,8 +240,7 @@ export function AppLayout() {
                 <Menu.Item component={Link} to="/profil" leftSection={<IconUserCircle size={16} />}>
                   Profilim ve görevlerim
                 </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut()}>
+                <Menu.Divider />                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut()}>
                   Çıkış yap
                 </Menu.Item>
               </Menu.Dropdown>

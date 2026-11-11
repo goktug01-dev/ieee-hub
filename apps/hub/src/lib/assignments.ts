@@ -17,13 +17,19 @@ export interface NewAssignment {
   note?: string;
   source?: 'manual' | 'election';
   electionId?: string | null;
+  governanceCaseId?: string;
 }
 
 /** Görev atar, isteğe bağlı olarak aynı rolün önceki sahiplerini sonlandırır, erişimleri yeniden hesaplar. */
-export async function createAssignments(items: NewAssignment[], opts: { replaceExisting?: boolean } = {}) {
+export async function createAssignments(items: NewAssignment[], opts: { replaceExisting?: boolean; endExisting?: (Assignment & {id:string})[] } = {}) {
   const me = auth.currentUser!.uid;
   const affected = new Set<string>();
   const batch = writeBatch(db);
+  for(const existing of opts.endExisting||[]) {
+    batch.update(doc(db,'assignments',existing.id),{status:'ended',endedAt:serverTimestamp(),endedBy:me});
+    affected.add(existing.uid);
+    auditInBatch(batch,'assignment.end',`assignments/${existing.id}`,{uid:existing.uid,reason:'Yeni görevle birlikte tüzük gereği sonlandırma'});
+  }
 
   if (opts.replaceExisting) {
     for (const it of items) {

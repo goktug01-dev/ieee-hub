@@ -1,0 +1,638 @@
+{
+  "rules": {
+    ".read": "auth != null && root.child('site_access').child(auth.uid).child('backup').isNumber() && root.child('site_access').child(auth.uid).child('backup').val() > now",
+    ".write": false,
+    "courses": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)"
+    },
+    "leaderboard_public": {
+      ".read": "(auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))) || (auth != null && (root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now))",
+      ".write": "(auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))) || (auth != null && (root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now))",
+      ".validate": "newData.hasChild('updatedAt')",
+      "updatedAt": {
+        ".validate": "newData.isNumber() || (newData.hasChildren(['.sv']) && newData.child('.sv').val() == 'timestamp')"
+      },
+      "top10": {
+        ".validate": "newData.hasChildren()"
+      },
+      "me": {
+        ".validate": "newData.hasChildren()"
+      }
+    },
+    "cafes": {
+      "$cafeId": {
+        ".read": "auth != null && root.child('cafe_accounts').child(auth.uid).val() == $cafeId",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+        "discount": {
+          ".validate": "newData.hasChildren() || newData.isString() || newData.isNumber() || newData.isBoolean()"
+        }
+      }
+    },
+    "user_attendance": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        "$qrid": {
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "newData.hasChildren(['event','at'])"
+        }
+      }
+    },
+    "events": {
+      ".read": "auth != null",
+      ".indexOn": [
+        "start",
+        "status",
+        "visibility",
+        "createdBy"
+      ],
+      "$id": {
+        ".read": "(root.child('events').child($id).child('status').val() == 'published' && root.child('events').child($id).child('visibility').val() == 'public') || (auth != null && root.child('events').child($id).child('status').val() == 'published' && root.child('events').child($id).child('visibility').val() == 'members') || (auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))) || (auth != null && (root.child('users').child(auth.uid).child('roles').child('reporter').val() == true || root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true || root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('reporter').val() == true) && root.child('events').child($id).child('createdBy').val() == auth.uid)",
+        ".write": "((auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)) || (auth != null && (root.child('users').child(auth.uid).child('roles').child('reporter').val() == true || root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true) && ((!data.exists() && newData.child('status').val() == 'pending' && newData.child('createdBy').val() == auth.uid) || (data.exists() && data.child('createdBy').val() == auth.uid && data.child('status').val() == 'pending' && newData.child('status').val() == 'pending' && newData.child('createdBy').val() == auth.uid))) || (auth != null && newData.child('sourceCommitteeId').exists() && root.child('committees').child(newData.child('sourceCommitteeId').val()).child('presidentUid').val() == auth.uid && !data.exists() && newData.child('status').val() == 'pending' && newData.child('createdBy').val() == auth.uid)) || (auth != null && (root.child('site_access').child(auth.uid).child('calendar').isNumber() && root.child('site_access').child(auth.uid).child('calendar').val() > now) && $id.beginsWith('hub-') && (!newData.exists() || (newData.child('source').val() == 'hub' && newData.child('status').val() == 'published' && ((!data.exists() && newData.child('createdBy').val() == auth.uid) || (data.exists() && newData.child('createdBy').val() == data.child('createdBy').val())))))",
+        "title": {
+          ".validate": "newData.isString() && newData.val().length > 1 && newData.val().length <= 120"
+        },
+        "desc": {
+          ".validate": "newData.isString() && newData.val().length <= 5000"
+        },
+        "start": {
+          ".validate": "newData.isString()"
+        },
+        "end": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "location": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "visibility": {
+          ".validate": "newData.val() == 'public' || newData.val() == 'members'"
+        },
+        "status": {
+          ".validate": "newData.val() == 'published' || newData.val() == 'pending'"
+        },
+        "createdBy": {
+          ".validate": "newData.isString()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "source": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "sourceCommitteeId": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "sourceTechEventId": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "id": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+        },
+        "createdByEmail": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val() == auth.token.email)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "public_announcements": {
+      ".read": true,
+      ".indexOn": [
+        "createdAt",
+        "tag",
+        "pinned",
+        "createdByUid",
+        "committeeId"
+      ],
+      "$id": {
+        ".write": "(auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true)) || ((!data.exists() && newData.child('committeeId').isString() && root.child('committees').child(newData.child('committeeId').val()).child('presidentUid').val() == auth.uid) || (data.exists() && data.child('committeeId').isString() && root.child('committees').child(data.child('committeeId').val()).child('presidentUid').val() == auth.uid && (!newData.exists() || newData.child('committeeId').val() == data.child('committeeId').val()))))) || (auth != null && (root.child('site_access').child(auth.uid).child('announcements').isNumber() && root.child('site_access').child(auth.uid).child('announcements').val() > now) && $id.beginsWith('hub-'))",
+        ".validate": "newData.hasChildren(['title','content','createdAt'])",
+        "title": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+        },
+        "content": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() || (newData.isString() && newData.val().length > 0)"
+        },
+        "tag": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "pinned": {
+          ".validate": "!newData.exists() || newData.isBoolean()"
+        },
+        "link": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "createdByUid": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.uid) || (data.exists() && newData.val() == data.val()))"
+        },
+        "createdByEmail": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.token.email) || (data.exists() && newData.val() == data.val()))"
+        },
+        "committeeId": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "users": {
+      ".indexOn": [
+        "email"
+      ],
+      ".read": "((auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true) || (query.orderByChild == 'email' && query.equalTo == auth.token.email))) || (auth != null && (root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now))) || (auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now)",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+      "$uid": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || root.child('users').child(auth.uid).child('roles').child('reporter').val() == true || root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true || auth.uid == $uid || root.child('users').child($uid).child('email').val() == auth.token.email) || (auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now)",
+        ".write": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true) || (auth.uid == $uid && ((!data.exists() && (!newData.child('roles').exists() && (!newData.child('email').exists() || newData.child('email').val() == auth.token.email))) || (data.exists() && (auth.token.email_verified == true || root.child('users').child($uid).child('approved').val() == true || root.child('approved_uids').child(auth.uid).val() == true)))))",
+        "email": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val() == auth.token.email)"
+        },
+        "name": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 80)"
+        },
+        "surname": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 80)"
+        },
+        "department": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 120)"
+        },
+        "phone": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^5[0-9]{9}$/))"
+        },
+        "defaultCommittee": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "committees": {
+          ".validate": "!newData.exists() || newData.hasChildren()",
+          "$committeeId": {
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "voted": {
+          ".validate": "!newData.exists() || newData.isBoolean()"
+        },
+        "kvkkConsent": {
+          ".validate": "!newData.exists() || newData.isBoolean()"
+        },
+        "consentDate": {
+          ".validate": "!newData.exists() || newData.isString() || newData.isNumber()"
+        },
+        "sadakat": {
+          ".write": "(auth != null && (auth.uid == $uid || root.child('users').child($uid).child('email').val() == auth.token.email)) || (auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now)",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+        },
+        "technical_locked": {
+          ".write": "auth != null && ((auth.uid == $uid) || (root.child('users').child($uid).child('email').val() == auth.token.email)) && (auth.token.email_verified == true || root.child('users').child($uid).child('approved').val() == true || root.child('approved_uids').child(auth.uid).val() == true || root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+        },
+        "events": {
+          ".write": "auth != null && ((auth.uid == $uid) || (root.child('users').child($uid).child('email').val() == auth.token.email)) && (auth.token.email_verified == true || root.child('users').child($uid).child('approved').val() == true || root.child('approved_uids').child(auth.uid).val() == true || root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+          ".validate": "newData.hasChildren() || newData.isString() || newData.isBoolean() || newData.isNumber()"
+        },
+        "lifetime_earned": {
+          ".write": "(auth != null && (auth.uid == $uid || root.child('users').child($uid).child('email').val() == auth.token.email)) || (auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now)",
+          ".validate": "newData.isNumber() || newData.hasChildren(['.sv'])"
+        },
+        "lifetime_spent": {
+          ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('email').val() == auth.token.email)",
+          ".validate": "newData.isNumber() || newData.hasChildren(['.sv'])"
+        },
+        "approved": {
+          ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+          ".write": "(auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)) || (auth != null && (root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now))",
+          ".validate": "newData.isBoolean()"
+        },
+        "roles": {
+          ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)"
+        },
+        "$other": {
+          ".validate": false
+        },
+        "activityYear": {
+          ".write": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now",
+          ".validate": "newData.val() == data.val() || ((auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now) && newData.isString() && newData.val() == newData.parent().parent().parent().child('activity_current').child('id').val())"
+        },
+        "annual_start_earned": {
+          ".write": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now",
+          ".validate": "newData.val() == data.val() || ((auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now) && newData.isNumber() && newData.val() >= 0 && ((!root.child('users').child($uid).child('lifetime_earned').exists() && newData.val() == 0) || newData.val() == root.child('users').child($uid).child('lifetime_earned').val()))"
+        }
+      }
+    },
+    "approved_uids": {
+      "$uid": {
+        ".write": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true) || (auth.uid == $uid && root.child('users').child($uid).child('approved').val() == true))",
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "valid_qrs": {
+      "$qrid": {
+        ".read": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true)) || (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now) || (!data.child('expiresAt').exists() || (data.child('active').val() == true && data.child('expiresAt').val() > now)))",
+        ".write": "auth != null && (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now) && newData.exists() && (!data.exists() || (newData.child('puan').val() == data.child('puan').val() && newData.child('createdAt').val() == data.child('createdAt').val() && newData.child('expiresAt').val() == data.child('expiresAt').val()))",
+        ".validate": "newData.hasChildren(['event','puan','active','createdAt'])",
+        "event": {
+          ".validate": "newData.isString()"
+        },
+        "puan": {
+          ".validate": "newData.isNumber() && newData.val() >= -100000 && newData.val() <= 100000"
+        },
+        "active": {
+          ".validate": "newData.isBoolean()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "expiresAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "committeeId": {
+          ".validate": "newData.isString()"
+        },
+        "type": {
+          ".validate": "newData.val() == 'earn' || newData.val() == 'spend'"
+        }
+      }
+    },
+    "technical_events": {
+      ".read": "auth != null",
+      ".indexOn": [
+        "committeeId",
+        "status",
+        "start",
+        "createdAt"
+      ],
+      "$eventId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true)) || ((!data.exists() && newData.child('committeeId').isString() && root.child('committees').child(newData.child('committeeId').val()).child('presidentUid').val() == auth.uid) || (data.exists() && data.child('committeeId').isString() && root.child('committees').child(data.child('committeeId').val()).child('presidentUid').val() == auth.uid && (!newData.exists() || newData.child('committeeId').val() == data.child('committeeId').val()))))",
+        ".validate": "newData.hasChildren(['title','committeeId','pointCost','createdAt'])",
+        "title": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+        },
+        "description": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "committeeId": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+        },
+        "pointCost": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+        },
+        "location": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)"
+        },
+        "start": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "status": {
+          ".validate": "!newData.exists() || (newData.val() == 'open' || newData.val() == 'archived')"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() || (newData.hasChildren(['.sv']) && newData.child('.sv').val() == 'timestamp')"
+        },
+        "createdByUid": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.uid) || (data.exists() && newData.val() == data.val()))"
+        },
+        "createdByEmail": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.token.email) || (data.exists() && newData.val() == data.val()))"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "used_qrs": {
+      "$qrid": {
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "newData.isNumber() || newData.isBoolean()"
+        }
+      }
+    },
+    "approved_emails": {
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "post_requests": {
+      ".indexOn": [
+        "createdByUid",
+        "createdAt"
+      ],
+      ".read": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true) || ((auth.token.email_verified == true || root.child('users').child(auth.uid).child('approved').val() == true || root.child('approved_uids').child(auth.uid).val() == true) && query.orderByChild == 'createdByUid' && query.equalTo == auth.uid))",
+      "$id": {
+        ".write": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true) || ((auth.token.email_verified == true || root.child('users').child(auth.uid).child('approved').val() == true || root.child('approved_uids').child(auth.uid).val() == true) && ((!data.exists() && newData.child('createdByUid').val() == auth.uid && newData.child('createdBy').child('uid').val() == auth.uid) || (data.exists() && newData.exists() && data.child('createdByUid').val() == auth.uid && newData.child('createdByUid').val() == auth.uid && newData.child('createdBy').child('uid').val() == auth.uid) || (data.exists() && !newData.exists() && data.child('createdByUid').val() == auth.uid))))"
+      }
+    },
+    "cafe_accounts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": false
+      }
+    },
+    "discounts": {
+      "redemptions": {
+        "$cafeId": {
+          ".read": "auth != null && root.child('cafe_accounts').child(auth.uid).val() == $cafeId",
+          ".write": false,
+          "$uid": {
+            ".read": "auth != null && (auth.uid == $uid || root.child('cafe_accounts').child(auth.uid).val() == $cafeId)",
+            ".write": false,
+            "code": {
+              ".write": "auth != null && (auth.uid == $uid || (root.child('cafe_accounts').child(auth.uid).val() == $cafeId && !data.exists()))",
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "lastRedeemAt": {
+              ".write": "auth != null && root.child('cafe_accounts').child(auth.uid).val() == $cafeId && (!data.exists() || (now - data.val()) >= 10800000)",
+              ".validate": "newData.isNumber()"
+            },
+            "counter": {
+              ".write": "auth != null && root.child('cafe_accounts').child(auth.uid).val() == $cafeId",
+              ".validate": "newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) && newData.val() <= 100000"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    },
+    "user_key_by_uid": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.isString() && root.child('users').child(newData.val()).child('email').val() == auth.token.email"
+      }
+    },
+    "roles_by_uid": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+        "admin": {
+          ".validate": "newData.isBoolean() && newData.val() == (root.child('users').child(root.child('user_key_by_uid').child($uid).val()).child('roles').child('admin').val() == true)"
+        },
+        "reporter": {
+          ".validate": "newData.isBoolean() && newData.val() == (root.child('users').child(root.child('user_key_by_uid').child($uid).val()).child('roles').child('reporter').val() == true)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "committees": {
+      ".read": "auth != null",
+      "$committeeId": {
+        ".write": "auth != null && (\n      root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('admin').val() == true\n    )",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+        },
+        "presidentUid": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 128)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "committee_members": {
+      "$committeeId": {
+        ".read": "auth != null && (\n      root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('admin').val() == true ||\n      root.child('users').child(auth.uid).child('roles').child('reporter').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true ||\n      root.child('committees').child($committeeId).child('presidentUid').val() == auth.uid   // 👈 BAŞKAN\n    )",
+        ".write": "auth != null && (\n      root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('admin').val() == true ||\n      root.child('users').child(auth.uid).child('roles').child('reporter').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true ||\n      root.child('committees').child($committeeId).child('presidentUid').val() == auth.uid   // 👈 BAŞKAN\n    )",
+        "$uid": {
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
+    "committee_qrs": {
+      "$committeeId": {
+        ".read": "(auth != null && (\n      root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('admin').val() == true ||\n      root.child('users').child(auth.uid).child('roles').child('reporter').val() == true ||\n      root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true ||\n      root.child('committees').child($committeeId).child('presidentUid').val() == auth.uid   // 👈 BAŞKAN\n    )) || (auth != null && (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now))",
+        "$qrid": {
+          ".write": "auth != null && (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now) && newData.exists() && (!data.exists() || (newData.child('puan').val() == data.child('puan').val() && newData.child('createdAt').val() == data.child('createdAt').val() && newData.child('expiresAt').val() == data.child('expiresAt').val()))",
+          ".validate": "newData.hasChildren(['event','puan','active','createdAt'])",
+          "event": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+          },
+          "puan": {
+            ".validate": "newData.isNumber() && newData.val() >= -100000 && newData.val() <= 100000"
+          },
+          "active": {
+            ".validate": "newData.isBoolean()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          },
+          "expiresAt": {
+            ".validate": "newData.isNumber()"
+          }
+        }
+      }
+    },
+    "committee_announcements": {
+      "$committeeId": {
+        ".read": "auth != null",
+        "$id": {
+          ".write": "auth != null && (\n        root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n        root.child('roles_by_uid').child(auth.uid).child('admin').val() == true ||\n        root.child('users').child(auth.uid).child('roles').child('reporter').val() == true ||\n        root.child('roles_by_uid').child(auth.uid).child('reporter').val() == true ||\n        root.child('committees').child($committeeId).child('presidentUid').val() == auth.uid   // 👈 BAŞKAN\n      )",
+          ".validate": "newData.hasChildren(['title','content','createdAt'])",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+          },
+          "content": {
+            ".validate": "newData.isString() && newData.val().length > 0"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "createdByUid": {
+            ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.uid) || (data.exists() && newData.val() == data.val()))"
+          },
+          "createdByEmail": {
+            ".validate": "newData.isString() && ((!data.exists() && newData.val() == auth.token.email) || (data.exists() && newData.val() == data.val()))"
+          },
+          "tag": {
+            ".validate": "!newData.exists() || newData.isString()"
+          },
+          "link": {
+            ".validate": "!newData.exists() || newData.isString()"
+          },
+          "pinned": {
+            ".validate": "!newData.exists() || newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        ".indexOn": [
+          "createdAt",
+          "createdByUid",
+          "tag",
+          "pinned"
+        ]
+      }
+    },
+    "technical_registrations": {
+      "$eventId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".read": "auth != null && (\n        auth.uid == $uid ||\n        root.child('users').child(auth.uid).child('roles').child('admin').val() == true ||\n        root.child('roles_by_uid').child(auth.uid).child('admin').val() == true\n      )",
+          ".write": "auth != null && (\n        auth.uid == $uid ||\n        root.child('users').child($uid).child('email').val() == auth.token.email\n      )",
+          "status": {
+            ".validate": "newData.val() == 'reserved' || newData.val() == 'cancelled' || newData.val() == 'attended'"
+          },
+          "pointCost": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "reservedAt": {
+            ".validate": "!newData.exists() || newData.isNumber() || newData.hasChildren(['.sv'])"
+          },
+          "statusUpdatedAt": {
+            ".validate": "!newData.exists() || newData.isNumber() || newData.hasChildren(['.sv'])"
+          },
+          "statusUpdatedByUid": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 128)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "user_technical": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true)",
+        "$eventId": {
+          ".validate": "newData.hasChildren(['status'])",
+          "status": {
+            ".validate": "newData.val() == 'reserved' || newData.val() == 'cancelled' || newData.val() == 'attended'"
+          },
+          "pointCost": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "eventTitle": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 160)"
+          },
+          "at": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        }
+      }
+    },
+    "course_comments": {
+      ".read": "auth != null",
+      "$courseId": {
+        "$commentId": {
+          ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || root.child('roles_by_uid').child(auth.uid).child('admin').val() === true)"
+        }
+      }
+    },
+    "admin_point_audit": {
+      ".read": "(auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))) || (auth != null && (root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now))",
+      "$id": {
+        ".write": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true)) || ((root.child('site_access').child(auth.uid).child('members').isNumber() && root.child('site_access').child(auth.uid).child('members').val() > now) && (newData.child('action').val() == 'approve_members' || newData.child('action').val() == 'suspend_members' || newData.child('action').val() == 'update_memberships'))) && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['action','actorUid','affectedUids','reason','at'])",
+        "actorUid": {
+          ".validate": "newData.val() == auth.uid"
+        },
+        "reason": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "at": {
+          ".validate": "newData.isNumber() && newData.val() == now"
+        },
+        "action": {
+          ".validate": "newData.isString()"
+        },
+        "affectedUids": {
+          ".validate": "newData.hasChildren()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "site_access": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true))",
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        "calendar": {
+          ".validate": "newData.isNumber()"
+        },
+        "announcements": {
+          ".validate": "newData.isNumber()"
+        },
+        "qr": {
+          ".validate": "newData.isNumber()"
+        },
+        "members": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        },
+        "backup": {
+          ".validate": "newData.isNumber()"
+        },
+        "activity": {
+          ".validate": "newData.isNumber()"
+        }
+      }
+    },
+    "hub_qr_audit": {
+      ".read": "auth != null && ((root.child('users').child(auth.uid).child('roles').child('admin').val() == true || root.child('roles_by_uid').child(auth.uid).child('admin').val() == true || (root.child('user_key_by_uid').child(auth.uid).isString() && root.child('users').child(root.child('user_key_by_uid').child(auth.uid).val()).child('roles').child('admin').val() == true)) || (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now))",
+      "$id": {
+        ".write": "auth != null && (root.child('site_access').child(auth.uid).child('qr').isNumber() && root.child('site_access').child(auth.uid).child('qr').val() > now) && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['actorUid','qrId','puan','active','at'])",
+        "actorUid": {
+          ".validate": "newData.val() == auth.uid"
+        },
+        "qrId": {
+          ".validate": "newData.isString()"
+        },
+        "puan": {
+          ".validate": "newData.isNumber()"
+        },
+        "active": {
+          ".validate": "newData.isBoolean()"
+        },
+        "at": {
+          ".validate": "newData.isNumber() && newData.val() == now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "activity_current": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now && newData.exists() && !root.child('activity_rollovers').child(newData.child('id').val()).exists()",
+      ".validate": "newData.hasChildren(['id','startsAt','endsAt','sourceCaseId','byUid','at']) && newData.child('id').isString() && newData.child('byUid').val() == auth.uid && newData.child('at').val() == now && newData.child('endsAt').val() > newData.child('startsAt').val() && newData.parent().child('activity_rollovers').child(newData.child('id').val()).child('at').val() == now"
+    },
+    "activity_rollovers": {
+      ".read": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now",
+      "$yearId": {
+        ".write": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['yearId','previousYearId','sourceCaseId','byUid','at','memberCount']) && newData.child('yearId').val() == $yearId && newData.child('byUid').val() == auth.uid && newData.child('at').val() == now && newData.child('memberCount').isNumber()"
+      }
+    },
+    "activity_year_archives": {
+      ".read": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now",
+      "$yearId": {
+        ".write": "auth != null && root.child('site_access').child(auth.uid).child('activity').isNumber() && root.child('site_access').child(auth.uid).child('activity').val() > now && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['previousYearId','sourceCaseId','byUid','at','users']) && newData.child('byUid').val() == auth.uid && newData.child('at').val() == now"
+      }
+    }
+  }
+}
