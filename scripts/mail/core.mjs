@@ -57,6 +57,14 @@ export async function processMail({ store, transport, sender, dryRun = true, now
       const key = fingerprint(signal.kind, signal.sourceId, source);
       const candidates = await store.candidates(signal.kind, source);
       let pending = false, blocked = false, retryAt = Infinity;
+      // İlk giriş / adres doğrulaması gecikirse yeni bildirimi kaybetmeyin.
+      // Sınırsız tarama yapmadan 24 saat boyunca yarım saatte bir yeniden çözün.
+      const queuedAt = millis(signal.queuedAt);
+      const registrationWindowOpen = queuedAt > 0 && now() - queuedAt < 86400000;
+      const awaitRegistration = () => {
+        if (registrationWindowOpen) { pending = true; retryAt = Math.min(retryAt, now() + 1800000); }
+      };
+      if (!candidates.length) awaitRegistration();
       for (const candidate of candidates) {
         if (attempts >= settings.maxPerRun) { pending = true; retryAt = Math.min(retryAt, now() + 600000); break; }
         // Kaynak, rol/erişim ve adres gönderimden hemen önce yeniden okunur.
@@ -65,6 +73,7 @@ export async function processMail({ store, transport, sender, dryRun = true, now
         source = await store.source(signal);
         if (!openSource(signal.kind, source) || fingerprint(signal.kind, signal.sourceId, source) !== key) { pending = true; break; }
         const { access, recipient } = await store.recipient(candidate.uid, signal.kind);
+        if (!recipient) { summary.skipped++; awaitRegistration(); continue; }
         if (!eligible(signal.kind, source, candidate.uid, access, recipient, now())) { summary.skipped++; continue; }
         const id = deliveryId(key, candidate.uid);
         const previous = await store.delivery(id);

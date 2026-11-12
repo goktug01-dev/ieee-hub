@@ -52,8 +52,11 @@ export function MailPreferences() {
         })}>Doğrulamayı kontrol et</Button>
       </Group>
     </> : <>
-      <Switch label="Onayımı bekleyen dilekçeler için mail gönder" checked={optimistic?.petitions ?? state.data?.petitions ?? true} disabled={busy || state.loading} onChange={e => void save('petitions', e.currentTarget.checked)} />
-      <Switch label="Bana yeni görev atandığında mail gönder" checked={optimistic?.tasks ?? state.data?.tasks ?? true} disabled={busy || state.loading} onChange={e => void save('tasks', e.currentTarget.checked)} />
+      {!state.loading && !state.data && <Alert color="yellow">Bildirim alıcı kaydınız henüz tamamlanmadı. Adres doğrulaması tek başına yeterli değildir; aşağıdaki düğmeyle kaydı tamamlayın.</Alert>}
+      {!state.loading && !state.data && <Button loading={busy} onClick={()=>void run(async()=>{await registerMailRecipient();notifySuccess('Bildirim alıcı kaydı tamamlandı.');})}>Bildirim kaydını tamamla</Button>}
+      {state.data && <Text size="sm" c="green">Bildirim alıcı kaydınız hazır.</Text>}
+      <Switch label="Onayımı bekleyen dilekçeler için mail gönder" checked={optimistic?.petitions ?? state.data?.petitions ?? false} disabled={busy || state.loading || !state.data} onChange={e => void save('petitions', e.currentTarget.checked)} />
+      <Switch label="Bana yeni görev atandığında mail gönder" checked={optimistic?.tasks ?? state.data?.tasks ?? false} disabled={busy || state.loading || !state.data} onChange={e => void save('tasks', e.currentTarget.checked)} />
       {state.error && <Alert color="red">Bildirim tercihleri okunamadı. Sayfayı yenileyip tekrar deneyin.</Alert>}
     </>}
   </Stack></Card>;

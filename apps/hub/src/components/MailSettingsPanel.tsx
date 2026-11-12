@@ -50,6 +50,7 @@ export function MailSettingsPanel() {
   return <Card data-testid="mail-settings"><Stack>
     <Title order={5}>E-posta bildirim servisi</Title>
     <Text size="sm">GitHub Actions, kulübün Gmail hesabından gönderir. Firebase Spark kalır; anlık teslim garantisi yoktur. Gmail şifresi veya uygulama şifresi bu ekrana girilmez.</Text>
+    <Alert color="yellow">Bazı üyelere mail gitmiyorsa Profilim → E-posta bildirimleri bölümünde adres doğrulamasını, alıcı kaydını ve ilgili bildirimin açık olduğunu kontrol ettirin. Ardından mevcut bekleyenleri kuyruğa alabilirsiniz. Atlanan sayısı tek başına gönderim hatası değildir; kapalı tercihler ve önceden gönderilenler de atlanır. GitHub zamanlaması saatlerce gecikebilir.</Alert>
     {[config.error, health.error, deliveries.error].filter(Boolean).map((e,i) => <Alert key={i} color="red">Bildirim verisi okunamadı: {e!.message}</Alert>)}
     <Switch label="Mail yürütücüsünün veri erişimini aç" description="Gönderimi durdurmak için kapatın. GitHub zamanlaması ayrıca kurulmuş olmalıdır." checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.currentTarget.checked })} />
     <TextInput label="Gönderici Gmail adresi" value={form.senderEmail} onChange={e => setForm({ ...form, senderEmail: e.currentTarget.value.trim().toLowerCase() })} />

@@ -11,7 +11,7 @@ const access = { roleKeys: { cs__chair: now + 10000 }, tokens: ['role:cs__chair'
 const target = { email: 'alice@example.com', petitions: true, tasks: true };
 function fixture(kind = 'task') {
   const state = { source: structuredClone(kind === 'task' ? task : petition), deliveries: new Map(), sends: [], signals: [], counter: 0, health: null, sourceReads: 0 };
-  const signal = { id: `${kind}_source`, kind, sourceId: 'source', state: 'pending' };
+  const signal = { id: `${kind}_source`, kind, sourceId: 'source', state: 'pending', queuedAt: now };
   const store = {
     settings: async () => settings,
     signals: async () => signal.state === 'pending' ? [signal] : [],
@@ -79,6 +79,25 @@ test('İşlem sırasında değişen rol ve alıcı adresi tekrar doğrulanır; k
 });
 test('Günlük kota rezervasyonu başarısızsa göndermez ve kaydı işlenmiş saymaz', async () => {
   const f=fixture(); f.store.claim=async()=>null; await f.run(); assert.equal(f.state.sends.length,0); assert.equal(f.signal.state,'pending');
+});
+
+test('İlk giriş kaydı eksik alıcı sonradan kaydolunca aynı bildirimi bir kez alır', async () => {
+  const f=fixture(); const recipient=f.store.recipient;
+  f.store.recipient=async()=>({recipient:null});
+  await f.run();
+  assert.equal(f.signal.state,'pending'); assert.equal(f.state.counter,0);
+  assert.equal(f.state.signals[0].readyAt,now+1800000);
+  f.store.recipient=recipient;
+  assert.equal((await f.run()).sent,1);
+  f.signal.state='pending'; assert.equal((await f.run()).sent,0);
+});
+
+test('Eksik alıcı/boş makam en çok 24 saat beklenir; opt-out tekrar kuyruğuna alınmaz', async () => {
+  const expired=fixture();expired.signal.queuedAt=now-86400000;
+  expired.store.recipient=async()=>({recipient:null});await expired.run();assert.equal(expired.signal.state,'processed');
+  const empty=fixture('petition');empty.store.candidates=async()=>[];await empty.run();assert.equal(empty.signal.state,'pending');
+  const optedOut=fixture();optedOut.store.recipient=async()=>({recipient:{...target,tasks:false}});
+  await optedOut.run();assert.equal(optedOut.signal.state,'processed');assert.equal(optedOut.state.counter,0);
 });
 test('SMTP açıkça geçici reddederse gecikmeli tekrar dener; farklı işler beklemek zorunda kalmaz', async () => {
   const f=fixture(); f.transport.sendMail=async()=>{throw{responseCode:451};}; await f.run();

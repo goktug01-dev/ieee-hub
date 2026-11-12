@@ -17,7 +17,9 @@ Kurulumu yeniden çalıştırmak yeni otomasyon kimliği üretir ve zamanlamayı
 
 Doğrulanmış e-postası olan aktif üyeler yeni Hub sürümüne giriş yapınca kendi doğrulanmış adresleriyle alıcı dizinine eklenir. Profilim → **E-posta bildirimleri** üzerinden dilekçe ve görev maillerini ayrı ayrı kapatabilirler. E-posta/şifre hesabı doğrulanmamışsa aynı bölümden doğrulama bağlantısı gönderilir ve kontrol edilir.
 
-Kuyrukta alıcı bulunamazsa kayıt işlenmiş sayılır; ilk kurulumda üyeler giriş yaptıktan sonra yetkili yönetici **Mevcut bekleyenleri kuyruğa al** düğmesini kullanabilir. Görev rolü veya adresi sonradan değiştiyse aynı işlem güncel alıcıları tekrar çözer. Daha önce gönderilen aynı dilekçe adımı/revizyonu veya aynı görev ataması aynı kişiye yeniden gönderilmez.
+İlk kurulumda üyeler giriş yaptıktan sonra yetkili yönetici **Mevcut bekleyenleri kuyruğa al** düğmesini kullanabilir. Görev rolü veya adresi sonradan değiştiyse aynı işlem güncel alıcıları tekrar çözer. Daha önce gönderilen aynı dilekçe adımı/revizyonu veya aynı görev ataması aynı kişiye yeniden gönderilmez.
+
+Güncelleme (2026-11-12): Yeni kuyruk kaydında alıcı kaydı veya onay makamı bulunamazsa ilk 24 saat boyunca 30 dakika aralık hedefiyle yeniden kontrol edilir; GitHub gecikmeleri bu kontrolü de geciktirir. Süre sonunda veya kapatılmış tercihte kayıt işlenir. Eski sürümde işlenmiş kayıtlar kendiliğinden açılmaz; üyeler Profilim ekranında alıcı kaydının hazır olduğunu doğruladıktan sonra yönetici bekleyenleri yeniden kuyruğa almalıdır.
 
 ## İşleyiş ve sınırlar
 
