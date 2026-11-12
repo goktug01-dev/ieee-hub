@@ -1,19 +1,20 @@
 import { FieldPath, Timestamp, collection, doc, getDocFromServer, getDocsFromServer, limit, orderBy, query, runTransaction, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { millis, roleKeys } from './core.mjs';
 
-export function mailStore(db) {
+export function mailStore(db, channel = 'mail') {
+  if (!['mail','push'].includes(channel)) throw new Error('invalid-channel');
   const get = async path => { const snapshot = await getDocFromServer(doc(db, path)); return snapshot.exists() ? snapshot.data() : null; };
   const optionalTarget = async uid => {
     try { return await get(`mailRecipients/${uid}`); }
     catch (error) { if (error.code === 'permission-denied') return null; throw error; }
   };
   const record = async (id, data) => {
-    await setDoc(doc(db, 'mailDeliveries', id), { ...data,
+    await setDoc(doc(db, `${channel}Deliveries`, id), { ...data,
       nextAttemptAt: Timestamp.fromMillis(millis(data.nextAttemptAt)), updatedAt: serverTimestamp() });
   };
   return {
     settings: () => get('settings/mail'),
-    signals: async count => (await getDocsFromServer(query(collection(db, 'mailSignals'), where('state', '==', 'pending'), where('readyAt', '<=', Timestamp.now()), orderBy('readyAt'), limit(count))))
+    signals: async count => (await getDocsFromServer(query(collection(db, `${channel}Signals`), where('state', '==', 'pending'), where('readyAt', '<=', Timestamp.now()), orderBy('readyAt'), limit(count))))
       .docs.map(snapshot => ({ id: snapshot.id, ...snapshot.data() })),
     source: signal => get(`${signal.kind === 'petition' ? 'petitions' : 'tasks'}/${signal.sourceId}`),
     candidates: async (kind, source) => {
@@ -26,14 +27,25 @@ export function mailStore(db) {
       return [...candidates.values()];
     },
     recipient: async (uid, kind) => ({ recipient: await optionalTarget(uid), access: kind === 'petition' ? await get(`access/${uid}`) : null }),
-    delivery: id => get(`mailDeliveries/${id}`),
+    delivery: id => get(`${channel}Deliveries/${id}`),
+    pushConfig: () => get('settings/push'),
+    pushDevices: async uid => {
+      try { return (await getDocsFromServer(query(collection(db, 'pushSubscriptions', uid, 'devices'),limit(5)))).docs.map(s=>({id:s.id,...s.data()})); }
+      catch(error) { if(error.code==='permission-denied')return [];throw error; }
+    },
+    pushDevice: async (uid,id) => {try{return await get(`pushSubscriptions/${uid}/devices/${id}`);}catch(error){if(error.code==='permission-denied')return null;throw error;}},
+    pushAccess: uid => get(`access/${uid}`),
     claim: async (id, identity, _settings, now) => {
       const reserve = () => runTransaction(db, async tx => {
-      const target = doc(db, 'mailDeliveries', id);
+      const target = doc(db, `${channel}Deliveries`, id);
       const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(now);
-      const counter = doc(db, 'mailDaily', day);
+      const counter = doc(db, `${channel}Daily`, day);
       const [current, daily, config] = await Promise.all([tx.get(target), tx.get(counter), tx.get(doc(db, 'settings/mail'))]);
       const previous = current.data();
+      if(channel==='push') {
+        const push=await tx.get(doc(db,'settings/push'));
+        if(!push.data()?.enabled || push.data().publicKey!==_settings.publicKey)return null;
+      }
       if (!config.data()?.enabled || config.data().senderEmail !== _settings.senderEmail || config.data().hubUrl !== _settings.hubUrl
         || (previous && (['sent','sending','uncertain','skipped'].includes(previous.state) || millis(previous.nextAttemptAt) > now))) return null;
       const attempts = daily.data()?.attempts ?? 0;
@@ -51,7 +63,7 @@ export function mailStore(db) {
           if (!['permission-denied','aborted','failed-precondition'].includes(error.code) || retry === 2) throw error;
           const config = await get('settings/mail');
           if (!config?.enabled || config.senderEmail !== _settings.senderEmail || config.hubUrl !== _settings.hubUrl) return null;
-          const current = await get(`mailDeliveries/${id}`);
+          const current = await get(`${channel}Deliveries/${id}`);
           if (current && (['sending','sent','uncertain','skipped'].includes(current.state) || millis(current.nextAttemptAt) > now)) return null;
         }
       }
@@ -59,11 +71,11 @@ export function mailStore(db) {
     },
     record,
     finishSignal: async (signal, state, readyAt = Date.now()) => runTransaction(db, async tx => {
-      const target = doc(db, 'mailSignals', signal.id);
+      const target = doc(db, `${channel}Signals`, signal.id);
       const current = await tx.get(target);
       if (current.exists() && current.data().sourceVersion.isEqual(signal.sourceVersion)
         && current.data().queuedAt.isEqual(signal.queuedAt)) tx.update(target, { state, readyAt: Timestamp.fromMillis(readyAt) });
     }),
-    health: summary => setDoc(doc(db, 'mailHealth/current'), { ...summary, at: serverTimestamp() }),
+    health: summary => setDoc(doc(db, `${channel}Health/current`), { ...summary, at: serverTimestamp() }),
   };
 }

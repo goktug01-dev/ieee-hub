@@ -256,9 +256,9 @@ service cloud.firestore {
     }
 
     match /settings/{docId} {
-      allow read: if isActive() || (docId == 'statutory' && signedIn()) || (docId == 'mail' && mailIdentity());
+      allow read: if isActive() || (docId == 'statutory' && signedIn()) || (docId in ['mail','push'] && mailIdentity());
       // settings/public kendi eşleşmesinde doğrulanır; kurallar VEYA ile birleştiği için burada dışlanır.
-      allow write: if docId != 'public' && docId != 'mail' && hasPerm('org.manage');
+      allow write: if docId != 'public' && docId != 'mail' && docId != 'push' && hasPerm('org.manage');
     }
 
     match /settings/mail {
@@ -288,6 +288,93 @@ service cloud.firestore {
       allow delete: if signedIn() && me() == uid;
     }
 
+    match /settings/push {
+      allow create, update: if hasPerm('org.manage')
+        && request.resource.data.keys().hasOnly(['enabled','publicKey','updatedAt'])
+        && request.resource.data.enabled is bool
+        && request.resource.data.publicKey is string
+        && request.resource.data.publicKey.matches('^[A-Za-z0-9_-]{87}$')
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+    match /pushSubscriptions/{uid}/devices/{deviceId} {
+      allow read: if (signedIn() && me() == uid) || (mailWorker() && mailTargetActive(uid));
+      allow create, update: if isActive() && me() == uid
+        && deviceId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['endpoint','p256dh','auth','petitions','tasks','publicKey','updatedAt'])
+        && request.resource.data.endpoint is string && request.resource.data.endpoint.size() <= 4096
+        && request.resource.data.endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com)/[^ ]+$')
+        && request.resource.data.p256dh is string && request.resource.data.p256dh.matches('^[A-Za-z0-9_-]{87}$')
+        && request.resource.data.auth is string && request.resource.data.auth.matches('^[A-Za-z0-9_-]{22}$')
+        && request.resource.data.petitions is bool && request.resource.data.tasks is bool
+        && request.resource.data.publicKey == get(docPath('settings','push')).data.publicKey
+        && get(docPath('settings','push')).data.enabled == true
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && me() == uid;
+    }
+    match /pushSignals/{id} {
+      function source() {
+        return request.resource.data.kind == 'petition'
+          ? getAfter(docPath('petitions', request.resource.data.sourceId)).data
+          : getAfter(docPath('tasks', request.resource.data.sourceId)).data;
+      }
+      function validSignal() {
+        let d = request.resource.data;
+        let s = source();
+        return isActive() && existsAfter(docPath('mailSignals', id)) && d.keys().hasOnly(['kind','sourceId','sourceVersion','queuedAt','readyAt','state'])
+          && d.kind in ['petition','task'] && d.sourceId is string
+          && id == d.kind + '_' + d.sourceId && d.sourceVersion == s.updatedAt
+          && d.queuedAt == request.time && d.readyAt == request.time && d.state == 'pending'
+          && (d.kind == 'petition'
+            ? (s.status != 'draft' && (s.ownerUid == me() || hasPerm('petitions.readAll') || s.visibleTo.hasAny(myTokens())))
+            : canReadTask(s));
+      }
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create: if validSignal();
+      allow update: if (validSignal() && (request.resource.data.sourceVersion != resource.data.sourceVersion || hasPerm('org.manage')))
+        || (mailWorker() && onlyKeys(['state','readyAt']) && request.resource.data.readyAt is timestamp
+          && request.resource.data.state in ['processed','pending','blocked']);
+      allow delete: if false;
+    }
+
+    match /pushDeliveries/{id} {
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create, update: if mailWorker()
+        && request.resource.data.keys().hasOnly(['signalId','recipientUid','fingerprint','state','attempts','nextAttemptAt','updatedAt','errorCode'])
+        && request.resource.data.state in ['sending','sent','failed','uncertain','skipped']
+        && request.resource.data.signalId is string && request.resource.data.recipientUid is string
+        && request.resource.data.fingerprint is string
+        && request.resource.data.attempts is int && request.resource.data.attempts >= 1
+        && request.resource.data.nextAttemptAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.errorCode is string && request.resource.data.errorCode.size() <= 60;
+      // Belirsiz SMTP teslimi otomatik tekrarlanmaz; yönetici açıkça yeniden dener.
+      allow update: if hasPerm('org.manage') && resource.data.state in ['uncertain','failed','sending']
+        && request.resource.data.state == 'failed' && request.resource.data.updatedAt == request.time
+        && request.resource.data.nextAttemptAt == request.time
+        && onlyKeys(['state','nextAttemptAt','updatedAt']);
+      allow delete: if false;
+    }
+
+    match /pushDaily/{day} {
+      allow read: if mailWorker() || hasPerm('org.manage');
+      allow create, update: if mailWorker()
+        && request.resource.data.keys().hasOnly(['attempts','updatedAt'])
+        && request.resource.data.attempts is int
+        && request.resource.data.attempts == (resource == null ? 1 : resource.data.attempts + 1)
+        && request.resource.data.attempts <= get(docPath('settings', 'mail')).data.maxPerDay
+        && request.resource.data.updatedAt == request.time;
+    }
+    match /pushHealth/current {
+      allow read: if hasPerm('org.manage');
+      allow create, update: if mailIdentity()
+        && request.resource.data.keys().hasOnly(['at','mode','result','sent','skipped','uncertain','errorCode'])
+        && request.resource.data.at == request.time
+        && request.resource.data.mode in ['dry-run','live']
+        && request.resource.data.result in ['ok','error','disabled']
+        && request.resource.data.sent is int && request.resource.data.skipped is int && request.resource.data.uncertain is int
+        && request.resource.data.errorCode is string && request.resource.data.errorCode.size() <= 60;
+    }
     match /mailSignals/{id} {
       function source() {
         return request.resource.data.kind == 'petition'

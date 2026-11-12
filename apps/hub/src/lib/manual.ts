@@ -35,6 +35,18 @@ export const MANUAL: ManualSection[] = [
     ], tips: ['Kontroller yaklaşık 10 dakikada bir planlanır; gecikme veya sağlayıcı kotası olabilir. Hub’daki onay/görev listesi güncel başvuru kaynağıdır.'],
   },
   {
+    id: 'telefon-bildirimleri', audiences: ['member', 'admin'], title: 'Telefon bildirimleri',
+    where: 'Giriş sonrası bildirim çağrısı · Profilim → Telefon bildirimleri',
+    summary: 'Bu cihaz için görev ve dilekçe bildirimlerini açabilirsiniz. GitHub zamanlaması kullanılır; saatlerce gecikebilir.',
+    steps: [
+      'Kurum servisi açıkken girişten sonra bildirim çağrısı otomatik görünür. Bildirimleri aç düğmesine dokununca tarayıcının kendi izin penceresi açılır. Sistem izni kullanıcı dokunmadan istenmez; engellenmiş izin otomatik tekrar sorulmaz.',
+      'iPhone/iPad’de iOS 16.4 veya sonrası gerekir; önce uygulamayı Ana Ekran’a ekleyip simgesinden açın. Kurulum gerektiren cihazda çağrı önce bunu anlatır.',
+      'Profilim → Telefon bildirimleri bölümünde görev ve dilekçe tercihlerini bu cihaz için ayrı değiştirin. Bu cihazda bildirimleri kapat kaydı ve tarayıcı aboneliğini kaldırır. Her cihaz ayrı izin ister.',
+      'Yönetici: Kurum ayarları → Telefon bildirim servisi bölümünde açık anahtarı kontrol edip servisi kaydedin. Gizli anahtar yalnız GitHub Secrets’ta tutulur; bu alana yazılmaz. Mail yürütücüsünün erişimi de açık olmalıdır.',
+      'Üyeler cihazlarını açtıktan sonra eski işler için Mevcut bekleyenleri kuyruğa al işlemini kullanın. Önceden gönderilen aynı kanal/cihaz bildirimi tekrarlanmaz.',
+    ], tips: ['Bildirim özel kişi/iş başlığı içermez; Hub’a giriş yapınca ayrıntılar görülür. Push servisinin kabulü telefonda görüntülendiğini tek başına kanıtlamaz.', 'Çevrimdışı oturum kapatmada abonelik iptali garanti edilemez; cihazın tarayıcı ayarından da bildirimler kapatılabilir.'],
+  },
+  {
     id: 'mail-yonetimi', audiences: ['admin'], title: 'E-posta servisini yönetme',
     where: 'Yönetim › Kurum ayarları › E-posta bildirim servisi',
     summary: 'Gönderici, ayrı otomasyon hesabı, Hub adresi ve gönderim sınırları bu panelden yönetilir. Gmail gizli bilgileri bu ekrana yazılmaz.',

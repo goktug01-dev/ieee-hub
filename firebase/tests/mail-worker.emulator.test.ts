@@ -4,6 +4,7 @@ import { Timestamp, doc, getDoc, getDocs, collection, setDoc, updateDoc } from '
 import { beforeAll, beforeEach, afterAll, expect, test } from 'vitest';
 import { processMail } from '../../scripts/mail/core.mjs';
 import { mailStore } from '../../scripts/mail/store.mjs';
+import { processPush } from '../../scripts/push/core.mjs';
 
 let env: RulesTestEnvironment;
 const version=Timestamp.fromMillis(1000), far=Timestamp.fromDate(new Date('2100-01-01'));
@@ -24,6 +25,23 @@ beforeEach(async()=>{
 });
 const bot=()=>env.authenticatedContext('bot').firestore();
 const transport=(calls:string[])=>({verify:async()=>{},sendMail:async(message:{to:{address:string}})=>{calls.push(message.to.address);return{accepted:[message.to.address]};}});
+
+test('Push ayrı kuyruk/kota/makbuz kullanır; mail kaydını kapatmaz ve aynı cihaza mükerrer göndermez',async()=>{
+  const publicKey='A'.repeat(87);
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(doc(db,'settings/push'),{enabled:true,publicKey});
+    await setDoc(doc(db,'pushSubscriptions/owner/devices/d'),{endpoint:'https://fcm.googleapis.com/fcm/send/test',p256dh:publicKey,auth:'A'.repeat(22),publicKey,tasks:true,petitions:true});
+    await setDoc(doc(db,'pushSignals/task_t'),{kind:'task',sourceId:'t',sourceVersion:version,queuedAt:version,readyAt:version,state:'pending'});
+  });
+  const db=bot(),calls:string[]=[],store=mailStore(db,'push');
+  const run=()=>processPush({store,publicKey,dryRun:false,send:async(_device:unknown,payload:string)=>{calls.push(payload);}});
+  const result=await run();expect(result.result).toBe('ok');expect(result.sent).toBe(1);
+  expect((await getDoc(doc(db,'mailSignals/task_t'))).data()!.state).toBe('pending');
+  expect((await getDocs(collection(db,'pushDeliveries'))).size).toBe(1);
+  await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'pushSignals/task_t'),{state:'pending'}));
+  await run();expect(calls).toHaveLength(1);
+});
 
 test('Gerçek SDK ve kurallarla kota rezervasyonu → SMTP kabulü → makbuz ve kuyruk kapanışı',async()=>{
   const db=bot(),calls:string[]=[],store=mailStore(db);

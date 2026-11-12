@@ -27,6 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:mail
+      - run: npm run test:push
       - name: Güvenlik kuralı testleri
         run: npm run test:rules
       - name: Uçtan uca testler (istemci + kurallar)
@@ -51,6 +52,7 @@ jobs:
       VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
       VITE_USE_EMULATORS: '0'
+      VITE_PUSH_PUBLIC_KEY: ${{ vars.PUSH_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v5

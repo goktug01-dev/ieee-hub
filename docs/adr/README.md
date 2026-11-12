@@ -49,5 +49,6 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0041](0041-tuzuk-surecleri-ve-yillik-aktiflik.md) | Tüzük dosyaları makam onayları, yıllık aktiflik ve süre takibiyle yürütülür | Kabul Edildi | ✓ | WP-04, WP-09, WP-10, WP-11 |
 | [0042](0042-telefona-kurulabilen-web-uygulamasi.md) | Hub telefona kurulabilen web uygulaması olarak sunulur | Kabul Edildi | ✓ | WP-10, WP-11 |
 | [0043](0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md) | Mail mevcut GitHub Actions ve Gmail ile gönderilir; Firebase Spark korunur | Kabul Edildi | ✓ | WP-10, WP-11, WP-12 |
+| [0044](0044-github-actions-ile-web-push.md) | Telefon Web Push bildirimleri mevcut GitHub Actions ile gönderilir; izin çağrısı girişte görünür | Kabul Edildi | ✓ | WP-10, WP-11 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

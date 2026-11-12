@@ -22,3 +22,20 @@ self.addEventListener('fetch', (event) => {
     ?? new Response('İnternet bağlantısı yok. Lütfen yeniden deneyin.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
   )));
 });
+
+self.addEventListener('push',event=>{
+  event.waitUntil((async()=>{
+    let data={};try{data=event.data?.json()||{};}catch{}
+    const petition=data.kind==='petition';
+    await self.registration.showNotification('IEEE Hub',{
+      body:petition?'Onayınızı bekleyen bir dilekçe var.':'Size yeni bir görev atandı.',
+      icon:'/icons/icon-192.png',tag:typeof data.tag==='string'?data.tag:'ieee-hub',
+      data:{path:petition?'/onaylar':'/gorevler'},
+    });
+  })());
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  const path=event.notification.data?.path==='/onaylar'?'/onaylar':'/gorevler';
+  event.waitUntil(self.clients.openWindow(new URL(path,self.location.origin).href));
+});

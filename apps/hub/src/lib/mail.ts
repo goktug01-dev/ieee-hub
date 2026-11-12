@@ -17,7 +17,7 @@ export interface MailRecipient { email: string; petitions: boolean; tasks: boole
 
 /** Alıcı ve içerik yazılmaz; yürütücü kaynağı ve güncel yetkiyi kendisi çözer. */
 export function queueMail(writer: { set(ref: DocumentReference, data: DocumentData): unknown }, kind: 'petition' | 'task', sourceId: string) {
-  writer.set(doc(db, 'mailSignals', `${kind}_${sourceId}`), {
+  for (const channel of ['mail','push']) writer.set(doc(db, `${channel}Signals`, `${kind}_${sourceId}`), {
     kind, sourceId, sourceVersion: serverTimestamp(), queuedAt: serverTimestamp(), readyAt: serverTimestamp(), state: 'pending',
   });
 }
@@ -39,9 +39,9 @@ export async function queuePendingMail(): Promise<number> {
   const petitions = await getDocs(query(collection(db, 'petitions'), where('status', '==', 'pending')));
   const tasks = await getDocs(query(collection(db, 'tasks'), where('status', 'in', ['todo', 'in_progress', 'blocked'])));
   const items = [...petitions.docs.map(d => ({ kind: 'petition' as const, d })), ...tasks.docs.map(d => ({ kind: 'task' as const, d }))];
-  for (let offset = 0; offset < items.length; offset += 10) {
+  for (let offset = 0; offset < items.length; offset += 5) {
     const batch = writeBatch(db);
-    for (const { kind, d } of items.slice(offset, offset + 10)) batch.set(doc(db, 'mailSignals', `${kind}_${d.id}`), {
+    for (const { kind, d } of items.slice(offset, offset + 5)) for (const channel of ['mail','push']) batch.set(doc(db, `${channel}Signals`, `${kind}_${d.id}`), {
       kind, sourceId: d.id, sourceVersion: d.data().updatedAt, queuedAt: serverTimestamp(), readyAt: serverTimestamp(), state: 'pending',
     });
     await batch.commit();
