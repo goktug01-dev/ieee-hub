@@ -1,0 +1,35 @@
+name: Telefon bildirimleri
+on:
+  schedule:
+    - cron: '8/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Yalnız alıcı ve cihaz kontrolü; telefon bildirimi göndermez'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: push-notifications
+  cancel-in-progress: false
+jobs:
+  mail:
+    if: github.event.repository.private == false && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.MAIL_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Telefon bildirimlerini kontrol et
+        run: node scripts/push/run.mjs
+        env:
+          DEBUG: ''
+          MAIL_FIREBASE_CREDENTIALS: ${{ secrets.MAIL_FIREBASE_CREDENTIALS }}
+          PUSH_VAPID_KEYS: ${{ secrets.PUSH_VAPID_KEYS }}
+          MAIL_SENDER_EMAIL: ${{ vars.MAIL_SENDER_EMAIL }}
+          MAIL_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}

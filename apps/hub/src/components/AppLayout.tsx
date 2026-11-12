@@ -68,6 +68,7 @@ import { useUnitScope } from '../lib/unitScope';
 import { siteQrController } from '../lib/siteWorkflow';
 import { AppInstallButton } from './AppInstall';
 import { MailRegistration } from './MailPreferences';
+import { PushPermissionPrompt } from './PushPermissionPrompt';
 
 interface NavItem {
   to: string;
@@ -190,6 +191,7 @@ export function AppLayout() {
       padding={{ base: 'md', sm: 'xl' }}
     >
       <MailRegistration />
+      <PushPermissionPrompt />
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">

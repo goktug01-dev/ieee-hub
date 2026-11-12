@@ -28,9 +28,13 @@
     "smoke": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke.mjs\"",
     "smoke:pwa": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-pwa.mjs\"",
     "smoke:mail": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-mail.mjs\"",
-    "smoke:statutory": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-statutory-setup.mjs\""
+    "smoke:statutory": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-statutory-setup.mjs\"",
+    "push:setup": "node scripts/push/setup.mjs",
+    "test:push": "node --test scripts/push/core.test.mjs",
+    "smoke:push": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-push.mjs\""
   },
   "dependencies": {
-    "nodemailer": "^10.5.0"
+    "nodemailer": "^10.5.0",
+    "web-push": "^4.0.0"
   }
 }

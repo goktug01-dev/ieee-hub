@@ -10,6 +10,7 @@ import { useCollection } from '../lib/hooks';
 import { useOrg } from '../lib/org';
 import type { Assignment } from '../lib/types';
 import { PERMISSION_MAP, type PermissionId } from '../lib/permissions';
+import { PushPreferences } from '../components/PushPreferences';
 import { MailPreferences } from '../components/MailPreferences';
 
 export function ProfilePage() {
@@ -130,7 +131,7 @@ export function ProfilePage() {
           </Stack>
         </Grid.Col>
       </Grid>
-      <MailPreferences />
+      <MailPreferences /><PushPreferences />
     </Stack>
   );
 }

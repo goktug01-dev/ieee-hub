@@ -122,7 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       orgSettings: { ...DEFAULT_ORG_SETTINGS, ...(orgState.data ?? {}) },
       can: (perm) => isActive && hasPermission(access, perm),
       isSuperAdmin: !!access?.superAdmin,
-      signOut: () => fbSignOut(auth),
+      signOut: async () => {
+        try {
+          const {disablePush,pushBinding}=await import('../lib/push');
+          if(pushBinding()?.uid===auth.currentUser?.uid)await Promise.race([disablePush(),new Promise(resolve=>window.setTimeout(resolve,3000))]);
+        } catch { /* Cihaz iptal edilemese de oturum kapatılır. */ }
+        await fbSignOut(auth);
+      },
     }),
     [phase, user, memberState.data, access, publicState.data, orgState.data, isActive],
   );

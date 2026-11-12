@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+import { chromium } from 'playwright-core';
+import { initializeApp,deleteApp } from 'firebase/app';
+import { connectAuthEmulator,getAuth,signInWithEmailAndPassword,signOut } from 'firebase/auth';
+import { connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,terminate } from 'firebase/firestore';
+if(!process.env.FIREBASE_AUTH_EMULATOR_HOST||!process.env.FIRESTORE_EMULATOR_HOST)throw new Error('Yalnız demo emülatörleri.');
+Object.assign(process.env,{VITE_FIREBASE_API_KEY:'demo-key',VITE_FIREBASE_AUTH_DOMAIN:'demo-ieee-hub.firebaseapp.com',VITE_FIREBASE_PROJECT_ID:'demo-ieee-hub',VITE_FIREBASE_APP_ID:'demo-app',VITE_USE_EMULATORS:'1',VITE_AUTH_EMULATOR_PORT:'9099',VITE_FIRESTORE_EMULATOR_PORT:'8085'});
+const app=initializeApp({apiKey:'demo-key',projectId:'demo-ieee-hub'}),auth=getAuth(app),db=getFirestore(app);
+connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(db,'127.0.0.1',8085);
+const out=fileURLToPath(new URL('../smoke-shots/push/',import.meta.url));await mkdir(out,{recursive:true});
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),logLevel:'warn',server:{host:'127.0.0.1',port:5187,strictPort:true}});
+let browser;
+try {
+  await signInWithEmailAndPassword(auth,'baskan@demo.ieee','demo1234');
+  await setDoc(doc(db,'settings/push'),{enabled:true,publicKey:'A'.repeat(87),updatedAt:serverTimestamp()});
+  await server.listen();browser=await chromium.launch({executablePath:process.env.BROWSER_PATH??'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
+  const page=await browser.newPage({viewport:{width:1366,height:950},locale:'tr-TR'}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  // Sahte tarayıcı push servisi; gerçek cihaz kaydı veya dış ağ bildirimi oluşturulmaz.
+  await page.addInitScript(()=>{
+    window.permissionCalls=0;
+    Notification.requestPermission=async()=>{window.permissionCalls++;return 'granted';};
+    PushManager.prototype.getSubscription=async()=>null;
+    PushManager.prototype.subscribe=async()=>({unsubscribe:async()=>true,toJSON:()=>({endpoint:'https://fcm.googleapis.com/fcm/send/demo-device',keys:{p256dh:'A'.repeat(87),auth:'A'.repeat(22)}})});
+  });
+  await page.goto('http://127.0.0.1:5187');
+  await page.evaluate(async()=>{await navigator.serviceWorker.register('/sw.js');await navigator.serviceWorker.ready;});
+  await page.getByText('Ayşe Yılmaz',{exact:true}).click();
+  const prompt=page.getByRole('dialog');await prompt.getByText('Görev bildirimlerini telefonunda al',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.permissionCalls),0,'Sistem izni kullanıcı dokunmadan istenmemeli.');
+  await prompt.screenshot({path:out+'automatic-prompt.png',animations:'disabled'});
+  await prompt.getByRole('button',{name:'Bildirimleri aç',exact:true}).click();
+  await page.getByText('Bu cihazda telefon bildirimleri açıldı.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.permissionCalls),1);
+  await page.goto('http://127.0.0.1:5187/profil');
+  await page.getByText('Bu cihaz kayıtlı.',{exact:true}).waitFor();
+  const tasks=page.getByLabel('Bu cihazda görev bildirimi',{exact:true});await tasks.uncheck();
+  await page.getByText('Telefon bildirim tercihi kaydedildi.',{exact:true}).waitFor();
+  await page.reload();await page.getByText('Bu cihaz kayıtlı.',{exact:true}).waitFor();assert.equal(await tasks.isChecked(),false);
+  await page.setViewportSize({width:390,height:844});
+  await page.getByTestId('push-preferences').screenshot({path:out+'profile-mobile.png',animations:'disabled'});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.getByRole('button',{name:'Bu cihazda bildirimleri kapat',exact:true}).click();
+  await page.getByText('Bu cihazın bildirim kaydı kaldırıldı.',{exact:true}).waitFor();
+  const iosContext=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'});
+  const ios=await iosContext.newPage();await ios.goto('http://127.0.0.1:5187');await ios.getByText('Ayşe Yılmaz',{exact:true}).click();
+  const iosPrompt=ios.getByRole('dialog');await iosPrompt.getByText('Görev bildirimlerini telefonunda al',{exact:true}).waitFor();
+  await iosPrompt.getByText(/önce uygulamayı Ana Ekran’a ekle/).waitFor();
+  assert.equal(await iosPrompt.getByRole('button',{name:'Bildirimleri aç',exact:true}).count(),0);
+  await iosPrompt.screenshot({path:out+'ios-install-guide.png',animations:'disabled'});await iosContext.close();
+  assert.deepEqual(errors,[]);console.log('Push UI: girişte otomatik çağrı, yalnız dokunmayla izin isteme, cihaz kaydı, tercih kalıcılığı, kapatma ve mobil görünüm geçti. Gerçek telefon bildirimi gönderilmedi.');
+}finally{await browser?.close();await server.close();await signOut(auth);await terminate(db);await deleteApp(app);}
