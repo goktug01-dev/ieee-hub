@@ -29,6 +29,7 @@ export const MANUAL: ManualSection[] = [
     summary: 'Onayınızı bekleyen yeni dilekçe adımı ve size atanan görev için, servis kuruluysa doğrulanmış adresinize mail gelir. Teslim anlık değildir.',
     steps: [
       'Yeni sürüme giriş yapan doğrulanmış aktif hesaplar operasyon bildirimlerine eklenir. Profilim sayfasında dilekçe ve görev maillerini ayrı ayrı açıp kapatabilirsiniz.',
+      'Profilde Bildirim alıcı kaydınız hazır yazısını kontrol edin; kayıt yoksa Bildirim kaydını tamamla düğmesine basın. Eksik alıcı veya boş onay makamı yeni kuyruk kaydından itibaren en çok 24 saat, yarım saat aralık hedefiyle yeniden kontrol edilir. Zamanlayıcı gecikirse bu kontrol de gecikir. Daha eski işler yönetici tarafından yeniden kuyruğa alınır; kapatılmış tercihler zorla açılmaz.',
       'Adresiniz doğrulanmamışsa “Doğrulama maili gönder” düğmesine basın, maildeki bağlantıyı açın ve “Doğrulamayı kontrol et”i kullanın.',
       'Maildeki Hub bağlantısından hesabınızla giriş yaparak güncel kaydı inceleyin. Dilekçe metni ve ekleri mailde paylaşılmaz.',
     ], tips: ['Kontroller yaklaşık 10 dakikada bir planlanır; gecikme veya sağlayıcı kotası olabilir. Hub’daki onay/görev listesi güncel başvuru kaynağıdır.'],

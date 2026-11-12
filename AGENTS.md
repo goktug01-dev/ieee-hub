@@ -4,6 +4,8 @@ Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor
 
 ## Güncel devam noktası (2026-11-11)
 
+- 2026-11-12 mail incelemesi: kullanıcı bazı kişilere mail gelmediğini bildirdi. Son zamanlanmış çalışmalarda SMTP hatası yok; çalıştırmalar arasında saatlik boşluklar var. Eksik alıcı/boş makam yeni sinyalden itibaren en çok 24 saat, 30 dakika aralık hedefiyle yeniden kontrol edilir. Profil alıcı kaydının gerçekten hazır olup olmadığını gösterir; eski işlenmiş işler yönetici tarafından yeniden kuyruğa alınır. Kapalı tercihler otomatik açılmaz. Kullanıcıya özel örnek henüz bekleniyor; bunun her eksik mailin kesin nedeni olduğu iddia edilmemeli. Telefon push bildirimi isteniyor; gecikme beklentisi soruldu, henüz push kurulmadı.
+
 - GitHub'daki `4f943c0` sürümü (2026-10-06) oda rezervasyonu ve CI güncellemelerini içeriyordu; yereldeki eski tabanla birleştirildi. Aşağıdaki eski §5 notu güncel Git durumunu yansıtmaz.
 - Hub–site otomasyonu, ACTOR puan/QR doğrulaması ve tüzük/yıllık aktiflik çalışmaları ayrı commit'te kaydedildi (ADR-0039–0041). PWA ayrı commit'tedir. Oda rezervasyonunun yayımlanmış ADR-0038 numarası korundu; önceki commitlenmemiş ADR numaraları kaydırıldı.
 - Telefona kurulabilen PWA desteği eklendi (ADR-0042): giriş, kullanıcı menüsü ve Yardım üzerinden kurulum; yalnız statik bağlantısız ekranını saklayan üretim worker'ı. `npm run smoke:pwa` demo emülatörleriyle ayrı üretim derlemesini sınar; normal `dist` çıktısını değiştirmez.
