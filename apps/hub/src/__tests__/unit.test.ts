@@ -185,6 +185,20 @@ describe('vTools L31 hazırlık paketi', () => {
     expect(vtoolsMissingFields(broken, settings)).toContain('katılımcı toplamı uyuşmuyor');
   });
 
+  it('bilinmeyen SPOID hazırlığı engellemez; negatif ve kesirli sayılar engeller', () => {
+    expect(vtoolsMissingFields(event, { ...settings, vtoolsSpoid: '' })).toEqual([]);
+    for (const ieeeAttendees of [-1, 1.5]) {
+      expect(vtoolsMissingFields({ ...event, vtools: { ...event.vtools!, ieeeAttendees } }, settings)).toContain('katılımcı sayıları sıfır veya pozitif tam sayı olmalı');
+    }
+  });
+
+  it('bozuk saat dilimi ekranı çökertmez ve hazırlıkta eksik gösterilir', () => {
+    const invalid = { ...settings, vtoolsTimeZone: 'yanlis/bolge' };
+    expect(vtoolsMissingFields(event, invalid)).toContain('geçerli saat dilimi');
+    expect(() => vtoolsPreparationRow(event, invalid)).not.toThrow();
+    expect(vtoolsMissingFields({ ...event, endsAt: event.startsAt }, settings)).toContain('bitiş başlangıçtan sonra olmalı');
+  });
+
   it('yalnız onaylanmış ve tarihli etkinlikleri iCalendar çıktısına alır', () => {
     const approved = { ...event, id: 'evt-1', status: 'approved' as const };
     const proposed = { ...event, id: 'evt-2', status: 'proposed' as const, name: 'Taslak' };

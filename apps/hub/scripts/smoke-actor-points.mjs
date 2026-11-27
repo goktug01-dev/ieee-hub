@@ -100,7 +100,8 @@ try {
   await s.page.screenshot({path:out+'approved-mobile.png',fullPage:true,animations:'disabled'});
   await s.page.setViewportSize({width:1366,height:950});
   await s.page.goto(`${base}/actor`);
-  await s.page.getByText(/40 puan · cs \(komite önerisi 25\)/).waitFor();
+  await s.page.getByText('Doğrulanan / kapatılan', {exact:true}).click();
+  await s.page.getByText(/Computer Society · 40 puan \(komite önerisi 25\)/).waitFor();
   await s.page.screenshot({path:out+'actor-page.png',fullPage:true,animations:'disabled'});
   await s.context.close();
 

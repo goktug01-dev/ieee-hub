@@ -4,6 +4,7 @@ import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore
 import { auth, db } from '../firebase';
 import { hasPermission } from '../lib/access';
 import { useDoc } from '../lib/hooks';
+import { disconnectExternalSessions } from '../lib/externalSessions';
 import { DEFAULT_ORG_SETTINGS } from '../lib/workflow';
 import type { Access, Member, OrgSettings, PublicSettings } from '../lib/types';
 import type { PermissionId } from '../lib/permissions';
@@ -44,14 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.pathname.startsWith('/politika/') ||
     window.location.hostname.includes('ieee-ikcu-kariyer');
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (u) => {
+  useEffect(() => {
+    let previousUid: string | null = null;
+    return onAuthStateChanged(auth, (u) => {
+        if (previousUid && previousUid !== u?.uid) void disconnectExternalSessions();
+        previousUid = u?.uid ?? null;
         setUser(u);
         setAuthReady(true);
-      }),
-    [],
-  );
+      });
+  }, []);
 
   const uid = user?.uid ?? null;
   const memberState = useDoc<Member>(uid ? `members/${uid}` : null);
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const {disablePush,pushBinding}=await import('../lib/push');
           if(pushBinding()?.uid===auth.currentUser?.uid)await Promise.race([disablePush(),new Promise(resolve=>window.setTimeout(resolve,3000))]);
         } catch { /* Cihaz iptal edilemese de oturum kapatılır. */ }
+        await disconnectExternalSessions();
         await fbSignOut(auth);
       },
     }),

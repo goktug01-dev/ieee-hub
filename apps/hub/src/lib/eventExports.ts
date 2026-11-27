@@ -1,5 +1,6 @@
 import type { HubEvent, VToolsEventData } from './opsTypes';
 import type { OrgSettings } from './types';
+import { validTimeZone } from './vtoolsGuide';
 
 export const EMPTY_VTOOLS_DATA: VToolsEventData = {
   category: '',
@@ -51,6 +52,7 @@ const dateParts = (iso: string | null, timeZone: string) => {
   if (!iso) return { date: '', time: '' };
   const value = new Date(iso);
   if (Number.isNaN(value.getTime())) return { date: '', time: '' };
+  if (!validTimeZone(timeZone)) return { date: '', time: '' };
   const date = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
   const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(value);
   return { date, time };
@@ -64,17 +66,20 @@ export function vtoolsMissingFields(event: HubEvent, settings: OrgSettings): str
   const data = vtoolsData(event);
   const missing: string[] = [];
   if (!event.name.trim()) missing.push('etkinlik başlığı');
-  if (!event.startsAt) missing.push('başlangıç');
-  if (!event.endsAt) missing.push('bitiş');
+  if (!event.startsAt || !Number.isFinite(Date.parse(event.startsAt))) missing.push('başlangıç');
+  if (!event.endsAt || !Number.isFinite(Date.parse(event.endsAt))) missing.push('bitiş');
+  if (event.startsAt && event.endsAt && Date.parse(event.endsAt) <= Date.parse(event.startsAt)) missing.push('bitiş başlangıçtan sonra olmalı');
+  if (!validTimeZone(settings.vtoolsTimeZone)) missing.push('geçerli saat dilimi');
   if (!event.report?.summary?.trim() && !event.description.trim()) missing.push('açıklama/özet');
   if (!data.category.trim()) missing.push('vTools kategorisi');
   if (data.locationType !== 'virtual' && !event.location.trim()) missing.push('yer');
   if (!settings.vtoolsOrganizationName.trim()) missing.push('organizasyon birimi');
-  if (!settings.vtoolsSpoid.trim()) missing.push('SPOID');
   if (!settings.vtoolsContactEmail.trim()) missing.push('iletişim e-postası');
   if (event.report?.participantCount === null || event.report?.participantCount === undefined) missing.push('toplam katılımcı');
   if (data.ieeeAttendees === null) missing.push('IEEE üyesi katılımcı');
   if (data.guestAttendees === null) missing.push('üye olmayan katılımcı');
+  const counts = [event.report?.participantCount, data.ieeeAttendees, data.guestAttendees];
+  if (counts.some(value => value !== null && value !== undefined && (!Number.isInteger(value) || value < 0))) missing.push('katılımcı sayıları sıfır veya pozitif tam sayı olmalı');
   if (
     event.report?.participantCount !== null &&
     event.report?.participantCount !== undefined &&

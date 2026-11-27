@@ -68,7 +68,7 @@ export function EventsPage() {
 
   return (
     <Stack>
-      {canApprove && <SiteConnection />}
+      {canApprove && <SiteConnection capability="calendar" />}
       <PageHeader
         title="Etkinlikler"
         description="Öneriden kapanış raporuna kadar tüm etkinlikler. Etkinlik, YK kararıyla veya onaylanmış etkinlik izin dilekçesiyle onaylanır."
