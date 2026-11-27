@@ -1,4 +1,4 @@
-import { Alert, Badge, Center, Group, Loader, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { Alert, Badge, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconCheck, IconInbox, IconX } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
@@ -15,11 +15,11 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <Group justify="space-between" align="flex-start" mb="lg" gap="md" wrap="wrap">
+    <Group justify="space-between" align="flex-end" mb={40} gap="md" wrap="wrap">
       <div style={{ minWidth: 0, flex: '1 1 320px' }}>
         <Title order={2}>{title}</Title>
         {description && (
-          <Text c="dimmed" mt={4} maw={760}>
+          <Text c="dimmed" mt={8} maw={680}>
             {description}
           </Text>
         )}
@@ -31,11 +31,9 @@ export function PageHeader({
 
 export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
-    <Center py={48}>
-      <Stack align="center" gap="xs" maw={420} ta="center">
-        <ThemeIcon size={56} radius="xl" variant="light" color="gray">
-          <IconInbox size={28} />
-        </ThemeIcon>
+    <Center py={40}>
+      <Stack align="center" gap={6} maw={420} ta="center">
+        <IconInbox size={26} stroke={1.4} color="var(--mantine-color-dimmed)" aria-hidden />
         <Text fw={600}>{title}</Text>
         {description && (
           <Text c="dimmed" size="sm">
