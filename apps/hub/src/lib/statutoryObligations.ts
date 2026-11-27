@@ -2,6 +2,7 @@ import type { WithId, Assignment, Unit, Term, Member } from './types';
 import type { Asset, HubEvent, Handover, Meeting, Project, ReportSnapshot, InventoryItem } from './opsTypes';
 import type { StatutoryCase, StatutoryObligation, StatutoryPolicy } from './statutoryTypes';
 import { caseDeadline, DAY } from './statutory';
+import { statutoryCasesLink } from './statutoryNavigation';
 
 export interface ObligationSources {
   events: WithId<HubEvent>[]; units: WithId<Unit>[]; assignments: WithId<Assignment>[];
@@ -29,17 +30,17 @@ export function statutoryObligations(s: ObligationSources, p: StatutoryPolicy, n
     const filed=s.cases.filter(c=>c.kind==='weekly_report'&&c.status==='approved'&&c.unitId===u.id).sort((a,b)=>b.updatedAt.toMillis()-a.updatedAt.toMillis())[0];
     const reportBase=Math.max(report?Date.parse(report.periodEnd):0,filed?.updatedAt.toMillis()||0)||s.term?.startsAt.toMillis();
     if(reportBase) add(`weekly-${u.id}`,`${u.name}: haftalık rapor`,'78.d','Komite başkanı',reportBase+p.limits.weeklyReportDays*DAY,'/raporlar','Haftalık İK–YK toplantısına rapor sunulmalı.');
-    if(s.term && s.term.endsAt.toMillis()<=now && !s.events.some(e=>e.unitId===u.id && ['held','closing','reported','archived'].includes(e.status) && Date.parse(e.startsAt||'')>=s.term!.startsAt.toMillis() && Date.parse(e.startsAt||'')<=s.term!.endsAt.toMillis()) && !s.projects.some(v=>v.unitId===u.id && v.status==='completed' && Date.parse(v.endDate||'')>=s.term!.startsAt.toMillis())) add(`passive-${u.id}`,`${u.name}: faaliyet değerlendirmesi`,'79.a','YK / Denetleme',s.term.endsAt.toMillis(),'/surecler','Dönemde etkinlik/proje görülmedi. Pasif statü için YK kararı gerekir; otomatik görevden alma yapılmaz.',true);
+    if(s.term && s.term.endsAt.toMillis()<=now && !s.events.some(e=>e.unitId===u.id && ['held','closing','reported','archived'].includes(e.status) && Date.parse(e.startsAt||'')>=s.term!.startsAt.toMillis() && Date.parse(e.startsAt||'')<=s.term!.endsAt.toMillis()) && !s.projects.some(v=>v.unitId===u.id && v.status==='completed' && Date.parse(v.endDate||'')>=s.term!.startsAt.toMillis())) add(`passive-${u.id}`,`${u.name}: faaliyet değerlendirmesi`,'79.a','YK / Denetleme',s.term.endsAt.toMillis(),statutoryCasesLink({kind:'committee_passive',unitId:u.id}),'Dönemde etkinlik/proje görülmedi. Pasif statü için YK kararı gerekir; otomatik görevden alma yapılmaz.',true);
   }
   if(s.term) {
     const start=s.term.startsAt.toMillis(),end=s.term.endsAt.toMillis();
     const count=(kind:string)=>s.cases.filter(c=>c.kind===kind&&c.status==='approved'&&c.updatedAt.toMillis()>=start&&c.updatedAt.toMillis()<=end).length;
     for(const [kind,target,title,article,owner] of [['general_assembly',2,'Genel Kurul', '103','Genel Sekreter'],['audit_period',2,'Denetleme incelemesi','91','Denetleme'],['actor_annual',1,'ACTOR yillik raporu ve nihai yedek','36, 37','ACTOR'],['advisory_annual',1,'Yuksek Istisare Kurulu toplantisi','94','Genel Sekreter'],['annual_plan',1,'Yillik faaliyet plani','54','YK / Genel Sekreter']] as const) {
-      const completed=count(kind);if(completed<target)add(`annual-${kind}`,`${title}: ${completed}/${target}`,article,owner,end,'/surecler','Donem icindeki onayli surec dosyalari sayilir; teslim kaniti ve makam onayi gerekir.');
+      const completed=count(kind);if(completed<target)add(`annual-${kind}`,`${title}: ${completed}/${target}`,article,owner,end,statutoryCasesLink({kind}),'Donem icindeki onayli surec dosyalari sayilir; teslim kaniti ve makam onayi gerekir.');
     }
     const lastYk=yk[0]?Date.parse(yk[0].date):0;
     const cash=s.cases.some(c=>c.kind==='finance_balance'&&c.status==='approved'&&c.updatedAt.toMillis()>=lastYk);
-    if(lastYk&&!cash)add('cash-meeting','YK toplantisi kasa raporu','58','Finansal Direktor',lastYk,'/surecler','Her YK toplantisinda bakiye raporu ve tutanak kaydi gerekir.',true);
+    if(lastYk&&!cash)add('cash-meeting','YK toplantisi kasa raporu','58','Finansal Direktor',lastYk,statutoryCasesLink({kind:'finance_balance'}),'Her YK toplantisinda bakiye raporu ve tutanak kaydi gerekir.',true);
   }
   for(const a of s.assignments.filter(a=>a.status==='ended' && a.endedAt)) {
     const end=a.endedAt!.toMillis();
@@ -53,12 +54,12 @@ export function statutoryObligations(s: ObligationSources, p: StatutoryPolicy, n
   }
   for(const c of s.cases) {
     const due=caseDeadline(c,p);
-    if(due) add(`case-${c.id}`,`${c.title}: ${p.flows[c.kind]?.stages[c.step]?.label}` ,p.flows[c.kind]?.articles||'',p.flows[c.kind]?.stages[c.step]?.authority||'',due,`/surecler?dosya=${c.id}`,'Süre aşımı otomatik onay veya ihraç değildir; ilgili merciye sevk kaydı gerekir.');
+    if(due) add(`case-${c.id}`,`${c.title}: ${p.flows[c.kind]?.stages[c.step]?.label}` ,p.flows[c.kind]?.articles||'',p.flows[c.kind]?.stages[c.step]?.authority||'',due,statutoryCasesLink({caseId:c.id}),'Süre aşımı otomatik onay veya ihraç değildir; ilgili merciye sevk kaydı gerekir.');
     if(c.kind==='emergency_access' && c.status==='approved') add(`ratify-${c.id}`,`${c.title}: ilk YK toplantısında resmileştirme`,'20-EK','Başkan / Genel Sekreter',c.updatedAt.toMillis(),'/kurullar','Acil tedbirin ilk YK toplantısında karar defterine bağlanması gerekir.',true);
   }
   for(const m of s.members.filter(m=>m.status==='left')) {
     const start=m.updatedAt?.toMillis();
-    if(start) { const d=new Date(start);d.setUTCFullYear(d.getUTCFullYear()+p.limits.retentionYears);add(`retention-${m.uid}`,`${m.displayName}: saklama süresi`,'70-EK','TechOps',d.getTime(),'/surecler','Beş yıl sonunda anonimleştirme/silme için onaylı veri işlemi süreci açılmalı.'); }
+    if(start) { const d=new Date(start);d.setUTCFullYear(d.getUTCFullYear()+p.limits.retentionYears);add(`retention-${m.uid}`,`${m.displayName}: saklama süresi`,'70-EK','TechOps',d.getTime(),statutoryCasesLink({kind:'retention',subjectUid:m.uid}),'Beş yıl sonunda anonimleştirme/silme için onaylı veri işlemi süreci açılmalı.'); }
   }
   for(const item of s.inventory.filter(i=>i.kind==='system' || i.kind==='access')) {
     const email=Object.entries(item.fields).find(([k])=>/email|e-posta|eposta/i.test(k))?.[1];
