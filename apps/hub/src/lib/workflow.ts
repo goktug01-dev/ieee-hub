@@ -22,6 +22,7 @@ export function stepUnitId(step: ApprovalStep, petitionUnitId: string): string {
 }
 
 export function stepRequiredApprovals(step: ApprovalStep): number {
+  if (step.recipientMode === 'person') return 1;
   if (step.approvalMode === 'all') return Math.max(1, step.roleIds.length);
   if (step.approvalMode === 'quorum') {
     return Math.max(1, Math.min(step.roleIds.length, Math.floor(step.requiredApprovals ?? 1)));
@@ -45,9 +46,13 @@ export function responseFieldsForStep(fields: TemplateField[], step: ApprovalSte
 }
 
 /** Dilekçeyi kimlerin görebileceği: sahibi, birim okuyucuları ve zincirdeki tüm roller. */
-export function computeVisibleTo(ownerUid: string, unitId: string, steps: ApprovalStep[]): string[] {
+export function computeVisibleTo(ownerUid: string, unitId: string, steps: ApprovalStep[], recipients: Record<string, string> = {}): string[] {
   const set = new Set<string>([`uid:${ownerUid}`, `unit:${unitId}`]);
+  steps.forEach((step, index) => {
+    if (step.recipientMode === 'person' && recipients[String(index)]) set.add(`uid:${recipients[String(index)]}`);
+  });
   for (const s of steps) {
+    if (s.recipientMode === 'person') continue;
     const u = stepUnitId(s, unitId);
     for (const r of s.roleIds) set.add(`role:${u}__${r}`);
   }

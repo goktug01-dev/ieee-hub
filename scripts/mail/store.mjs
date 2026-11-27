@@ -1,5 +1,5 @@
 import { FieldPath, Timestamp, collection, doc, getDocFromServer, getDocsFromServer, limit, orderBy, query, runTransaction, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { millis, roleKeys } from './core.mjs';
+import { millis, roleKeys, directRecipient } from './core.mjs';
 
 export function mailStore(db, channel = 'mail') {
   if (!['mail','push'].includes(channel)) throw new Error('invalid-channel');
@@ -19,6 +19,8 @@ export function mailStore(db, channel = 'mail') {
     source: signal => get(`${signal.kind === 'petition' ? 'petitions' : 'tasks'}/${signal.sourceId}`),
     candidates: async (kind, source) => {
       if (kind === 'task') return [{ uid: source.assigneeUid }];
+      const direct = directRecipient(source);
+      if (direct) return [{ uid: direct }];
       const candidates = new Map();
       for (const key of roleKeys(source)) {
         const snapshot = await getDocsFromServer(query(collection(db, 'access'), where(new FieldPath('roleKeys', key), '>', Timestamp.now())));

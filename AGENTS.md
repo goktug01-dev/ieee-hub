@@ -1,8 +1,10 @@
 # AI devir notu — IEEE İKÇÜ Hub
 
-Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-11-11.
+Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-11-27.
 
-## Güncel devam noktası (2026-11-11)
+## Güncel devam noktası (2026-11-27)
+
+- İş odaklı menü/arama, tek komite özeti, rol kopyalarını ayırt eden katalog ve kişiye imza uygulandı (ADR-0046). Kullanıcı 2026-11-27 tarihinde uzak değişiklikleri birleştirip yayınlama talimatı verdi. `d8676cb` arayüz/ACTOR değişiklikleriyle birleştirildi; uzak tasarım ve ACTOR geri gönderme/puan düzenleme davranışı korunur. Komite paneli QR kararı, uzaktaki yayımlanmış ADR-0045 ile çakışmaması için ADR-0047 oldu. Canlı roller birleştirilmedi, yayımlanmış şablonlar değiştirilmedi. Kişisel imza için şablon yöneticisi adımı açmalı veya hazır Kişisel imza şablonunu oluşturup yayımlamalı. `smoke:usability` yeni akışları demo ortamında sınar. Canlı yayın durumunu PR ve GitHub Actions üzerinden doğrulayın.
 
 - 2026-11-27: Arayüz yenilemesi `feat/arayuz-yenileme` dalında. ACTOR bekleyen puan önerisini gerekçeyle değiştirerek doğrulayabilir veya komiteye geri gönderebilir; komite geri geleni düzeltip yeniden gönderir, doğrulanan puan yine değişmez (ADR-0045). `npm run smoke:actor` bu akışı demo emülatöründe sınar. Kaydırılarak gizlenen üst çubuk/yan menü `inert` yapıldı; aksi halde masaüstünde iki "Kullanıcı menüsü" düğmesi erişilebilir kalıyordu.
 - 2026-11-12 mail incelemesi: bazı kişilere mail gitmediği bildirildi. Son çalışmalarda SMTP hatası yok; zamanlama arasında saatlik boşluklar var. Eksik alıcı/boş makam ilk 24 saat yeniden kontrol edilir; eski işlenmiş işler üyeler kaydolduktan sonra yönetici tarafından yeniden kuyruğa alınır. Atanmış iş örneği verildi fakat kişinin canlı alıcı kaydı görülmedi; bunun her eksik mailin kesin nedeni olduğu söylenmemeli.
@@ -38,7 +40,7 @@ Hub veri ve onay yetkileri için **`firebase/firestore.rules` tek güvenilir kat
 
 - Yetki özeti `access/{uid}`: `superAdmin`, `perms` (kol geneli izin → bitiş), `unitPerms` (`"birim__izin"` → bitiş), `roleKeys` (`"birim__rol"` → bitiş), `memberOf`, `tokens` (dilekçe/devir görünürlüğü). İstemcide `lib/access.ts → computeAccess` görev atamalarından hesaplar; kurallar bitiş zamanını her istekte `request.time` ile karşılaştırır.
 - İzin kataloğu `apps/hub/src/lib/permissions.ts` ile kurallar **birlikte** değişir. Yeni izin = kurallarda karşılığı + test.
-- Dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). Adım politikası rollerden biri, tüm makamlar veya belirli nisap olabilir. Kurallar: rol ve birim eşleşmesi, sıra/nisap, aynı rolün bir kez sayılması, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
+- Makam temelli dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). ADR-0046 ile şablonun `recipientMode: person` olarak açtığı adımda `stepRecipients` içindeki kişi kendi adına imzalar; gönderici makam adımını kişiye çeviremez ve gönderimden sonra alıcı değişmez. Adım politikası rollerden biri, tüm makamlar veya belirli nisap olabilir. Kurallar: rol ve birim eşleşmesi, sıra/nisap, aynı rolün bir kez sayılması, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
 - Birim yöneticisi yalnızca **gönüllü rolünü** kendi biriminde verip alabilir (`access` üzerinde sınırlı güncelleme, `lastDelegation` alanı).
 - Birim toplantıları `meetings` koleksiyonundadır: birim üyeleri okur; `unit.meetings.manage` / `unit.manage` yetkilileri taslak yönetir; kesinleşen tutanak kurallarda değişmezdir.
 - Harici Firebase bağlantısı servis hesabı kullanmaz. `external.firebase.manage` paneli açar; kullanıcı uzak projede ayrıca oturum açar ve uzak Security Rules nihai yetkidir ([ADR-0027](docs/adr/0027-harici-firebase-ikincil-oturum.md)).

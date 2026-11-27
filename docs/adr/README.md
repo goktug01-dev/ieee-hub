@@ -51,5 +51,7 @@ Süreç ve durum tanımları: [dokümantasyon kuralları §3](../dokumantasyon-k
 | [0043](0043-github-actions-ve-gmail-ile-e-posta-bildirimleri.md) | Mail mevcut GitHub Actions ve Gmail ile gönderilir; Firebase Spark korunur | Kabul Edildi | ✓ | WP-10, WP-11, WP-12 |
 | [0044](0044-github-actions-ile-web-push.md) | Telefon Web Push bildirimleri mevcut GitHub Actions ile gönderilir; izin çağrısı girişte görünür | Kabul Edildi | ✓ | WP-10, WP-11 |
 | [0045](0045-actor-puan-onerisini-degistirir-veya-geri-gonderir.md) | ACTOR puan önerisini gerekçeyle değiştirerek doğrular veya komiteye geri gönderir; doğrulanan puan değişmez | Kabul Edildi | ✓ | — |
+| [0046](0046-is-odakli-gezinme-ve-kisiye-imza.md) | Günlük işler ve komite alanı sadeleşir; rol kopyaları ayırt edilir, şablonda kişiye imza desteklenir | Kabul Edildi | ✓ | WP-04, WP-05, WP-06, WP-11 |
+| [0047](0047-komite-baskani-panelinden-puan-qr.md) | Komite başkanı site panelinden kendi komitesi için puan QR'ı oluşturabilir; Hub QR'ları ACTOR'e ait kalır | Kabul Edildi | ✓ | WP-11 |
 
 > 2026-09-24: Blaze planı alınamadığı (AS-06) için sunucu gerektiren kararlar ADR-0017…0021 ile güncellendi. "Uygulama notu" taşıyan ADR'ler geçerlidir, ancak uygulama noktaları ADR-0017'ye göre uyarlanmıştır.

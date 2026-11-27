@@ -7,6 +7,12 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 const now=1800000000000;
 const device={id:'d',endpoint:'https://fcm.googleapis.com/fcm/send/abc',tasks:true,petitions:true,publicKey:'public'};
+test('Kişiye imza push bildirimi rol gerektirmez; yalnız seçili kişiye gider', () => {
+  const source={status:'pending',ownerUid:'owner',currentStep:0,steps:[{recipientMode:'person',roleIds:[]}],stepRecipients:{'0':'u'},visibleTo:['uid:u']};
+  assert.equal(pushEligible('petition',source,'u',null,device,now),true);
+  assert.equal(pushEligible('petition',source,'other',null,device,now),false);
+  assert.equal(pushEligible('petition',{...source,stepApprovalRoleIds:['uid:u']},'u',null,device,now),false);
+});
 function fixture() {
   const source={status:'todo',assigneeUid:'u',mailAssignmentKey:'a'},signal={id:'task_t',kind:'task',sourceId:'t',queuedAt:now};
   const records=new Map(),sent=[];let state='pending';

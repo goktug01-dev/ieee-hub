@@ -56,10 +56,9 @@ import { EventPointsPanel, SitePublicationStatus } from '../../components/SiteWo
 
 export function EventDetailPage() {
   const { id } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const { user, access } = useAuth();
   const { data: e, loading } = useDoc<HubEvent>(`events/${id}`);
-  const [tab, setTab] = useState<string | null>(params.get('sekme') === 'puan' ? 'puan' : 'genel');
 
   if (loading) return <SectionLoader />;
   if (!e || !id) return <EmptyState title="Etkinlik bulunamadı" />;
@@ -67,6 +66,15 @@ export function EventDetailPage() {
   const isOwner = e.ownerUids.includes(user!.uid);
   const canManage = isOwner || hasUnitPermission(access, e.unitId, 'unit.manage', 'events.manageAll');
   const canParticipants = canManage;
+  const requestedTab = params.get('sekme') ?? 'genel';
+  const tab = ['genel', 'gorevler', 'iletisim', 'katilimci', 'puan', 'kapanis', 'vtools'].includes(requestedTab)
+    && (requestedTab !== 'katilimci' || canParticipants) ? requestedTab : 'genel';
+  const setTab = (value: string | null) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (value && value !== 'genel') next.set('sekme', value);
+    else next.delete('sekme');
+    return next;
+  });
   const flowIdx = EVENT_FLOW.indexOf(e.status);
   const next = flowIdx >= 0 && flowIdx < EVENT_FLOW.length - 1 ? EVENT_FLOW[flowIdx + 1] : null;
 
@@ -146,13 +154,13 @@ export function EventDetailPage() {
 
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
-          <Tabs.Tab value="puan">Aktiflik puanı ve QR</Tabs.Tab>
           <Tabs.Tab value="genel">Genel</Tabs.Tab>
           <Tabs.Tab value="gorevler">Görev planı</Tabs.Tab>
+          <Tabs.Tab value="iletisim">İletişim</Tabs.Tab>
           {canParticipants && <Tabs.Tab value="katilimci">Katılımcılar (HeptaCert)</Tabs.Tab>}
+          <Tabs.Tab value="puan">Aktiflik puanı ve QR</Tabs.Tab>
           <Tabs.Tab value="kapanis">Kapanış ve rapor</Tabs.Tab>
           <Tabs.Tab value="vtools">vTools hazırlık</Tabs.Tab>
-          <Tabs.Tab value="iletisim">İletişim</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="genel">
           <General e={e} id={id} canManage={canManage} />
@@ -170,8 +178,8 @@ export function EventDetailPage() {
         <Tabs.Panel value="iletisim">
           <EventContent id={id} />
         </Tabs.Panel>
+        <Tabs.Panel value="puan"><EventPointsPanel id={id} event={e} canManage={canManage} /></Tabs.Panel>
       </Tabs>
-      {tab === 'puan' && <EventPointsPanel id={id} event={e} canManage={canManage} />}
     </Stack>
   );
 }
@@ -183,7 +191,7 @@ function ApprovalPanel({ e, id, canManage }: { e: HubEvent; id: string; canManag
     [where('ownerUid', '==', user!.uid), where('status', '==', 'approved')],
     `pa-${user!.uid}`,
   );
-  const options = petitions.data.filter((p) => p.unitId === e.unitId);
+  const options = petitions.data.filter((p) => p.unitId === e.unitId && !Object.keys(p.stepRecipients ?? {}).length);
   const [pid, setPid] = useState<string | null>(null);
   return (
     <Alert color="yellow" title="Öneri onay bekliyor">

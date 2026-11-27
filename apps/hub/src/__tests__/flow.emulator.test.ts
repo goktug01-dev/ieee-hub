@@ -271,6 +271,40 @@ run('uçtan uca dilekçe akışı', () => {
     ).rejects.toThrow();
   });
 
+  it('kişiye imza: rolü olmayan aktif üye alır, iade eder ve revizyonu kendi adına imzalar', async () => {
+    const { createTemplate, saveBuilderDraft, saveDraftContent, publishTemplate } = await import('../lib/templates');
+    const { DEFAULT_BUILDER } = await import('../lib/docx');
+    const { eligibleRoles } = await import('../lib/inbox');
+    await applyForMembership('imzaci', 'İmza Alıcısı');
+    await as('baskan');
+    await updateDoc(doc(db, 'members', uids.imzaci), { status: 'active' });
+    await createTemplate('kisisel', { name: 'Kişisel imza isteği', description: '', category: 'Genel', scope: 'branch', unitIds: [], series: 'KSI' });
+    const { content } = await saveBuilderDraft('kisisel', null, { ...DEFAULT_BUILDER, body: '{aciklama}' });
+    await saveDraftContent('kisisel', { ...content, steps: [{ name: 'Kişisel imza', recipientMode: 'person', roleIds: [], unitMode: 'branch', unitId: null }] });
+    await publishTemplate('kisisel', 'Kişiye imza testi');
+    await as('uye');
+    const data = { aciklama: 'Bireysel bir yazışmanın imza isteği.' };
+    const id = await createDraft({ template: await template('kisisel'), unitId: 'branch', unitName: 'Kol Geneli', title: 'Kişisel yazışma', data, stepRecipients: { '0': uids.imzaci } });
+    await submitPetition(id, data, 'Kişisel yazışma');
+    await as('imzaci');
+    const inbox = await getDocs(query(collection(db, 'petitions'), where('visibleTo', 'array-contains', `uid:${uids.imzaci}`), where('status', '==', 'pending')));
+    expect(inbox.docs.map((item) => item.id)).toContain(id);
+    const p = (await getDoc(doc(db, 'petitions', id))).data() as Petition;
+    expect(eligibleRoles(p, null, uids.imzaci)).toEqual([`uid:${uids.imzaci}`]);
+    await decidePetition({ petitionId: id, decision: 'return', roleId: '', roleName: '', unitName: 'Kol Geneli', comment: 'Açıklamayı genişletin.' });
+    await as('uye');
+    await resubmitPetition(id, { aciklama: 'Düzeltilmiş bireysel yazışma.' }, 'Kişisel yazışma');
+    await as('imzaci');
+    await decidePetition({ petitionId: id, decision: 'approve', roleId: '', roleName: '', unitName: 'Kol Geneli', comment: '' });
+    const approved = (await getDoc(doc(db, 'petitions', id))).data() as Petition;
+    expect(approved.status).toBe('approved');
+    expect(approved.revision).toBe(2);
+    expect(approved.approvals?.at(-1)?.roleName).toBe('Kişisel imza');
+    const blob = await renderPetitionDocx(approved, { orgName: 'IEEE', settings: null });
+    const xml = new PizZip(await blob.arrayBuffer()).file('word/document.xml')!.asText();
+    expect(xml).toContain('İmza Alıcısı');
+  });
+
   it('tüzük: gerçek istemciyle atomik tedbir, otomatik takip dosyası, gizli itiraz ve açık erişim iadesi', async()=>{
     const { Timestamp }=await import('firebase/firestore');
     const { initialStatutoryPolicy,publishStatutoryPolicy,createStatutoryCase,decideStatutoryCase }=await import('../lib/statutory');

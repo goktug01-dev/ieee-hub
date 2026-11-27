@@ -24,12 +24,7 @@ body {
   margin-bottom: 16px !important;
 }
 
-/* Mobilde A4 sayfayı ekrana sığdır */
-@media (max-width: 48em) {
-  .docx-preview-host .docx-wrapper > section.docx {
-    zoom: 0.5;
-  }
-}
+/* Ekrandaki ölçek, DocxPreview içindeki ResizeObserver ile kart genişliğine göre hesaplanır. */
 
 /* Yazdır / PDF olarak kaydet: yalnızca belge önizlemesi basılır */
 @media print {

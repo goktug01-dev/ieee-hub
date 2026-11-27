@@ -16,12 +16,27 @@ beforeEach(async () => {
 test('Komite başkanı başka komitenin etkinliğini kendi komitesine taşıyamaz', async () => {
   await assertFails(update(ref(env.authenticatedContext('alice').database(), 'technical_events/old'), { committeeId: 'a' }));
 });
-test('Puan QR kaydı yalnız ACTOR yetkisiyle oluşur ve puanı sonradan değişmez', async () => {
+test('Komite başkanı kendi komitesinde panelden QR yönetir; Hub QR kayıtlarına dokunamaz', async () => {
+  const alice = env.authenticatedContext('alice').database();
+  const admin = env.authenticatedContext('admin').database();
+  const qr = { event: 'Panel', puan: 10, active: true, createdAt: 1 };
+  await assertSucceeds(update(ref(alice), { 'committee_qrs/a/panel1': qr, 'valid_qrs/panel1': { ...qr, committeeId: 'a' } }));
+  await assertSucceeds(update(ref(alice), { 'committee_qrs/a/panel1/puan': 20, 'valid_qrs/panel1/puan': 20 }));
+  await assertFails(set(ref(alice, 'committee_qrs/b/panel2'), qr));
+  await assertFails(set(ref(alice, 'valid_qrs/panel2'), { ...qr, committeeId: 'b' }));
+  await assertFails(set(ref(alice, 'valid_qrs/panel1/committeeId'), 'b'));
+  await assertFails(set(ref(alice, 'valid_qrs/panel3'), qr));
+  await assertFails(set(ref(alice, 'committee_qrs/a/hub-event-x'), qr));
+  await assertFails(set(ref(alice, 'valid_qrs/hub-event-x'), { ...qr, committeeId: 'a' }));
+  await assertFails(set(ref(env.authenticatedContext('bob').database(), 'valid_qrs/panel1'), null));
+  await assertSucceeds(update(ref(alice), { 'committee_qrs/a/panel1': null, 'valid_qrs/panel1': null }));
+  await assertSucceeds(update(ref(admin), { 'committee_qrs/b/adminqr': qr, 'valid_qrs/adminqr': { ...qr, committeeId: 'b' } }));
+  await assertFails(set(ref(admin, 'valid_qrs/hub-event-y'), { ...qr, committeeId: 'b' }));
+});
+test('Hub puan QR kaydı ACTOR yetkisiyle oluşur ve puanı sonradan değişmez', async () => {
   const db = env.authenticatedContext('controller').database();
   const qr = { event: 'Test', puan: 15, active: true, createdAt: 1, expiresAt: Date.now() + 86400000 };
   await assertSucceeds(set(ref(db, 'committee_qrs/a/qr'), qr));
-  await assertFails(set(ref(env.authenticatedContext('alice').database(), 'committee_qrs/a/qr2'), qr));
-  await assertFails(set(ref(env.authenticatedContext('admin').database(), 'valid_qrs/admin-qr'), qr));
   await assertFails(set(ref(env.authenticatedContext('expired').database(), 'valid_qrs/expired-qr'), qr));
   await assertSucceeds(set(ref(db, 'valid_qrs/qr'), { ...qr, committeeId: 'a' }));
   await assertFails(update(ref(db, 'valid_qrs/qr'), { puan: 100 }));

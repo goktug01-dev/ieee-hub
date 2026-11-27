@@ -23,6 +23,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { DocxPreview } from '../../components/DocxPreview';
+import { PetitionRecipients } from '../../components/PetitionRecipients';
+import { useActiveMembers } from '../../lib/members';
 import { PetitionForm, missingRequired, prefillValues } from '../../components/PetitionForm';
 import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { renderDocx } from '../../lib/docx';
@@ -50,12 +52,14 @@ export function NewPetitionPage() {
   const [busy, setBusy] = useState<'draft' | 'submit' | null>(null);
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const [preview, setPreview] = useState<Blob | null>(null);
+  const [stepRecipients, setStepRecipients] = useState<Record<string, string>>({});
 
   const templates = useCollection<PetitionTemplate>('petitionTemplates', [where('active', '==', true)], 'active');
   const myRoles = useCollection<Assignment>('assignments', [where('uid', '==', user!.uid), where('status', '==', 'active')], user!.uid);
   const version = useDoc<TemplateVersion>(
     template ? `petitionTemplates/${template.id}/versions/${template.currentVersion}` : null,
   );
+  const { nameOf } = useActiveMembers(!!version.data?.steps.some((step) => step.recipientMode === 'person'));
 
   const list = useMemo(() => {
     const q = search.toLocaleLowerCase('tr');
@@ -81,6 +85,7 @@ export function NewPetitionPage() {
   const choose = (t: WithId<PetitionTemplate>) => {
     setTemplate(t);
     setValues({});
+    setStepRecipients({});
     setShowErrors(false);
     setFile(null);
     setPreview(null);
@@ -145,6 +150,9 @@ export function NewPetitionPage() {
 
   const save = async (andSubmit: boolean) => {
     if (!template || !unitId) return;
+    if (andSubmit && steps.some((step, index) => step.recipientMode === 'person' && !stepRecipients[String(index)])) {
+      return notifyError(new Error('Kişiye imza adımları için imzalayacak kişiyi seçin.'), 'İmza alıcısı eksik');
+    }
     if (andSubmit && missing.length) {
       setShowErrors(true);
       notifyError(new Error(`Zorunlu alanları doldurun: ${missing.map((f) => f.label).join(', ')}`), 'Eksik bilgi');
@@ -153,7 +161,7 @@ export function NewPetitionPage() {
     const run = async () => {
       setBusy(andSubmit ? 'submit' : 'draft');
       try {
-        const id = await createDraft({ template, unitId, unitName: unitName(unitId), title: title.trim() || template.name, data: values });
+        const id = await createDraft({ template, unitId, unitName: unitName(unitId), title: title.trim() || template.name, data: values, stepRecipients });
         if (andSubmit) {
           const no = await submitPetition(id, values, title.trim() || template.name);
           notifySuccess(`Evrak sayısı: ${no}`, 'Dilekçe onaya gönderildi');
@@ -181,7 +189,7 @@ export function NewPetitionPage() {
           </Text>
           {steps.map((s, i) => (
             <Text size="sm" key={i}>
-              {i + 1}. {s.name} — {s.roleIds.map(roleName).join(' / ')} ({unitName(stepUnitId(s, unitId))})
+              {i + 1}. {s.name} — {s.recipientMode === 'person' ? nameOf(stepRecipients[String(i)]) : `${s.roleIds.map(roleName).join(' / ')} (${unitName(stepUnitId(s, unitId))})`}
             </Text>
           ))}
         </Stack>
@@ -290,6 +298,8 @@ export function NewPetitionPage() {
                     value={title}
                     onChange={(e) => setTitle(e.currentTarget.value)}
                   />
+                  <Text size="sm" c="dimmed">Dilekçenin sahibi sizsiniz. Birim seçimi, belgenin hangi çalışma alanına ait olduğunu belirtir.</Text>
+                  <PetitionRecipients steps={steps} ownerUid={user!.uid} value={stepRecipients} onChange={setStepRecipients} />
                 </Stack>
               </Card>
               <Card>
@@ -312,7 +322,7 @@ export function NewPetitionPage() {
                     {steps.map((s, i) => (
                       <Timeline.Item key={i} title={s.name}>
                         <Text size="xs" c="dimmed">
-                          {s.roleIds.map(roleName).join(' / ')} · {unitName(stepUnitId(s, unitId))}
+                          {s.recipientMode === 'person' ? (stepRecipients[String(i)] ? nameOf(stepRecipients[String(i)]) : 'İmzalayacak kişi seçilecek') : `${s.roleIds.map(roleName).join(' / ')} · ${unitName(stepUnitId(s, unitId))}`}
                         </Text>
                       </Timeline.Item>
                     ))}

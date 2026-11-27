@@ -608,6 +608,7 @@ function Handover({ d }: { d: Data }) {
     if (!v) continue;
     const unitScope = t.scope === 'branch' ? [BRANCH] : (t.unitIds.length ? t.unitIds : units.filter((u) => u.active).map((u) => u.id));
     for (const s of v.steps) {
+      if (s.recipientMode === 'person') continue;
       const targetUnits = s.unitMode === 'petition' ? unitScope : [stepUnitId(s, BRANCH)];
       for (const u of targetUnits) {
         const count = new Set(s.roleIds.flatMap((r) => holders(u, r).map((a) => a.uid))).size;

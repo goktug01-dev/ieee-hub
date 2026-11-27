@@ -75,6 +75,7 @@ export function EventPointsPanel({ id, event, canManage }: { id: string; event: 
     {isActor && <SiteConnection />}<ErrorAlert error={request.error} />
     {!eventIsPublic(event) ? <Text>Önce etkinliğin YK / izin dilekçesi onayı tamamlanmalı.</Text> : request.loading ? <SectionLoader /> : !p ? canManage && !ended ? proposalForm(false) : <Text>Puan önerisi bulunmuyor.</Text> : <Stack><Card withBorder><Stack>
       <Group><Text fw={700}>{p.points} puan</Text><Badge color={eventPointsStatusColor[p.status]}>{eventPointsStatusLabel[p.status]}</Badge>{(p.status === 'approved' || p.status === 'closed') && <SitePublicationStatus kind="qr" id={id} version={p.updatedAt} />}</Group>
+      {(p.status === 'approved' || p.status === 'closed') && sync.data?.status === 'failed' && sync.data.error && <Alert color="red" title="Site aktarım hatası">{sync.data.error}</Alert>}
       {p.proposedPoints !== undefined && <Text size="sm" c="dimmed">Komite önerisi {p.proposedPoints} puandı; ACTOR {p.points} puan olarak doğruladı.</Text>}
       <Text>{p.note}</Text>
       {p.actorNote && <Alert color={p.status === 'returned' ? 'orange' : 'gray'} title={actorNoteLabel(p)}><Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{p.actorNote}</Text></Alert>}

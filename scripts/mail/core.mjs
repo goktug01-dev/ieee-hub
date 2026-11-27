@@ -6,9 +6,21 @@ export const openSource = (kind, source) => !!source && (kind === 'petition'
   : ['todo', 'in_progress', 'blocked'].includes(source.status));
 export function roleKeys(source) {
   const step = source.steps?.[source.currentStep ?? 0];
-  if (!step) return [];
+  if (!step || step.recipientMode === 'person') return [];
   const unit = step.unitMode === 'petition' ? source.unitId : step.unitMode === 'branch' ? 'branch' : step.unitId ?? 'branch';
   return step.roleIds.filter(role => !(source.stepApprovalRoleIds ?? []).includes(role)).map(role => `${unit}__${role}`);
+}
+export function directRecipient(source) {
+  const index = source.currentStep ?? 0;
+  return source.steps?.[index]?.recipientMode === 'person' ? source.stepRecipients?.[String(index)] ?? null : null;
+}
+export function petitionRecipientEligible(source, uid, access, now = Date.now()) {
+  if (source.ownerUid === uid) return false;
+  const direct = directRecipient(source);
+  if (direct) return direct === uid && !(source.stepApprovalRoleIds ?? []).includes(`uid:${uid}`)
+    && (source.visibleTo ?? []).includes(`uid:${uid}`);
+  return roleKeys(source).some(key => millis(access?.roleKeys?.[key]) > now)
+    && (source.visibleTo ?? []).some(token => (access?.tokens ?? []).includes(token));
 }
 export function fingerprint(kind, id, source) {
   return kind === 'petition' ? `petition:${id}:${source.revision ?? 1}:${source.currentStep ?? 0}`
@@ -19,8 +31,7 @@ export function eligible(kind, source, uid, access, recipient, now = Date.now())
   if (!openSource(kind, source) || !recipient?.[kind === 'petition' ? 'petitions' : 'tasks']) return false;
   if (typeof recipient.email !== 'string' || !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(recipient.email)) return false;
   if (kind === 'task') return source.assigneeUid === uid;
-  return source.ownerUid !== uid && roleKeys(source).some(key => millis(access?.roleKeys?.[key]) > now)
-    && (source.visibleTo ?? []).some(token => (access?.tokens ?? []).includes(token));
+  return petitionRecipientEligible(source, uid, access, now);
 }
 export function mailMessage(settings, kind, id) {
   const url = new URL(settings.hubUrl);

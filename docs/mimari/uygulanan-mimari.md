@@ -4,6 +4,12 @@ Bu doküman Hub'ın **şu anda çalışan** mimarisini ve veri modelini anlatır
 
 [Sistem mimarisi](sistem-mimarisi.md) ve [Firestore veri modeli](firestore-veri-modeli.md) dokümanları Blaze/Functions varsayımıyla yazılmıştır; hedef mimari olarak arşivde tutulur. Kod ile bu doküman çelişirse **kod esas alınır** ([dokümantasyon kuralları §2](../dokumantasyon-kurallari.md)).
 
+## İş odaklı kullanım ve kişiye imza (2026-11-27)
+
+[ADR-0046](../adr/0046-is-odakli-gezinme-ve-kisiye-imza.md): menü ve işlem araması aynı izinli kataloğu kullanır; ana sayfa kişisel işleri, komite çalışma alanı ortak işleri gösterir. Rol kataloğu aynı ad/kapsamdaki kayıtların kimliklerini, aktif atamalarını ve yetkilerini karşılaştırır; otomatik birleştirme yapmaz.
+
+Şablon adımları varsayılan olarak makam/rol temellidir. `recipientMode: person` adımında başvuranın seçtiği aktif üye `petitions.stepRecipients` içinde adım indeksi → UID olarak saklanır ve gönderimden sonra değişmez. Alıcı UID görünürlük ve onay kutusuna eklenir. İmza `uid:<uid>` kimliği ve Kişisel imza sıfatıyla kaydedilir; rol gerekmez. Mail/push aynı alıcıyı çözer. Kişisel imza içeren dilekçeler etkinliğin resmî makam onayı yerine geçmez. Bu zincirler en çok 10 toplam ve 3 kişisel adımla sınırlandırılır; Security Rules alıcıları, aktif üyeliği, değişmezliği ve karar sırasını denetler.
+
 ## 1. Bileşenler
 
 ```mermaid

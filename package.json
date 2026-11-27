@@ -26,6 +26,7 @@
     "emulators:empty": "firebase emulators:start --only auth,firestore --project demo-ieee-hub",
     "demo:rebuild": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --export-on-exit=firebase/demo-data \"npm run seed -w apps/hub\"",
     "smoke": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke.mjs\"",
+    "smoke:usability": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-usability.mjs\"",
     "smoke:pwa": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-pwa.mjs\"",
     "smoke:mail": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-mail.mjs\"",
     "smoke:statutory": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-statutory-setup.mjs\"",

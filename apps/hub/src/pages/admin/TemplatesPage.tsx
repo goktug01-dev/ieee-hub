@@ -9,7 +9,8 @@ import { fmtDate, slugify } from '../../lib/format';
 import { useCollection } from '../../lib/hooks';
 import { useOrg } from '../../lib/org';
 import { classifyPetitionFile } from '../../lib/petitionCategories';
-import { createTemplate, saveDraftFile, type TemplateMeta } from '../../lib/templates';
+import { createTemplate, saveBuilderDraft, saveDraftContent, saveDraftFile, type TemplateMeta } from '../../lib/templates';
+import { DEFAULT_BUILDER } from '../../lib/docx';
 import type { PetitionTemplate } from '../../lib/types';
 
 export function TemplatesPage() {
@@ -18,6 +19,7 @@ export function TemplatesPage() {
   const { unitOptions } = useOrg();
   const list = useCollection<PetitionTemplate>('petitionTemplates', [orderBy('name')], 'tpl');
   const [open, setOpen] = useState(false);
+  const [personal, setPersonal] = useState(false);
   const [meta, setMeta] = useState<TemplateMeta>({ name: '', description: '', category: '', scope: 'unit', unitIds: [], series: '' });
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -40,6 +42,14 @@ export function TemplatesPage() {
     setBusy(true);
     try {
       await createTemplate(id, { ...meta, series: meta.series.toUpperCase() });
+      if (personal) {
+        const { content } = await saveBuilderDraft(id, null, { ...DEFAULT_BUILDER, recipient: 'İLGİLİ KİŞİYE', subject: '{konu}', body: '{aciklama}' });
+        await saveDraftContent(id, {
+          ...content,
+          fields: content.fields.map((field) => ({ ...field, label: field.key === 'konu' ? 'Konu' : field.key === 'aciklama' ? 'Açıklama' : field.label, type: field.key === 'aciklama' ? 'textarea' : field.type, required: true })),
+          steps: [{ name: 'Kişisel imza', recipientMode: 'person', roleIds: [], unitMode: 'branch', unitId: null }],
+        });
+      }
       navigate(`/yonetim/sablonlar/${id}`);
     } catch (e) {
       notifyError(e);
@@ -97,7 +107,8 @@ export function TemplatesPage() {
           <FileButton onChange={(files) => void importFiles(files)} accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
             {(props) => <Button {...props} variant="light" leftSection={<IconUpload size={18} />} loading={importBusy}>Word klasöründen aktar</Button>}
           </FileButton>
-          <Button leftSection={<IconPlus size={18} />} onClick={() => setOpen(true)}>Yeni şablon</Button>
+          <Button variant="light" onClick={() => { setPersonal(true); setMeta({ name: 'Kişisel imza isteği', description: 'Bir aktif Hub üyesine kendi adına imzalaması için gönderilen yazışma.', category: 'Genel', scope: 'branch', unitIds: [], series: 'KSI' }); setOpen(true); }}>Kişisel imza şablonu</Button>
+          <Button leftSection={<IconPlus size={18} />} onClick={() => { setPersonal(false); setOpen(true); }}>Yeni şablon</Button>
         </>}
       />
       <Group wrap="wrap">
@@ -107,7 +118,7 @@ export function TemplatesPage() {
       {list.loading ? (
         <SectionLoader />
       ) : list.data.length === 0 ? (
-        <EmptyState title="Henüz şablon yok" action={<Button size="xs" variant="light" onClick={() => setOpen(true)}>İlk şablonu oluştur</Button>} />
+        <EmptyState title="Henüz şablon yok" action={<Button size="xs" variant="light" onClick={() => { setPersonal(false); setOpen(true); }}>İlk şablonu oluştur</Button>} />
       ) : filtered.length === 0 ? (
         <EmptyState title="Filtreye uyan şablon yok" description="Arama metnini veya kategori filtresini değiştirin." />
       ) : (
@@ -149,6 +160,7 @@ export function TemplatesPage() {
 
       <Modal opened={open} onClose={() => setOpen(false)} title="Yeni dilekçe şablonu" size="lg">
         <Stack>
+          {personal && <Text size="sm" c="dimmed">Konu, açıklama ve kişiye imza adımı hazır gelir. Oluşturduktan sonra belgeyi kontrol edip yayımlayın; üyeler imzalayacak kişiyi gönderim sırasında seçer.</Text>}
           <TextInput label="Şablon adı" placeholder="örn. Salon Tahsis Dilekçesi" required value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.currentTarget.value })} />
           <div>
             <Text size="sm" fw={500} mb={4}>

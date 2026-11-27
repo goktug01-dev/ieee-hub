@@ -37,7 +37,6 @@ export function PetitionForm({
 
   const render = (f: TemplateField) => {
     const common = {
-      key: f.key,
       label: f.label,
       description: f.help || undefined,
       required: f.required,
@@ -47,11 +46,12 @@ export function PetitionForm({
     switch (f.type) {
       case 'textarea':
         return (
-          <Textarea {...common} autosize minRows={4} maxRows={14} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />
+          <Textarea key={f.key} {...common} autosize minRows={4} maxRows={14} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />
         );
       case 'date':
         return (
           <DateInput
+            key={f.key}
             {...common}
             valueFormat="DD.MM.YYYY"
             placeholder="GG.AA.YYYY"
@@ -63,6 +63,7 @@ export function PetitionForm({
       case 'number':
         return (
           <NumberInput
+            key={f.key}
             {...common}
             thousandSeparator="."
             decimalSeparator=","
@@ -73,6 +74,7 @@ export function PetitionForm({
       case 'select':
         return (
           <Select
+            key={f.key}
             {...common}
             data={f.options ?? []}
             value={values[f.key] || null}
@@ -81,12 +83,13 @@ export function PetitionForm({
           />
         );
       case 'email':
-        return <TextInput {...common} type="email" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
+        return <TextInput key={f.key} {...common} type="email" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
       case 'phone':
-        return <TextInput {...common} type="tel" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
+        return <TextInput key={f.key} {...common} type="tel" value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
       case 'checkbox':
         return (
           <Checkbox
+            key={f.key}
             {...common}
             mt="md"
             checked={values[f.key] === '☒'}
@@ -94,7 +97,7 @@ export function PetitionForm({
           />
         );
       default:
-        return <TextInput {...common} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
+        return <TextInput key={f.key} {...common} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.currentTarget.value)} />;
     }
   };
 

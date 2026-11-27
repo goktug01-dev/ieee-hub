@@ -9,7 +9,7 @@ export function InboxPage() {
     <Stack>
       <PageHeader
         title="Onayımı bekleyenler"
-        description="Görev atamalarınız gereği kararınızı bekleyen dilekçeler. Kendi dilekçelerinizi onaylayamazsınız."
+        description="Rolünüz gereği veya doğrudan size gönderilen, kararınızı bekleyen dilekçeler. Kendi dilekçelerinizi onaylayamazsınız."
       />
       <ErrorAlert error={error} />
       {loading ? (

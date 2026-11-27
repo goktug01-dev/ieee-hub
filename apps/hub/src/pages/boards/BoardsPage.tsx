@@ -1,3 +1,4 @@
+import { roleChoiceLabel } from '../../lib/roleCatalog';
 import {
   Alert,
   Badge,
@@ -507,7 +508,7 @@ function BoardSettingsCard({ settings }: { settings: BoardsSettings }) {
     { value: BRANCH, label: 'Kol geneli' },
     ...units.filter((unit) => unit.active).map((unit) => ({ value: unit.id, label: unit.name })),
   ];
-  const roleOptions = roles.filter((role) => role.active).map((role) => ({ value: role.id, label: `${role.name}${role.scope === 'branch' ? ' (kol geneli)' : ''}` }));
+  const roleOptions = roles.filter((role) => role.active).map((role) => ({ value: role.id, label: `${roleChoiceLabel(role, roles)}${role.scope === 'branch' ? ' (kol geneli)' : ''}` }));
   const setSeats = (board: BoardId, seats: BoardSeat[]) => setDraft({ ...draft, [board]: { ...draft[board], seats } });
 
   const save = async () => {
@@ -557,7 +558,7 @@ function BoardSettingsCard({ settings }: { settings: BoardsSettings }) {
         <Select
           label="Altın oy / son söz sahibi (YK Başkanı)"
           description="YK eşitliğinde oyu iki sayılır (Md. 40); İK eşitliğinde son söz onundur (Md. 46). Ortak oylamada işlemez."
-          data={roles.filter((role) => role.scope === 'branch').map((role) => ({ value: `${BRANCH}__${role.id}`, label: role.name }))}
+          data={roles.filter((role) => role.scope === 'branch').map((role) => ({ value: `${BRANCH}__${role.id}`, label: roleChoiceLabel(role, roles) }))}
           value={draft.chairRoleKey}
           clearable
           onChange={(value) => setDraft({ ...draft, chairRoleKey: value })}

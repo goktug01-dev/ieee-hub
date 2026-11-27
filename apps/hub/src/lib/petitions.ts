@@ -58,6 +58,7 @@ export async function createDraft(input: {
   unitName: string;
   title: string;
   data: Record<string, string>;
+  stepRecipients?: Record<string, string>;
 }): Promise<string> {
   const u = auth.currentUser!;
   const ref = await addDoc(collection(db, 'petitions'), {
@@ -72,13 +73,14 @@ export async function createDraft(input: {
     data: input.data,
     status: 'draft',
     visibleTo: [`uid:${u.uid}`],
+    stepRecipients: input.stepRecipients ?? {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
   return ref.id;
 }
 
-export async function updateDraft(id: string, patch: Partial<Pick<Petition, 'title' | 'data' | 'unitId' | 'unitName'>>) {
+export async function updateDraft(id: string, patch: Partial<Pick<Petition, 'title' | 'data' | 'unitId' | 'unitName' | 'stepRecipients'>>) {
   await updateDoc(doc(db, 'petitions', id), { ...patch, updatedAt: serverTimestamp() });
 }
 
@@ -127,6 +129,13 @@ export async function submitPetition(petitionId: string, data: Record<string, st
     }
     const vSnap = await tx.get(doc(db, 'petitionTemplates', p.templateId, 'versions', String(p.templateVersion)));
     const v = vSnap.data() as TemplateVersion;
+    for (const [index, step] of v.steps.entries()) {
+      if (step.recipientMode !== 'person') continue;
+      const uid = p.stepRecipients?.[String(index)];
+      if (!uid || uid === p.ownerUid) throw new Error(`${step.name} için kendiniz dışında bir kişi seçin.`);
+      const recipient = await tx.get(doc(db, 'members', uid));
+      if (recipient.data()?.status !== 'active') throw new Error(`${step.name} için seçilen kişi artık aktif üye değil.`);
+    }
 
     const year = new Date().getUTCFullYear();
     const counterId = `${t.series}_${year}`;
@@ -157,7 +166,7 @@ export async function submitPetition(petitionId: string, data: Record<string, st
       approvalData: {},
       stepApprovalRoleIds: [],
       notes: [],
-      visibleTo: computeVisibleTo(p.ownerUid, p.unitId, v.steps),
+      visibleTo: computeVisibleTo(p.ownerUid, p.unitId, v.steps, p.stepRecipients),
     };
 
     tx.update(pRef, {
@@ -277,11 +286,14 @@ export async function decidePetition(input: DecisionInput) {
     if (p.status !== 'pending') throw new Error('Bu dilekçe artık onay sürecinde değil.');
     const stepIdx = p.currentStep ?? 0;
     const step = p.steps![stepIdx];
+    const personal = step.recipientMode === 'person';
+    const roleId = personal ? `uid:${u.uid}` : input.roleId;
     const unitId = stepUnitId(step, p.unitId);
     const approvals = p.approvals ?? [];
     const notes = p.notes ?? [];
     const approvedRoles = p.stepApprovalRoleIds ?? [];
-    if (approvedRoles.includes(input.roleId)) throw new Error('Bu makam bu adım için zaten onay verdi.');
+    if (personal && p.stepRecipients?.[String(stepIdx)] !== u.uid) throw new Error('Bu imza isteği başka bir kişiye gönderilmiş.');
+    if (approvedRoles.includes(roleId)) throw new Error('Bu adım için zaten onay verildi.');
 
     const record: ApprovalRecord = {
       step: stepIdx,
@@ -289,8 +301,8 @@ export async function decidePetition(input: DecisionInput) {
       revision: p.revision ?? 1,
       uid: u.uid,
       name: u.displayName ?? u.email ?? '',
-      roleId: input.roleId,
-      roleName: input.roleName,
+      roleId,
+      roleName: personal ? 'Kişisel imza' : input.roleName,
       unitId,
       unitName: input.unitName,
       decision: input.decision,
@@ -304,7 +316,7 @@ export async function decidePetition(input: DecisionInput) {
     );
 
     const isLast = stepIdx === p.steps!.length - 1;
-    const nextApprovedRoles = [...approvedRoles, input.roleId];
+    const nextApprovedRoles = [...approvedRoles, roleId];
     const stepComplete = nextApprovedRoles.length >= stepRequiredApprovals(step);
     const patch: Record<string, unknown> = {
       approvals: newApprovals,

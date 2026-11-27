@@ -1,7 +1,7 @@
-import { Anchor, Badge, Button, Group, SegmentedControl, Select, Stack, Text, Title } from '@mantine/core';
-import { IconArrowRight, IconArrowUpRight, IconFilePlus } from '@tabler/icons-react';
+import { Anchor, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { IconArrowRight, IconArrowUpRight, IconBuildingCommunity, IconCalendarStar, IconFilePlus, IconListCheck } from '@tabler/icons-react';
 import { orderBy, where, limit } from 'firebase/firestore';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, StatusBadge } from '../components/ui';
@@ -14,7 +14,6 @@ import { dueInfo } from '../components/MetaBadge';
 import dayjs from 'dayjs';
 import { useOrg } from '../lib/org';
 import { useUnitScope } from '../lib/unitScope';
-import { UnitOverview } from '../components/UnitOverview';
 
 /** Sayı panosunun küçük kutusu. `note` kırmızı etiketle gösterilir (ör. gecikmiş görev). */
 function Kpi({ label, value, to, note }: { label: string; value: number; to: string; note?: string }) {
@@ -50,8 +49,7 @@ function Panel({ title, to, children }: { title: string; to: string; children: R
 export function DashboardPage() {
   const { member, user, can } = useAuth();
   const { unitName } = useOrg();
-  const { accessibleUnits, selectedUnitId, selectedUnit, setSelectedUnitId } = useUnitScope();
-  const [scope, setScope] = useState<'mine' | 'unit'>('mine');
+  const { selectedUnit } = useUnitScope();
   const inbox = useInbox();
   const mine = useCollection<Petition>(
     'petitions',
@@ -82,44 +80,10 @@ export function DashboardPage() {
   const drafts = mine.data.filter((p) => p.status === 'draft' || p.status === 'returned').length;
   const inProgress = mine.data.filter((p) => p.status === 'pending').length;
   const firstName = member?.displayName?.split(' ')[0] ?? '';
-  const scopeControl = accessibleUnits.length > 0 && (
-    <Group justify="space-between" wrap="wrap">
-      <SegmentedControl
-        value={scope}
-        onChange={(value) => setScope(value as 'mine' | 'unit')}
-        data={[{ value: 'mine', label: 'Benim alanım' }, { value: 'unit', label: 'Komitem' }]}
-      />
-      {scope === 'unit' && (
-        <Select
-          value={selectedUnitId}
-          onChange={setSelectedUnitId}
-          data={accessibleUnits.map((unit) => ({ value: unit.id, label: `${unit.name} (${unit.shortCode})` }))}
-          allowDeselect={false}
-          searchable
-          w={280}
-        />
-      )}
-    </Group>
-  );
-
-  if (scope === 'unit' && selectedUnit) {
-    return (
-      <Stack gap="xl">
-        {scopeControl}
-        <Group justify="space-between" wrap="wrap">
-          <div><Title order={2}>{selectedUnit.name}</Title><Text c="dimmed">Komite çalışma alanının güncel özeti</Text></div>
-          <Button component={Link} to={`/birimler/${selectedUnit.id}`} variant="light">Çalışma alanını aç</Button>
-        </Group>
-        <UnitOverview unitId={selectedUnit.id} />
-      </Stack>
-    );
-  }
-
   const showMembers = can('members.manage');
 
   return (
     <Stack gap={48}>
-      {scopeControl}
       <Group justify="space-between" align="flex-end" wrap="wrap" gap="lg">
         <div>
           <span className="hub-date-line">{dayjs().format('D MMMM YYYY, dddd')}</span>
@@ -143,6 +107,12 @@ export function DashboardPage() {
           Yeni dilekçe
         </Button>
       </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: selectedUnit ? 3 : 2 }}>
+        {selectedUnit && <Card component={Link} to={`/birimler/${selectedUnit.id}`} style={{ textDecoration: 'none' }}><Group gap="sm"><IconBuildingCommunity size={22} stroke={1.6} /><div><Text fw={600}>{selectedUnit.name}</Text><Text size="sm" c="dimmed">Komitenin işleri, ekibi ve hızlı işlemleri</Text></div></Group></Card>}
+        <Card component={Link} to="/etkinlikler" style={{ textDecoration: 'none' }}><Group gap="sm"><IconCalendarStar size={22} stroke={1.6} /><div><Text fw={600}>Etkinlik işleri</Text><Text size="sm" c="dimmed">Öneri, onay, katılımcı, puan ve QR</Text></div></Group></Card>
+        <Card component={Link} to="/gorevler" style={{ textDecoration: 'none' }}><Group gap="sm"><IconListCheck size={22} stroke={1.6} /><div><Text fw={600}>Yapılacak işlerim</Text><Text size="sm" c="dimmed">Görevleri ve projeleri takip et</Text></div></Group></Card>
+      </SimpleGrid>
 
       <nav className="hub-kpis" aria-label="Özet">
         <Link to="/onaylar" className="hub-kpi" data-hero>

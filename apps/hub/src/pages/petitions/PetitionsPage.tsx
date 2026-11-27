@@ -130,7 +130,7 @@ export function PetitionsPage() {
   const [params] = useSearchParams();
   const initialUnit = params.get('birim');
   const [tab, setTab] = useState<string | null>(params.get('sekme') ?? 'mine');
-  const tokens = (access?.tokens ?? []).filter((t) => !t.startsWith('uid:')).slice(0, 30);
+  const tokens = [...new Set([`uid:${user!.uid}`, ...(access?.tokens ?? [])])].slice(0, 30);
   const templates = useCollection<PetitionTemplate>('petitionTemplates', [orderBy('name')], 'petition-category-map');
   const categoryByTemplate = useMemo(() => new Map(templates.data.map((template) => [template.id, template.category || 'Genel'])), [templates.data]);
 
@@ -160,7 +160,7 @@ export function PetitionsPage() {
       <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="mine">Dilekçelerim ({mine.data.length})</Tabs.Tab>
-          {tokens.length > 0 && <Tabs.Tab value="visible">Görev alanımdakiler</Tabs.Tab>}
+          <Tabs.Tab value="visible">Bana gelen ve görev alanımdakiler</Tabs.Tab>
           {can('petitions.readAll') && <Tabs.Tab value="all">Tüm evrak (arşiv)</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="mine">
