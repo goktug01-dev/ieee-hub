@@ -154,6 +154,8 @@ export type ApprovalMode = 'any' | 'all' | 'quorum';
 
 export interface ApprovalStep {
   name: string;
+  /** person: dilekçe sahibi bu adım için aktif bir Hub üyesi seçer. Varsayılan role. */
+  recipientMode?: 'role' | 'person';
   roleIds: string[];
   unitMode: StepUnitMode;
   unitId: string | null;
@@ -247,6 +249,8 @@ export interface Petition {
   data: Record<string, string>;
   status: PetitionStatus;
   visibleTo: string[];
+  /** Kişiye imza adımları: adım indeksi → seçilen kişinin Auth UID'si. Gönderimden sonra sabittir. */
+  stepRecipients?: Record<string, string>;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   // Gönderimden sonra

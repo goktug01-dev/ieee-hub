@@ -1,3 +1,4 @@
+import { roleChoiceLabel } from '../../lib/roleCatalog';
 import { ActionIcon, Badge, Button, Group, Menu, Select, Stack, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -76,7 +77,7 @@ export function AssignmentsPage() {
   return (
     <Stack>
       <PageHeader
-        title="Görev atamaları"
+        title="Rol ve makam atamaları"
         description="Kimin hangi birimde hangi rolde olduğu. Yetkiler ve onay hakları buradan gelir; değişiklikler anında geçerli olur."
         actions={
           <>
@@ -95,7 +96,7 @@ export function AssignmentsPage() {
         <TextInput placeholder="Ara…" leftSection={<IconSearch size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} style={{ flex: '1 1 200px' }} />
         <Select placeholder="Dönem" data={terms.map((t) => ({ value: t.id, label: t.name }))} value={term} onChange={setTerm} clearable allowDeselect w={180} />
         <Select placeholder="Birim" data={unitOptions({ includeBranch: true, onlyActive: false })} value={unit} onChange={setUnit} clearable allowDeselect searchable w={220} />
-        <Select placeholder="Rol" data={roles.map((r) => ({ value: r.id, label: `${r.name}${r.scope === 'unit' ? ' (birim)' : ''}` }))} value={role} onChange={setRole} clearable allowDeselect searchable w={200} />
+        <Select placeholder="Rol" data={roles.map((r) => ({ value: r.id, label: `${roleChoiceLabel(r, roles)}${r.scope === 'unit' ? ' (birim)' : ''}` }))} value={role} onChange={setRole} clearable allowDeselect searchable w={200} />
         <Select
           placeholder="Durum"
           data={[

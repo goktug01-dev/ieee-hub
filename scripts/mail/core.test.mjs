@@ -39,6 +39,21 @@ test('Görev bir kez gönderilir; tekrar kuyruklama veya başlık değişimi tek
   f.signal.state = 'pending'; f.state.source.title = 'Değişti';
   assert.equal((await f.run()).sent, 0); assert.equal(f.state.sends.length, 1);
 });
+
+test('Kişiye imza bildirimi rol gerektirmez; yalnız seçili kişi alır ve bir kez gönderilir', async () => {
+  const f = fixture('petition');
+  f.state.source.steps = [{ recipientMode: 'person', roleIds: [], unitMode: 'branch' }];
+  f.state.source.stepRecipients = { '0': 'alice' };
+  f.state.source.visibleTo = ['uid:owner', 'uid:alice'];
+  f.store.recipient = async () => ({ access: null, recipient: target });
+  assert.equal(eligible('petition', f.state.source, 'alice', null, target, now), true);
+  assert.equal(eligible('petition', f.state.source, 'bob', access, target, now), false);
+  assert.equal(eligible('petition', { ...f.state.source, stepApprovalRoleIds: ['uid:alice'] }, 'alice', null, target, now), false);
+  assert.deepEqual(roleKeys(f.state.source), []);
+  assert.equal((await f.run()).sent, 1);
+  f.signal.state = 'pending';
+  assert.equal((await f.run()).sent, 0);
+});
 test('Yeni sorumluya atama ve aynı kişiye daha sonraki yeni atama farklı kimlik üretir', () => {
   assert.notEqual(fingerprint('task','t',task), fingerprint('task','t',{ ...task, assigneeUid: 'bob' }));
   assert.notEqual(fingerprint('task','t',task), fingerprint('task','t',{ ...task, mailAssignmentKey: 'second' }));

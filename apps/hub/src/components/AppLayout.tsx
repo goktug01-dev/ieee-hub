@@ -4,6 +4,7 @@ import {
   Avatar,
   Badge,
   Burger,
+  Button,
   Group,
   Image,
   Menu,
@@ -17,161 +18,47 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
-import {
-  IconBuildingCommunity,
-  IconCalendarEvent,
-  IconChecklist,
-  IconFilePlus,
-  IconFileText,
-  IconHistory,
-  IconHome,
-  IconLogout,
-  IconMoon,
-  IconSettings,
-  IconShieldLock,
-  IconSitemap,
-  IconGavel,
-  IconSun,
-  IconTemplate,
-  IconUserCircle,
-  IconUsers,
-  IconUserShield,
-  IconBallpen,
-  IconListCheck,
-  IconCalendarStar,
-  IconSpeakerphone,
-  IconBuildingStore,
-  IconCoin,
-  IconChartBar,
-  IconHeartHandshake,
-  IconArrowsExchange,
-  IconServer,
-  IconLifebuoy,
-  IconNotebook,
-  IconUsersGroup,
-  IconDatabaseCog,
-  IconBook2,
-  IconPackage,
-  IconBan,
-  IconBriefcase2,
-  IconDoor,
-} from '@tabler/icons-react';
-import { Suspense, type ReactNode } from 'react';
+import { useDisclosure, useHotkeys } from '@mantine/hooks';
+import { IconLogout, IconMoon, IconShieldLock, IconSun, IconUserCircle, IconLifebuoy, IconSearch } from '@tabler/icons-react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
-import { unitsWithPermission } from '../lib/access';
+import { hubNavigation, isHubNavActive, type HubNavItem } from '../lib/navigation';
+import { NavigationSearch } from './NavigationSearch';
 import { useInbox } from '../lib/inbox';
 import { SectionLoader } from './ui';
-import type { PermissionId } from '../lib/permissions';
 import { useUnitScope } from '../lib/unitScope';
-import { siteQrController } from '../lib/siteWorkflow';
 import { AppInstallButton } from './AppInstall';
 import { MailRegistration } from './MailPreferences';
 import { PushPermissionPrompt } from './PushPermissionPrompt';
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: ReactNode;
-  perm?: PermissionId;
-  badge?: number;
-  exact?: boolean;
-}
-
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
-  const { member, publicSettings, can, signOut, isSuperAdmin, access } = useAuth();
+  const { member, publicSettings, signOut, isSuperAdmin, access } = useAuth();
   const { waiting } = useInbox();
   const location = useLocation();
   const navigate = useNavigate();
-  const { accessibleUnits, selectedUnitId, selectedUnit, setSelectedUnitId } = useUnitScope();
+  const { accessibleUnits, selectedUnitId, setSelectedUnitId } = useUnitScope();
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
 
-  const unitManager = unitsWithPermission(access, 'unit.manage').length > 0;
-  const sections: { label: string | null; items: NavItem[] }[] = [
-    {
-      label: null,
-      items: [
-        { to: '/', label: 'Ana sayfa', icon: <IconHome size={18} />, exact: true },
-        { to: '/onaylar', label: 'Onayımı bekleyenler', icon: <IconChecklist size={18} />, badge: waiting.length },
-        { to: '/gorevler', label: 'Görevler ve projeler', icon: <IconListCheck size={18} /> },
-      ],
-    },
-    {
-      label: selectedUnit ? selectedUnit.name : 'Komitem',
-      items: selectedUnit
-        ? [{ to: `/birimler/${selectedUnit.id}`, label: 'Komite çalışma alanı', icon: <IconBuildingCommunity size={18} /> }]
-        : [],
-    },
-    {
-      label: 'Dilekçe',
-      items: [
-        { to: '/dilekceler/yeni', label: 'Yeni dilekçe', icon: <IconFilePlus size={18} />, exact: true },
-        { to: '/dilekceler', label: 'Dilekçeler', icon: <IconFileText size={18} /> },
-      ],
-    },
-    {
-      label: 'Operasyon',
-      items: [
-        { to: '/etkinlikler', label: 'Etkinlikler', icon: <IconCalendarStar size={18} /> },
-        { to: '/surecler', label: 'Tüzük süreçleri', icon: <IconShieldLock size={18} /> },
-        ...(siteQrController(access) ? [{ to: '/actor', label: 'ACTOR · Puan ve QR', icon: <IconShieldLock size={18} /> }] : []),
-        { to: '/toplantilar', label: 'Toplantılar', icon: <IconUsersGroup size={18} /> },
-        { to: '/oda-rezervasyonu', label: 'Oda rezervasyonu', icon: <IconDoor size={18} /> },
-        { to: '/iletisim', label: 'İletişim', icon: <IconSpeakerphone size={18} /> },
-        { to: '/sponsorluk', label: 'Sponsorluk', icon: <IconBuildingStore size={18} /> },
-        ...(can('inventory.manage') || can('finance.read') || can('finance.manage') || can('secretary.ledger.manage') || can('work.manageAll') ? [{ to: '/demirbas', label: 'Demirbaş ve zimmet', icon: <IconPackage size={18} /> }] : []),
-        ...(can('finance.read') || can('finance.manage') || unitManager ? [{ to: '/butceler', label: 'Bütçeler', icon: <IconCoin size={18} /> }] : []),
-        ...(can('reports.read') || can('reports.approve') ? [{ to: '/raporlar', label: 'Raporlar', icon: <IconChartBar size={18} /> }] : []),
-        ...(can('secretary.ledger.manage') ? [{ to: '/sekreterlik-defteri', label: 'Sekreterlik defteri', icon: <IconNotebook size={18} /> }] : []),
-      ],
-    },
-    {
-      label: 'Organizasyon',
-      items: [
-        { to: '/organizasyon', label: 'Organizasyon şeması', icon: <IconSitemap size={18} /> },
-        { to: '/kurullar', label: 'Kurullar ve karar defteri', icon: <IconGavel size={18} /> },
-        { to: '/tuzuk', label: 'Tüzük', icon: <IconBook2 size={18} /> },
-        { to: '/kariyer', label: 'Açık başvurular', icon: <IconBriefcase2 size={18} /> },
-        { to: '/gonulluluk', label: 'Gönüllülük', icon: <IconHeartHandshake size={18} /> },
-        ...(unitManager || can('assignments.manage') ? [{ to: '/basvuru-yonetimi', label: 'Başvuru yönetimi', icon: <IconUsersGroup size={18} /> }] : []),
-        { to: '/devir', label: 'Devir paketleri', icon: <IconArrowsExchange size={18} /> },
-      ],
-    },
-    {
-      label: 'Yönetim',
-      items: (
-        [
-          { to: '/yonetim/uyeler', label: 'Üyeler', icon: <IconUsers size={18} />, perm: 'members.manage' },
-          { to: '/yonetim/etkinlik-kisitlamalari', label: 'Etkinlik kısıtlamaları', icon: <IconBan size={18} />, perm: 'members.manage' },
-          { to: '/yonetim/atamalar', label: 'Görev atamaları', icon: <IconUserShield size={18} />, perm: 'assignments.manage' },
-          { to: '/yonetim/secimler', label: 'Seçimler', icon: <IconBallpen size={18} />, perm: 'elections.manage' },
-          { to: '/yonetim/birimler', label: 'Komiteler ve birimler', icon: <IconBuildingCommunity size={18} />, perm: 'org.manage' },
-          { to: '/yonetim/roller', label: 'Roller ve yetkiler', icon: <IconShieldLock size={18} />, perm: 'org.manage' },
-          { to: '/yonetim/donemler', label: 'Dönemler', icon: <IconCalendarEvent size={18} />, perm: 'org.manage' },
-          { to: '/yonetim/sablonlar', label: 'Dilekçe şablonları', icon: <IconTemplate size={18} />, perm: 'templates.manage' },
-          { to: '/yonetim/envanter', label: 'Envanter', icon: <IconServer size={18} />, perm: 'inventory.manage' },
-          { to: '/yonetim/harici-firebase', label: 'Harici Firebase', icon: <IconDatabaseCog size={18} />, perm: 'external.firebase.manage' },
-          { to: '/yonetim/ayarlar', label: 'Kurum ayarları', icon: <IconSettings size={18} />, perm: 'org.manage' },
-          { to: '/yonetim/denetim', label: 'Denetim kaydı', icon: <IconHistory size={18} />, perm: 'audit.read' },
-        ] as NavItem[]
-      ).filter((i) => !i.perm || can(i.perm)),
-    },
-  ];
+  const sections = hubNavigation(access, selectedUnitId, waiting.length);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [searchOpened, search] = useDisclosure();
+  useHotkeys([['mod+K', search.open]]);
+  const activeSectionId = sections.find((section) => section.id !== 'daily' && section.items.some((item) => !item.searchOnly && isHubNavActive(item, location.pathname)))?.id;
+  useEffect(() => {
+    if (activeSectionId) setExpanded((current) => current.includes(activeSectionId) ? current : [...current, activeSectionId]);
+  }, [activeSectionId, location.pathname]);
 
-  const isActive = (item: NavItem) =>
-    item.exact ? location.pathname === item.to : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`) && !(item.to === '/dilekceler' && location.pathname === '/dilekceler/yeni');
-
-  const renderItem = (item: NavItem) => (
+  const renderItem = (item: HubNavItem) => (
     <NavLink
       key={item.to}
       component={Link}
       to={item.to}
       label={item.label}
-      leftSection={item.icon}
-      active={isActive(item)}
+      leftSection={<item.icon size={18} />}
+      active={isHubNavActive(item, location.pathname)}
       onClick={close}
       rightSection={
         item.badge ? (
@@ -190,6 +77,7 @@ export function AppLayout() {
       navbar={{ width: 272, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding={{ base: 'md', sm: 'xl' }}
     >
+      <NavigationSearch sections={sections} opened={searchOpened} onClose={() => { search.close(); close(); }} />
       <MailRegistration />
       <PushPermissionPrompt />
       <AppShell.Header>
@@ -216,6 +104,7 @@ export function AppLayout() {
           </Group>
 
           <Group gap="xs" wrap="nowrap">
+            <ActionIcon variant="default" size="lg" onClick={search.open} aria-label="İşlem bul" hiddenFrom="sm"><IconSearch size={18} /></ActionIcon>
             <Tooltip label={scheme === 'dark' ? 'Açık tema' : 'Koyu tema'}>
               <ActionIcon
                 variant="default"
@@ -259,6 +148,7 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="sm">
+        <AppShell.Section mb="sm"><Button fullWidth variant="default" leftSection={<IconSearch size={18} />} onClick={search.open}>İşlem bul</Button></AppShell.Section>
         {accessibleUnits.length > 0 && (
           <AppShell.Section mb="xs">
             <Select
@@ -278,18 +168,19 @@ export function AppLayout() {
         )}
         <AppShell.Section grow component={ScrollArea}>
           <Stack gap={2}>
-            {sections
-              .filter((sec) => sec.items.length)
-              .map((sec) => (
-                <div key={sec.label ?? 'genel'}>
-                  {sec.label && (
-                    <Text size="xs" c="dimmed" fw={600} mt="md" mb={4} px="sm" className="nav-section-label">
-                      {sec.label}
-                    </Text>
-                  )}
-                  {sec.items.map(renderItem)}
-                </div>
-              ))}
+            {sections.filter((section) => section.items.some((item) => !item.searchOnly)).map((section) => (
+              section.id === 'daily' ? <div key={section.id}>{section.items.map(renderItem)}</div> : (
+                <NavLink
+                  key={section.id} label={section.label} leftSection={<section.icon size={18} />}
+                  opened={expanded.includes(section.id)}
+                  onChange={(open) => setExpanded((current) => open ? [...current, section.id] : current.filter((id) => id !== section.id))}
+                  childrenOffset={12}
+                  style={{ borderRadius: 'var(--mantine-radius-md)' }}
+                >
+                  {section.items.filter((item) => !item.searchOnly).map(renderItem)}
+                </NavLink>
+              )
+            ))}
           </Stack>
         </AppShell.Section>
         <AppShell.Section>

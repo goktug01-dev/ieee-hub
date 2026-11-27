@@ -84,9 +84,13 @@ export function validateSteps(steps: ApprovalStep[], fields: TemplateField[] = [
   const fieldKeys = new Set(fields.map((field) => field.key));
   const assignedFields = new Set<string>();
   if (!steps.length) errors.push('En az bir onay adımı tanımlayın.');
+  if (steps.some((step) => step.recipientMode === 'person') && steps.length > 10) errors.push('Kişiye imza içeren zincirler en çok 10 adımdan oluşabilir.');
+  if (steps.filter((step) => step.recipientMode === 'person').length > 3) errors.push('Bir zincirde en çok 3 kişiye imza adımı olabilir.');
   steps.forEach((s, i) => {
     if (!s.name.trim()) errors.push(`${i + 1}. adımın adı boş.`);
-    if (!s.roleIds.length) errors.push(`${i + 1}. adımda en az bir rol seçin.`);
+    if (s.recipientMode === 'person') {
+      if (s.roleIds.length || s.unitMode !== 'branch' || (s.approvalMode ?? 'any') !== 'any') errors.push(`${i + 1}. kişiye imza adımı tek kişilik ve kol geneli olmalıdır; rol içeremez.`);
+    } else if (!s.roleIds.length) errors.push(`${i + 1}. adımda en az bir rol seçin.`);
     if (s.unitMode === 'fixed' && !s.unitId) errors.push(`${i + 1}. adım için birim seçin.`);
     if (s.approvalMode === 'all' && s.roleIds.length < 2) errors.push(`${i + 1}. oybirliği adımında en az iki makam seçin.`);
     if (

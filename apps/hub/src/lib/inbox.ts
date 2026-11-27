@@ -13,18 +13,20 @@ export function eligibleRoles(p: Petition, access: Access | null, uid: string | 
   if (!step) return [];
   const unit = stepUnitId(step, p.unitId);
   const approvedRoles = p.stepApprovalRoleIds ?? [];
+  if (step.recipientMode === 'person') {
+    return uid && p.stepRecipients?.[String(p.currentStep ?? 0)] === uid && !approvedRoles.includes(`uid:${uid}`) ? [`uid:${uid}`] : [];
+  }
   return step.roleIds.filter((r) => !approvedRoles.includes(r) && hasRoleKey(access, `${unit}__${r}`));
 }
 
 /** Kullanıcının görebildiği süreçteki dilekçeler ve bunlardan onayını bekleyenler. */
 export function useInbox() {
   const { access, user } = useAuth();
-  const tokens = useMemo(() => (access?.tokens ?? []).slice(0, 30), [access?.tokens]);
-  const roleTokens = tokens.filter((t) => t.startsWith('role:'));
+  const tokens = useMemo(() => [...new Set([...(user ? [`uid:${user.uid}`] : []), ...(access?.tokens ?? [])])].slice(0, 30), [access?.tokens, user?.uid]);
   const key = tokens.join('|');
 
   const visible = useCollection<Petition>(
-    roleTokens.length ? 'petitions' : null,
+    tokens.length ? 'petitions' : null,
     [where('visibleTo', 'array-contains-any', tokens), where('status', '==', 'pending'), orderBy('updatedAt', 'desc')],
     key,
   );

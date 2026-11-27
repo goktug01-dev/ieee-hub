@@ -1,8 +1,10 @@
 # AI devir notu — IEEE İKÇÜ Hub
 
-Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-11-11.
+Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor, Copilot vb.) ve onları kullanan geliştiriciler içindir. Çalışmaya başlamadan önce tamamını okuyun. Son güncelleme: 2026-11-27.
 
-## Güncel devam noktası (2026-11-11)
+## Güncel devam noktası (2026-11-27)
+
+- İş odaklı menü/arama, tek komite özeti, rol kopyalarını ayırt eden katalog ve kişiye imza yerelde uygulandı (ADR-0046). Canlı roller birleştirilmedi, yayımlanmış şablonlar değiştirilmedi; yeni yayın yapılmadı. Kişisel imza için şablon yöneticisi adımı açmalı veya hazır Kişisel imza şablonunu oluşturup yayımlamalı. `smoke:usability` yeni akışları demo ortamında sınar.
 
 - 2026-11-12 mail incelemesi: bazı kişilere mail gitmediği bildirildi. Son çalışmalarda SMTP hatası yok; zamanlama arasında saatlik boşluklar var. Eksik alıcı/boş makam ilk 24 saat yeniden kontrol edilir; eski işlenmiş işler üyeler kaydolduktan sonra yönetici tarafından yeniden kuyruğa alınır. Atanmış iş örneği verildi fakat kişinin canlı alıcı kaydı görülmedi; bunun her eksik mailin kesin nedeni olduğu söylenmemeli.
 - Kullanıcı gecikmeli Web Push'u mevcut ücretsiz yapıyla ve girişte otomatik izin çağrısıyla onayladı (ADR-0044). VAPID anahtarı GitHub Secrets/variable içine kuruldu. Hub kurum ayarından servis açılmalı; gerçek cihaz izni ve teslimi ayrıca doğrulanmalı. Otomatik çağrı girişte görünür, sistem izni yalnız düğmeye dokununca istenir. `test:push`, `smoke:push`, kural ve e2e testleri vardır. Mail erişimi ve MAIL_ENABLED iki kanalın ortak ana durdurma denetimidir.
@@ -37,7 +39,7 @@ Hub veri ve onay yetkileri için **`firebase/firestore.rules` tek güvenilir kat
 
 - Yetki özeti `access/{uid}`: `superAdmin`, `perms` (kol geneli izin → bitiş), `unitPerms` (`"birim__izin"` → bitiş), `roleKeys` (`"birim__rol"` → bitiş), `memberOf`, `tokens` (dilekçe/devir görünürlüğü). İstemcide `lib/access.ts → computeAccess` görev atamalarından hesaplar; kurallar bitiş zamanını her istekte `request.time` ile karşılaştırır.
 - İzin kataloğu `apps/hub/src/lib/permissions.ts` ile kurallar **birlikte** değişir. Yeni izin = kurallarda karşılığı + test.
-- Dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). Adım politikası rollerden biri, tüm makamlar veya belirli nisap olabilir. Kurallar: rol ve birim eşleşmesi, sıra/nisap, aynı rolün bir kez sayılması, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
+- Makam temelli dilekçe onayı izinden değil **rolden** gelir (şablon adımı "şu birimdeki şu rol"). ADR-0046 ile şablonun `recipientMode: person` olarak açtığı adımda `stepRecipients` içindeki kişi kendi adına imzalar; gönderici makam adımını kişiye çeviremez ve gönderimden sonra alıcı değişmez. Adım politikası rollerden biri, tüm makamlar veya belirli nisap olabilir. Kurallar: rol ve birim eşleşmesi, sıra/nisap, aynı rolün bir kez sayılması, sahibi onaylayamaz, son 15 dk giriş, önceki onaylar değişmez, evrak sayacı yalnızca +1 ve gönderimle aynı batch'te, doğrulama kaydı dilekçeyle alan alan aynı.
 - Birim yöneticisi yalnızca **gönüllü rolünü** kendi biriminde verip alabilir (`access` üzerinde sınırlı güncelleme, `lastDelegation` alanı).
 - Birim toplantıları `meetings` koleksiyonundadır: birim üyeleri okur; `unit.meetings.manage` / `unit.manage` yetkilileri taslak yönetir; kesinleşen tutanak kurallarda değişmezdir.
 - Harici Firebase bağlantısı servis hesabı kullanmaz. `external.firebase.manage` paneli açar; kullanıcı uzak projede ayrıca oturum açar ve uzak Security Rules nihai yetkidir ([ADR-0027](docs/adr/0027-harici-firebase-ikincil-oturum.md)).

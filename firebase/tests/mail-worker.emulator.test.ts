@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { Timestamp, doc, getDoc, getDocs, collection, setDoc, updateDoc } from 'firebase/firestore';
+import { Timestamp, deleteDoc, doc, getDoc, getDocs, collection, setDoc, updateDoc } from 'firebase/firestore';
 import { beforeAll, beforeEach, afterAll, expect, test } from 'vitest';
 import { processMail } from '../../scripts/mail/core.mjs';
 import { mailStore } from '../../scripts/mail/store.mjs';
@@ -62,6 +62,17 @@ test('Dilekçe makamı sorgusu, aktif adım ve doğrulanmış alıcı dizini bir
   const calls:string[]=[]; const result=await processMail({store:mailStore(bot()),transport:transport(calls),sender:config.senderEmail,dryRun:false});
   expect(result.result).toBe('ok'); expect(result.sent).toBe(1); expect(calls).toEqual(['owner@example.com']);
 });
+test('Kişiye imza: gerçek kuyruk alıcı UID ile çözülür; rol veya erişim belgesi gerekmez',async()=>{
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore(); await updateDoc(doc(db,'mailSignals/task_t'),{state:'processed'});
+    await setDoc(doc(db,'petitions/p'),{status:'pending',revision:1,currentStep:0,ownerUid:'applicant',unitId:'branch',steps:[{recipientMode:'person',unitMode:'branch',roleIds:[]}],stepRecipients:{'0':'owner'},visibleTo:['uid:owner'],updatedAt:version});
+    await setDoc(doc(db,'mailSignals/petition_p'),{kind:'petition',sourceId:'p',sourceVersion:version,queuedAt:version,readyAt:version,state:'pending'});
+    await deleteDoc(doc(db,'access/owner'));
+  });
+  const calls:string[]=[]; const result=await processMail({store:mailStore(bot()),transport:transport(calls),sender:config.senderEmail,dryRun:false});
+  expect(result.result).toBe('ok'); expect(result.sent).toBe(1); expect(calls).toEqual(['owner@example.com']);
+});
+
 test('Tedbirli üyenin adresine erişim reddi gönderime dönüşmez',async()=>{
   await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'governanceHolds/owner/scopes/all'),{expiresAt:far}));
   const calls:string[]=[]; const result=await processMail({store:mailStore(bot()),transport:transport(calls),sender:config.senderEmail,dryRun:false});

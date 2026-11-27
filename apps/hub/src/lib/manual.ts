@@ -24,6 +24,17 @@ export interface ManualSection {
 
 export const MANUAL: ManualSection[] = [
   {
+    id: 'kisiye-imza', audiences: ['member', 'manager', 'admin'], title: 'Kişiye imza gönderme',
+    where: 'Dilekçeler › Yeni dilekçe · Sistem yönetimi › Dilekçe şablonları',
+    summary: 'Makam gerektirmeyen yazışmaları aktif bir Hub üyesine kendi adına imzalaması için gönderebilirsiniz. Şablon bu adım türünü açmış olmalıdır.',
+    steps: [
+      'Yönetici: Dilekçe şablonları ekranında Kişisel imza şablonu ile hazır taslak oluşturun. Konu, açıklama ve kişisel imza adımı hazır gelir; kontrol edip Yayımla ile kullanıma açın.',
+      'Mevcut bir şablonun Onay zinciri sekmesinde İmza kime gönderilir? alanını Dilekçe sahibinin seçeceği kişiye yapabilirsiniz. Bu değişiklik yayımlandıktan sonraki yeni dilekçelerde geçerli olur.',
+      'Gönderici: şablonu seçin, formu doldurun ve İmzalayacak kişi alanından üyeyi seçip gönderin. Kendinizi seçemezsiniz.',
+      'Alıcı: Onayımı bekleyenler ekranından isteği açın. Kendi adınıza onaylayın veya gerekçeyle iade/reddedin. Rol sahibi olmanız gerekmez.',
+    ], tips: ['Kişiye imza içeren bir zincir en çok 10 toplam adım ve 3 kişisel adım içerir. Resmî makam onayları bu seçenekle değiştirilmez.'],
+  },
+  {
     id: 'mail-tercihleri', audiences: ['member', 'manager', 'admin'],
     title: 'E-posta bildirimleri', where: 'Profilim ve görevlerim › E-posta bildirimleri',
     summary: 'Onayınızı bekleyen yeni dilekçe adımı ve size atanan görev için, servis kuruluysa doğrulanmış adresinize mail gelir. Teslim anlık değildir.',
@@ -48,7 +59,7 @@ export const MANUAL: ManualSection[] = [
   },
   {
     id: 'mail-yonetimi', audiences: ['admin'], title: 'E-posta servisini yönetme',
-    where: 'Yönetim › Kurum ayarları › E-posta bildirim servisi',
+    where: 'Sistem yönetimi › Kurum ayarları › E-posta bildirim servisi',
     summary: 'Gönderici, ayrı otomasyon hesabı, Hub adresi ve gönderim sınırları bu panelden yönetilir. Gmail gizli bilgileri bu ekrana yazılmaz.',
     steps: [
       'TechOps, proje kökünde npm run mail:setup komutuyla Gmail bağlantısını ve GitHub Secrets kurulumunu tamamlar; betiğin verdiği bildirim hesabı kimliği panele girilir.',
@@ -76,7 +87,7 @@ export const MANUAL: ManualSection[] = [
     id: 'tuzuk-surecleri',
     audiences: ['member', 'manager', 'admin'],
     title: 'Tüzük süreçleri ve yıllık aktiflik',
-    where: 'Tüzük süreçleri',
+    where: 'Belgeler ve kaynaklar › Tüzük süreçleri',
     summary: 'Tüzükteki kararlar makam imzaları, kurul oylamaları ve değişmez işlem geçmişiyle takip edilir. Süre uyarıları kendi başına karar oluşturmaz.',
     steps: [
       'İlk kurulumda organizasyon yöneticisi makam rol eşlemelerini, kurul koltuklarını, resmî tatilleri ve süreleri kontrol ederek süreç politikasını yayımlar. Açık dosyalar oluşturulduğu sürüme bağlı kalır.',
@@ -124,7 +135,9 @@ export const MANUAL: ManualSection[] = [
     summary: 'Ana sayfa açık görevlerinizi, onayınızı bekleyen dilekçeleri, süreçteki dilekçelerinizi ve yaklaşan etkinlikleri özetler.',
     steps: [
       'Sol menünün üstündeki “Çalışma alanı” seçiminden görevli olduğunuz komiteyi seçin; menüde o komitenin çalışma alanı bağlantısı çıkar.',
-      'Menü yalnızca yetkinizin olduğu sayfaları gösterir. Bir sayfayı göremiyorsanız görev atamanızda o yetki yoktur.',
+      'Günlük işler doğrudan görünür. Diğer işlemler için Etkinlik ve iletişim, Ekip ve üyelik, Belgeler ve kaynaklar veya Sistem yönetimi grubunu açın; bulunduğunuz grubun menüsü otomatik açılır.',
+      'İşlem bul düğmesini veya Ctrl/⌘+K kısayolunu kullanın. Örneğin üye onay, görev ata, puan veya oda yazın; arama yalnız erişebildiğiniz işlemleri gösterir. Mobilde üst çubuktaki büyüteç aynı aramayı açar.',
+      'Ana sayfa kişisel işlerinizi gösterir. Komitenin ortak işleri için Komite çalışma alanını açın; aynı komite özeti ana sayfada tekrarlanmaz.',
       'Üst çubuktaki ay/güneş düğmesiyle açık ve koyu tema arasında geçiş yapın; seçiminiz bu tarayıcıda hatırlanır.',
       'Sağ üstteki adınıza tıklayarak “Profilim ve görevlerim” sayfasına gidebilir veya çıkış yapabilirsiniz.',
     ],
@@ -159,17 +172,19 @@ export const MANUAL: ManualSection[] = [
     id: 'dilekce-yaz',
     audiences: ['member'],
     title: 'Dilekçe yazma ve gönderme',
-    where: 'Dilekçe › Yeni dilekçe',
+    where: 'Belgeler ve kaynaklar › Dilekçeler › Yeni dilekçe',
     summary: 'Dilekçeler şablondan oluşturulur; formu doldururken belge sağda anında oluşur ve onay zinciri gösterilir.',
     steps: [
       'Yeni dilekçe sayfasında dilekçenin kol geneli mi yoksa bir komite/birim adına mı olduğunu seçin.',
       'Şablon listesinden dilekçe türünü seçin; arama kutusu ve kategori filtresiyle daraltabilirsiniz.',
       '“Dilekçe başlığı” alanına listelerde görünecek kısa bir ad yazın (belgeye basılmaz).',
-      'Formu doldurun; sağdaki belge önizlemesi ve altındaki onay zinciri anında güncellenir.',
+      'Formu doldurun; sağdaki belge önizlemesi ve altındaki onay zinciri anında güncellenir. Dilekçenin sahibi sizsiniz; birim seçimi belgenin çalışma alanını belirtir.',
+      'Şablonda kişiye imza adımı varsa İmzalayacak kişi alanından kendiniz dışında aktif bir üyeyi seçin. İstek o kişinin onay kutusuna gider; rol ataması gerekmez. Makam adımlarındaki rol zinciri gönderici tarafından değiştirilemez.',
       'Hazır değilseniz “Taslak kaydet”; hazırsanız “Onaya gönder” deyin ve onaylayın. Evrak numarası gönderimde atanır.',
     ],
     tips: [
-      'Gönderilen dilekçe onay zincirindeki ilk makama düşer; durumunu Dilekçeler › Dilekçelerim sekmesinden izleyin.',
+      'Gönderilen dilekçe ilk adımdaki makama veya seçilen kişiye düşer; durumunu Dilekçeler › Dilekçelerim sekmesinden izleyin. Bana gelen ve görev alanımdakiler sekmesi size yönlendirilen evrakı da gösterir.',
+      'Kişisel alıcı gönderimden sonra ve iadede değiştirilemez. Başka alıcı gerekiyorsa dilekçeyi geri çekip yeni taslak hazırlayın. Kişisel imza resmî makam sıfatı taşımaz ve etkinlik makam onayı yerine kullanılamaz.',
       'Kullanabileceğiniz şablon yoksa Genel Sekreterliğe başvurun; şablonlar yönetimden eklenir.',
     ],
   },
@@ -177,7 +192,7 @@ export const MANUAL: ManualSection[] = [
     id: 'dilekce-takip',
     audiences: ['member'],
     title: 'Dilekçe takibi, iade ve belge doğrulama',
-    where: 'Dilekçe › Dilekçeler',
+    where: 'Belgeler ve kaynaklar › Dilekçeler',
     summary: 'Dilekçenin hangi adımda olduğunu, onay geçmişini ve onaylı belgeyi dilekçe sayfasında görürsünüz.',
     steps: [
       'Dilekçeler sayfasında “Dilekçelerim” sekmesinden dilekçeyi açın.',
@@ -193,7 +208,7 @@ export const MANUAL: ManualSection[] = [
     id: 'gonulluluk',
     audiences: ['member'],
     title: 'Gönüllülük başvurusu',
-    where: 'Organizasyon › Gönüllülük',
+    where: 'Ekip ve üyelik › Gönüllülük',
     summary: 'Hub üyesi olarak başka bir komite veya birimde gönüllü olmak için buradan başvurursunuz.',
     steps: [
       '“Başvur / başvurularım” sekmesinde birimi seçin.',
@@ -207,7 +222,7 @@ export const MANUAL: ManualSection[] = [
     id: 'kariyer-aday',
     audiences: ['member'],
     title: 'Açık başvurular (kariyer sayfası)',
-    where: 'Organizasyon › Açık başvurular · ieee-ikcu-kariyer.web.app',
+    where: 'Ekip ve üyelik › Açık başvurular · ieee-ikcu-kariyer.web.app',
     summary: 'Komitelerin ve Yönetim Kurulunun tarihli ilanları herkese açık kariyer sayfasında yayımlanır; kulüp dışından da başvurulabilir.',
     steps: [
       'Kariyer sayfasında sağ üstteki veya “Başvurmak için giriş yap” kartındaki “Google ile giriş yap” düğmesiyle giriş yapın (e-posta ile de girebilirsiniz). Bu hesap yalnız başvurunuzu göndermeniz ve takip etmeniz içindir.',
@@ -220,7 +235,7 @@ export const MANUAL: ManualSection[] = [
     id: 'toplanti-uye',
     audiences: ['member'],
     title: 'Toplantılar ve tutanaklar',
-    where: 'Operasyon › Toplantılar',
+    where: 'Etkinlik ve iletişim › Toplantılar',
     summary: 'Komitenizin toplantı gündemini, kararlarını ve kesinleşmiş tutanaklarını buradan okursunuz.',
     steps: [
       'Toplantılar sayfasında komitenizi seçin ve toplantıyı açın.',
@@ -231,7 +246,7 @@ export const MANUAL: ManualSection[] = [
     id: 'oda-takvimi',
     audiences: ['member'],
     title: 'Oda takvimi',
-    where: 'Operasyon › Oda rezervasyonu',
+    where: 'Etkinlik ve iletişim › Oda rezervasyonu',
     summary: 'Kulüp odasının hangi gün ve saatte kim tarafından kullanılacağını haftalık takvimde görürsünüz.',
     steps: [
       'Oda rezervasyonu sayfasını açın; haftalık takvimde dolu saatler renkli kutularla, geçmiş saatler soluk gösterilir.',
@@ -244,7 +259,7 @@ export const MANUAL: ManualSection[] = [
     id: 'icerik-talebi',
     audiences: ['member', 'manager'],
     title: 'İçerik (tanıtım) talebi',
-    where: 'Operasyon › İletişim',
+    where: 'Etkinlik ve iletişim › İletişim',
     summary: 'Afiş, duyuru ve sosyal medya istekleri iletişim birimine WhatsApp yerine buradan iletilir.',
     steps: [
       '“Taleplerim ve birimim” sekmesinde “İçerik talebi” açın.',
@@ -258,7 +273,7 @@ export const MANUAL: ManualSection[] = [
     id: 'sponsor-sorgu',
     audiences: ['member'],
     title: 'Sponsor firma sorgulama',
-    where: 'Operasyon › Sponsorluk › Firma sorgula',
+    where: 'Belgeler ve kaynaklar › Sponsorluk › Firma sorgula',
     summary: 'Aynı firmayla birden çok kişinin görüşmesini önlemek için her firmanın tek sorumlusu vardır.',
     steps: [
       'Bir firmayla görüşmeden önce “Firma sorgula” sekmesinde firma adını arayın.',
@@ -270,7 +285,7 @@ export const MANUAL: ManualSection[] = [
     id: 'devir-uye',
     audiences: ['member', 'manager'],
     title: 'Devir paketi hazırlama ve teslim alma',
-    where: 'Organizasyon › Devir paketleri',
+    where: 'Belgeler ve kaynaklar › Devir paketleri',
     summary: 'Görev süreniz biterken bir sonraki kişiye bırakacağınız bilgileri paket olarak hazırlarsınız; paket aynı rolü devralan kişiye görünür.',
     steps: [
       '“Hazırladıklarım” sekmesinde “Paket oluştur” deyin ve paketin hangi göreviniz için olduğunu seçin.',
@@ -278,7 +293,7 @@ export const MANUAL: ManualSection[] = [
       'Hazır olduğunda “Teslim et” deyin.',
       'Size devredilen paketler “Bana devredilenler” sekmesindedir; okuyup “Kabul et” veya eksikse not yazarak “Eksik, geri gönder” deyin.',
     ],
-    tips: ['Pakete şifre ve kişisel telefon yazmayın; hesap erişimleri Envanter üzerinden devredilir.'],
+    tips: ['Pakete şifre ve kişisel telefon yazmayın; hesap erişimleri Dijital sistem envanteri üzerinden devredilir.'],
   },
   {
     id: 'yardim',
@@ -315,7 +330,7 @@ export const MANUAL: ManualSection[] = [
     id: 'birim-alani',
     audiences: ['manager'],
     title: 'Komite çalışma alanı',
-    where: 'Sol menü › [Komite adı] › Komite çalışma alanı',
+    where: 'Sol menü › Komite çalışma alanı',
     summary: 'Komitenizin görevlerini, etkinliklerini, toplantılarını ve üyelerini tek sayfada özetler.',
     steps: [
       'Sol menünün üstündeki “Çalışma alanı” seçiminden komitenizi seçin.',
@@ -340,7 +355,7 @@ export const MANUAL: ManualSection[] = [
     id: 'gonullu-yonet',
     audiences: ['manager'],
     title: 'Gönüllü başvurularını değerlendirme',
-    where: 'Organizasyon › Gönüllülük › Birimime gelen başvurular',
+    where: 'Ekip ve üyelik › Gönüllülük › Birimime gelen başvurular',
     summary: 'Hub üyelerinin biriminize yaptığı gönüllülük başvurularını kabul veya reddedersiniz.',
     steps: [
       '“Birimime gelen başvurular” sekmesini açın.',
@@ -354,7 +369,7 @@ export const MANUAL: ManualSection[] = [
     id: 'ilan',
     audiences: ['manager'],
     title: 'Alım ilanı açma ve adayları değerlendirme',
-    where: 'Organizasyon › Başvuru yönetimi',
+    where: 'Ekip ve üyelik › Başvuru yönetimi',
     summary: 'Tarihli ilan açıp kariyer sayfasında yayımlarsınız; kulüp dışından gelen adayları değerlendirir, kabul edilenleri gönüllü yaparsınız.',
     steps: [
       '“Yönettiğiniz birim” alanında birimi seçin ve “Yeni ilan aç” deyin.',
@@ -376,7 +391,7 @@ export const MANUAL: ManualSection[] = [
     id: 'etkinlik',
     audiences: ['manager'],
     title: 'Etkinlik önerme ve yürütme',
-    where: 'Operasyon › Etkinlikler',
+    where: 'Etkinlik ve iletişim › Etkinlikler',
     summary: 'Etkinlik öneriden kapanış raporuna kadar Hub’da izlenir; YK kararıyla veya onaylanmış etkinlik izin dilekçesiyle onaylanır.',
     steps: [
       '“Etkinlik öner” deyin; ad, düzenleyen birim, tür, tarih, yer, tahmini katılımcı ve sorumluları girip “Öneriyi gönder” deyin.',
@@ -393,7 +408,7 @@ export const MANUAL: ManualSection[] = [
     id: 'toplanti-yonet',
     audiences: ['manager'],
     title: 'Toplantı ve tutanak yönetimi',
-    where: 'Operasyon › Toplantılar',
+    where: 'Etkinlik ve iletişim › Toplantılar',
     summary: 'Gündem, katılım, kararlar ve takip maddeleri tek tutanakta tutulur; kesinleşen tutanak değiştirilemez.',
     steps: [
       'Komiteyi seçin, “Yeni toplantı” alanına başlık yazıp “Oluştur” deyin.',
@@ -407,7 +422,7 @@ export const MANUAL: ManualSection[] = [
     id: 'oda-rezervasyonu',
     audiences: ['manager'],
     title: 'Kulüp odası rezervasyonu',
-    where: 'Operasyon › Oda rezervasyonu',
+    where: 'Etkinlik ve iletişim › Oda rezervasyonu',
     summary: 'Komiteniz adına mülakat, toplantı ve benzeri kullanımlar için odayı yarım saatlik dilimlerle ayırırsınız. Dolu bir saat ikinci kez alınamaz.',
     steps: [
       'Takvimde boş bir saate tıklayın ya da “Rezervasyon yap” düğmesini kullanın.',
@@ -426,7 +441,7 @@ export const MANUAL: ManualSection[] = [
     id: 'butce',
     audiences: ['manager'],
     title: 'Bütçe özeti',
-    where: 'Operasyon › Bütçeler',
+    where: 'Belgeler ve kaynaklar › Bütçeler',
     summary: 'Etkinlik ve birim bütçelerinin planlanan ve gerçekleşen tutarları özetlenir; ana finansal kayıt Sheets ve Drive’da kalır.',
     steps: [
       'Birim filtresinden biriminizi seçin.',
@@ -440,7 +455,7 @@ export const MANUAL: ManualSection[] = [
     id: 'uyeler',
     audiences: ['admin'],
     title: 'Üye onayı, askıya alma ve ayrılış',
-    where: 'Yönetim › Üyeler',
+    where: 'Ekip ve üyelik › Üyeler',
     summary: 'Hub’a giriş yapan kişiler önce onay bekler; onaylanan üyeler dilekçe oluşturabilir ve görev alabilir.',
     steps: [
       '“Onay bekliyor” filtresinden yeni hesapları görün; kimliği doğrulayıp “Onayla” veya “Reddet” deyin.',
@@ -453,8 +468,8 @@ export const MANUAL: ManualSection[] = [
   {
     id: 'atamalar',
     audiences: ['admin'],
-    title: 'Görev atamaları ve yetkiler',
-    where: 'Yönetim › Görev atamaları',
+    title: 'Rol ve makam atamaları',
+    where: 'Ekip ve üyelik › Rol ve makam atamaları',
     summary: 'Kimin hangi birimde hangi rolde olduğu; yetkiler ve dilekçe onay hakları buradan gelir ve anında geçerli olur.',
     steps: [
       '“Görev ata” deyin; kişiyi, birimi, rolü ve dönemi seçin.',
@@ -468,7 +483,7 @@ export const MANUAL: ManualSection[] = [
     id: 'donemler',
     audiences: ['admin'],
     title: 'Dönem yönetimi',
-    where: 'Yönetim › Dönemler',
+    where: 'Sistem yönetimi › Dönemler',
     summary: 'Görevler döneme bağlıdır; dönem kapatıldığında o döneme ait görevler sona erer ve eski yetkiler açık kalmaz.',
     steps: [
       '“Yeni dönem” ile başlangıç ve bitiş tarihlerini girin.',
@@ -480,7 +495,7 @@ export const MANUAL: ManualSection[] = [
     id: 'secimler',
     audiences: ['admin'],
     title: 'Seçim kaydı',
-    where: 'Yönetim › Seçimler',
+    where: 'Ekip ve üyelik › Seçimler',
     summary: 'Genel kurul ve komite seçimlerinin kaydı tutulur; sonuç görev atamalarına işlenir. Oylama fiziksel yapılır, Hub sonucu kaydeder.',
     steps: [
       '“Yeni seçim” ile başlık, dönem ve seçim tarihini girin; açılan seçim sayfasında pozisyonları (birim ve rol) ekleyin.',
@@ -495,13 +510,14 @@ export const MANUAL: ManualSection[] = [
     id: 'birimler-roller',
     audiences: ['admin'],
     title: 'Komiteler, birimler ve roller',
-    where: 'Yönetim › Komiteler ve birimler / Roller ve yetkiler',
+    where: 'Sistem yönetimi › Komiteler ve birimler / Roller ve yetkiler',
     summary: 'Birimler ve rollerin neler yapabileceği arayüzden düzenlenir. Birimler silinmez, pasifleştirilir; geçmiş kayıtlar bozulmaz.',
     steps: [
       'Komiteler ve birimler sayfasında birim ekleyin: ad, kısa kod (evrak ve raporlarda görünür), tür, üst birim ve sıra.',
       'Kullanılmayan birimi “Aktif” işaretini kaldırarak pasifleştirin.',
       'Roller ve yetkiler sayfasında rolün adını, açıklamasını ve yetkilerini düzenleyin.',
-      'Aynı adlı rolleri karttaki Rol kimliği ile ayırt edin. Görev atamaları tablosunda da birim__rol anahtarı gösterilir; isim benzerliği kayıtların aynı olduğunu göstermez.',
+      'Rol ara, Pasifleri göster ve Aynı adlı kayıtlar filtreleriyle listeyi daraltın. Kartlarda aktif atamalar ve görevliler görünür; yetkileri görmek için yetki düğmesini açın. Kol geneli ve komite kapsamları ayrı değerlendirilir.',
+      'Aynı adlı farklı kayıtların kimlikleri seçim kutularında da görünür. Aynı ad/kapsamda yeni kopya oluşturmak yerine mevcut rolü kullanın. Mevcut kayıtlar atamalar ve şablon bağlantıları incelenmeden birleştirilmez.',
     ],
     tips: ['Dilekçe onay zincirleri rollere göre kurulduğundan rol değişikliği onay akışlarını etkiler.'],
   },
@@ -509,7 +525,7 @@ export const MANUAL: ManualSection[] = [
     id: 'sablonlar',
     audiences: ['admin'],
     title: 'Dilekçe şablonları',
-    where: 'Yönetim › Dilekçe şablonları',
+    where: 'Sistem yönetimi › Dilekçe şablonları',
     summary: 'Mevcut Word dilekçeleri yüklenir veya sistemde yeni şablon oluşturulur. Word içindeki {alan_adi} etiketleri form alanına dönüşür.',
     steps: [
       '“Yeni şablon” ile ad, kategori, evrak serisi (2–6 harf) ve kullanabilecek birimleri girin; ya da “Word klasöründen aktar” ile toplu yükleyin.',
@@ -525,7 +541,7 @@ export const MANUAL: ManualSection[] = [
     id: 'tuzuk',
     audiences: ['admin'],
     title: 'Tüzük yayımlama',
-    where: 'Organizasyon › Tüzük',
+    where: 'Belgeler ve kaynaklar › Tüzük',
     summary: 'Tüzük herkese açık yayımlanır; her yayım değiştirilemez bir sürüm olarak arşivlenir.',
     steps: [
       'Tüzük sayfasında PDF veya Word dosyasını (en fazla 4 MB) seçin.',
@@ -536,7 +552,7 @@ export const MANUAL: ManualSection[] = [
     id: 'raporlar',
     audiences: ['admin', 'manager'],
     title: 'Raporlar',
-    where: 'Operasyon › Raporlar',
+    where: 'Belgeler ve kaynaklar › Raporlar',
     summary: 'Raporlar operasyon verilerinden anlık hesaplanır; Genel Sekreter onayından geçmeden resmî kabul edilmez.',
     steps: [
       '“Haftalık operasyon” ve “Aylık yönetim” sekmelerinden görev, etkinlik, dilekçe, sponsor ve bütçe özetlerini inceleyin.',
@@ -549,7 +565,7 @@ export const MANUAL: ManualSection[] = [
     id: 'sekreterlik',
     audiences: ['admin'],
     title: 'Sekreterlik defteri',
-    where: 'Operasyon › Sekreterlik defteri',
+    where: 'Belgeler ve kaynaklar › Sekreterlik defteri',
     summary: 'Toplantı tutanakları, kararlar, gelen-giden evrak ve takip notlarının kronolojik kurumsal kaydıdır.',
     steps: [
       '“Yeni kayıt” deyin; kayıt türü, tarih, karar / evrak sayısı, konu, birim ve açıklamayı girin.',
@@ -560,7 +576,7 @@ export const MANUAL: ManualSection[] = [
     id: 'sponsor-yonet',
     audiences: ['admin'],
     title: 'Sponsor havuzu',
-    where: 'Operasyon › Sponsorluk › Havuz',
+    where: 'Belgeler ve kaynaklar › Sponsorluk › Havuz',
     summary: 'Sponsor havuzu, görüşme geçmişi ve sponsor kilidi burada yönetilir.',
     steps: [
       '“Sponsor ekle” ile firma adını, sektörü, web sitesini ve tek sorumluyu girin.',
@@ -573,7 +589,7 @@ export const MANUAL: ManualSection[] = [
     id: 'oda-yonetimi',
     audiences: ['admin'],
     title: 'Odalar ve rezervasyon yetkisi',
-    where: 'Operasyon › Oda rezervasyonu › Odalar · Yönetim › Roller ve yetkiler',
+    where: 'Etkinlik ve iletişim › Oda rezervasyonu › Odalar · Sistem yönetimi › Roller ve yetkiler',
     summary: 'Rezervasyona açılan odaları, kullanım saatlerini ve kimlerin rezervasyon yapabileceğini siz belirlersiniz.',
     steps: [
       'Oda rezervasyonu sayfasında “Odalar” düğmesine basın, “Oda ekle” ile oda adını, konumunu, açılış ve kapanış saatini ve en fazla kaç gün sonrasına rezervasyon yapılabileceğini girin.',
@@ -587,7 +603,7 @@ export const MANUAL: ManualSection[] = [
     id: 'demirbas',
     audiences: ['admin'],
     title: 'Demirbaş ve zimmet',
-    where: 'Operasyon › Demirbaş ve zimmet',
+    where: 'Belgeler ve kaynaklar › Demirbaş ve zimmet',
     summary: 'Fiziksel varlıkların kimde, nerede ve hangi durumda olduğu hareket geçmişiyle izlenir; kayıtlar silinmez.',
     steps: [
       '“Demirbaş ekle” ile varlık adı, kategori, fiziksel konum, birim ve varsa seri numarası, alım bilgileri ve garanti bitişini girin.',
@@ -600,7 +616,7 @@ export const MANUAL: ManualSection[] = [
     id: 'envanter',
     audiences: ['admin'],
     title: 'Sistem envanteri (TechOps)',
-    where: 'Yönetim › Envanter',
+    where: 'Sistem yönetimi › Dijital sistem envanteri',
     summary: 'Kolun kullandığı sistemler, erişimler, veriler ve riskler kayıt altında tutulur.',
     steps: [
       'Her sistem için yöneticileri ve erişim bilgisinin nerede tutulduğunu kaydedin (şifre yazmayın).',
@@ -611,7 +627,7 @@ export const MANUAL: ManualSection[] = [
     id: 'etkinlik-kisitlamalari',
     audiences: ['admin'],
     title: 'Dönemler arası etkinlik kısıtlamaları',
-    where: 'Yönetim › Etkinlik kısıtlamaları',
+    where: 'Ekip ve üyelik › Etkinlik kısıtlamaları',
     summary: 'Etkinliğe alınmaması gereken veya yönetici dikkati gerektiren kişiler gerekçeli, süreli ve denetlenebilir biçimde kaydedilir.',
     steps: [
       '“Kısıtlama ekle” deyin; kişinin adını ve katılımcı listelerindeki e-postasını girin.',
@@ -628,7 +644,7 @@ export const MANUAL: ManualSection[] = [
     id: 'kurullar',
     audiences: ['admin', 'manager'],
     title: 'Kurul oylamaları ve karar defteri',
-    where: 'Organizasyon › Kurullar ve karar defteri',
+    where: 'Ekip ve üyelik › Kurullar ve karar defteri',
     summary: 'YK ve İK oylamaları tüzükteki nisap kurallarıyla yürütülür; sonuçlar ve kesinleşen toplantı kararları numaralı deftere işlenir.',
     steps: [
       '“Oylamalar” sekmesinde “Yeni oylama” deyin; kurulu, kabul kuralını, son oy zamanını ve varsa oy kullanamayacak üyeleri seçin. Oylama açılınca oy hakkı listesi dondurulur.',
@@ -680,7 +696,7 @@ export const MANUAL: ManualSection[] = [
     id: 'harici-firebase-puan',
     audiences: ['admin'],
     title: 'IEEE Puan ve harici Firebase yönetimi',
-    where: 'Yönetim › Harici Firebase',
+    where: 'Sistem yönetimi › Harici Firebase',
     summary: 'IEEE Puan verisi Hub’a kopyalanmadan, uzak projenin kendi hesabı ve güvenlik kurallarıyla görüntülenir ve yönetilir.',
     steps: [
       'Firebase Console’daki web uygulaması değerlerini ve Realtime Database URL’sini bağlantı alanlarına girin; servis hesabı veya özel anahtar kullanmayın.',
@@ -702,7 +718,7 @@ export const MANUAL: ManualSection[] = [
     id: 'ayarlar',
     audiences: ['admin'],
     title: 'Kurum ayarları',
-    where: 'Yönetim › Kurum ayarları',
+    where: 'Sistem yönetimi › Kurum ayarları',
     summary: 'Kurum kimliği, evrak numarası biçimi, doğrulama adresi, gönüllülük ve vTools ayarları buradadır.',
     steps: [
       'Kurum adı, kısa ad, logo ve giriş ekranı notunu düzenleyin.',
@@ -716,7 +732,7 @@ export const MANUAL: ManualSection[] = [
     id: 'politikalar',
     audiences: ['admin'],
     title: 'KVKK ve politika metinleri',
-    where: 'Yönetim › Kurum ayarları › Politikalar ve KVKK metinleri',
+    where: 'Sistem yönetimi › Kurum ayarları › Politikalar ve KVKK metinleri',
     summary: 'Başvuru ve üye KVKK aydınlatma metinleri, çerez politikası ve kullanım koşulları herkese açık, değiştirilemez sürümler olarak yayımlanır.',
     steps: [
       'Sekmelerden politikayı seçin. İlk açılışta hazır taslak gelir.',
@@ -732,7 +748,7 @@ export const MANUAL: ManualSection[] = [
     id: 'denetim',
     audiences: ['admin'],
     title: 'Denetim kaydı',
-    where: 'Yönetim › Denetim kaydı',
+    where: 'Sistem yönetimi › Denetim kaydı',
     summary: 'Yönetim işlemlerinin kaydıdır; kayıtlar yalnızca eklenebilir, değiştirilemez ve silinemez.',
     steps: ['Kimin hangi işlemi ne zaman yaptığını inceleyin. Dilekçe onayları ayrıca her dilekçenin kendi geçmişinde tutulur.'],
   },

@@ -1,4 +1,4 @@
-import { deliveryId, fingerprint, millis, openSource, roleKeys } from '../mail/core.mjs';
+import { deliveryId, fingerprint, millis, openSource, petitionRecipientEligible } from '../mail/core.mjs';
 
 export function safeEndpoint(value) {
   try { const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.port
@@ -7,8 +7,7 @@ export function safeEndpoint(value) {
 export function pushEligible(kind,source,uid,access,device,now=Date.now()) {
   if(!openSource(kind,source)||!device?.[kind==='petition'?'petitions':'tasks']||!safeEndpoint(device.endpoint))return false;
   if(kind==='task')return source.assigneeUid===uid;
-  return source.ownerUid!==uid&&roleKeys(source).some(key=>millis(access?.roleKeys?.[key])>now)
-    &&(source.visibleTo??[]).some(token=>(access?.tokens??[]).includes(token));
+  return petitionRecipientEligible(source,uid,access,now);
 }
 export async function processPush({store,send,publicKey,dryRun=true,now=()=>Date.now()}) {
   const summary={mode:dryRun?'dry-run':'live',result:'ok',sent:0,skipped:0,uncertain:0,errorCode:''};

@@ -106,7 +106,7 @@ async function seed() {
   });
 }
 
-function submitBatch(db: Firestore, opts: { seq?: number; steps?: unknown; code?: string } = {}) {
+function submitBatch(db: Firestore, opts: { seq?: number; steps?: unknown; code?: string; visibleTo?: string[] } = {}) {
   const year = new Date().getUTCFullYear();
   const seq = opts.seq ?? 1;
   const code = opts.code ?? 'ABCDEFGHJKMN';
@@ -126,7 +126,7 @@ function submitBatch(db: Firestore, opts: { seq?: number; steps?: unknown; code?
     notes: [],
     submittedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    visibleTo: VISIBLE,
+    visibleTo: opts.visibleTo ?? VISIBLE,
   });
   b.set(doc(db, 'counters', `ETK_${year}`), { value: seq, lastPetitionId: 'p1' });
   b.set(doc(db, 'petitionVerifications', code), {
@@ -197,6 +197,77 @@ afterAll(async () => {
 beforeEach(async () => {
   await env.clearFirestore();
   await seed();
+});
+
+describe('kişiye imza güvenliği', () => {
+  const steps = [{ name: 'Kişisel imza', recipientMode: 'person', roleIds: [], unitMode: 'branch', unitId: null }];
+  const visibleTo = ['uid:owner', 'unit:cs', 'uid:stranger'];
+  const signature = { ...chairApproval, stepName: 'Kişisel imza', uid: 'stranger', name: 'stranger', roleId: 'uid:stranger', roleName: 'Kişisel imza', unitId: 'branch', unitName: 'Kol Geneli' };
+  const prepare = async (recipients: unknown = { '0': 'stranger' }) => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore() as unknown as Firestore;
+      await updateDoc(doc(db, 'petitionTemplates', 'etk', 'versions', '1'), { steps });
+      await updateDoc(doc(db, 'petitions', 'p1'), { stepRecipients: recipients });
+    });
+  };
+
+  it('rolü olmayan seçili aktif üye isteği listeler ve kendi adına imzalar', async () => {
+    await prepare();
+    await assertSucceeds(submitBatch(ctx('owner'), { steps, visibleTo }).commit());
+    const incoming = await assertSucceeds(getDocs(query(collection(ctx('stranger'), 'petitions'), where('visibleTo', 'array-contains', 'uid:stranger'))));
+    expect(incoming.docs.map((document) => document.id)).toContain('p1');
+    await assertFails(getDoc(doc(ctx('secretary'), 'petitions', 'p1')));
+    await assertSucceeds(decisionBatch(ctx('stranger'), { approvals: [], notes: [] }, signature, { status: 'approved', currentStep: 0, completedAt: serverTimestamp() }).commit());
+    expect((await getDoc(doc(ctx('owner'), 'petitions', 'p1'))).data()?.approvals[0].roleName).toBe('Kişisel imza');
+  });
+
+  it.each([
+    ['eksik alıcı', {}], ['sahibin kendisi', { '0': 'owner' }],
+    ['aktif olmayan üye', { '0': 'pendingUser' }], ['bilinmeyen üye', { '0': 'missing' }],
+    ['fazladan adım', { '0': 'stranger', '1': 'chair' }], ['map olmayan alıcı', ['stranger']],
+  ])('%s gönderimde reddedilir', async (_label, recipients) => {
+    await prepare(recipients);
+    await assertFails(submitBatch(ctx('owner'), { steps, visibleTo }).commit());
+  });
+
+  it('alıcı görünürlüğü çıkarılamaz; bir makam adımına kişi eklenemez', async () => {
+    await prepare();
+    await assertFails(submitBatch(ctx('owner'), { steps, visibleTo: ['uid:owner'] }).commit());
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore() as unknown as Firestore, 'petitionTemplates', 'etk', 'versions', '1'), { steps: STEPS });
+    });
+    await assertFails(submitBatch(ctx('owner')).commit());
+  });
+
+  it('10 adımlı karma zincirde üç ayrı kişiye imza Spark belge erişim sınırına sığar', async () => {
+    const mixed = Array.from({ length: 10 }, (_, index) => [0, 5, 9].includes(index) ? steps[0] : STEPS[0]);
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore() as unknown as Firestore;
+      await updateDoc(doc(db, 'petitionTemplates', 'etk', 'versions', '1'), { steps: mixed });
+      await updateDoc(doc(db, 'petitions', 'p1'), { stepRecipients: { '0': 'stranger', '5': 'chair', '9': 'vice' } });
+    });
+    await assertSucceeds(submitBatch(ctx('owner'), { steps: mixed, visibleTo: [...visibleTo, 'uid:chair', 'uid:vice'] }).commit());
+  });
+
+  it('sahip ve başka makam sahibi imzalayamaz; alıcı makam kimliği taklit edemez', async () => {
+    await prepare();
+    await submitBatch(ctx('owner'), { steps, visibleTo }).commit();
+    const patch = { status: 'approved', currentStep: 0, completedAt: serverTimestamp() };
+    await assertFails(decisionBatch(ctx('owner'), { approvals: [], notes: [] }, { ...signature, uid: 'owner', roleId: 'uid:owner' }, patch).commit());
+    await assertFails(decisionBatch(ctx('chair'), { approvals: [], notes: [] }, { ...signature, uid: 'chair', roleId: 'uid:chair' }, patch).commit());
+    await assertFails(decisionBatch(ctx('stranger'), { approvals: [], notes: [] }, { ...signature, roleId: 'chair', roleName: 'Başkan' }, patch).commit());
+    await assertFails(updateDoc(doc(ctx('owner'), 'petitions', 'p1'), { stepRecipients: { '0': 'chair' } }));
+  });
+
+  it('kişisel imzalı dilekçe etkinliğin resmî makam onayı yerine geçmez', async () => {
+    await prepare();
+    await submitBatch(ctx('owner'), { steps, visibleTo }).commit();
+    await decisionBatch(ctx('stranger'), { approvals: [], notes: [] }, signature, { status: 'approved', currentStep: 0, completedAt: serverTimestamp() }).commit();
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore() as unknown as Firestore, 'events', 'personal-test'), { status: 'proposed', unitId: 'cs', ownerUids: ['owner'], code: 'TEST' });
+    });
+    await assertFails(updateDoc(doc(ctx('owner'), 'events', 'personal-test'), { status: 'approved', petitionId: 'p1', petitionNo: 'TEST', updatedAt: serverTimestamp() }));
+  });
 });
 
 describe('kurulum', () => {

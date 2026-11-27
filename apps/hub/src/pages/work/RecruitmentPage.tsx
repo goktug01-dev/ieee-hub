@@ -23,6 +23,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconEdit, IconExternalLink, IconPlus, IconSettings, IconTrash } from '@tabler/icons-react';
 import { Timestamp, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { hasPermission, unitsWithPermission } from '../../lib/access';
@@ -68,11 +69,13 @@ export function RecruitmentPage() {
     if (hasPermission(access, 'assignments.manage')) return [BRANCH, ...units.filter((unit) => unit.active).map((unit) => unit.id)];
     return unitsWithPermission(access, 'unit.manage');
   }, [access, units]);
-  const [unitId, setUnitId] = useState(managedIds[0] ?? '');
+  const [params] = useSearchParams();
+  const preset = params.get('birim');
+  const [unitId, setUnitId] = useState(preset && managedIds.includes(preset) ? preset : managedIds[0] ?? '');
   // Yetki ve birimler geç yüklenirse ilk yönetilen birimi seç.
   useEffect(() => {
-    if (!unitId && managedIds[0]) setUnitId(managedIds[0]);
-  }, [unitId, managedIds]);
+    if ((!unitId || !managedIds.includes(unitId)) && managedIds[0]) setUnitId(preset && managedIds.includes(preset) ? preset : managedIds[0]);
+  }, [unitId, managedIds, preset]);
   const calls = useCollection<RecruitmentCall>(unitId ? 'recruitmentCalls' : null, unitId ? [where('unitId', '==', unitId)] : [], `recruitment-calls-${unitId}`);
   const applications = useCollection<RecruitmentApplication>(unitId ? 'recruitmentApplications' : null, unitId ? [where('unitId', '==', unitId)] : [], `recruitment-applications-${unitId}`);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);

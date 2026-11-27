@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Group,
   Modal,
   NumberInput,
@@ -19,7 +20,8 @@ import {
 import { IconEdit, IconPlus, IconAlertTriangle } from '@tabler/icons-react';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
-import { PageHeader, notifyError, notifySuccess } from '../../components/ui';
+import { Link } from 'react-router';
+import { EmptyState, ErrorAlert, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { db } from '../../firebase';
 import { rebuildAccessMany } from '../../lib/access';
 import { logAudit } from '../../lib/audit';
@@ -28,13 +30,27 @@ import { useOrg } from '../../lib/org';
 import { PERMISSIONS, PERMISSION_MAP, type PermissionId } from '../../lib/permissions';
 import type { Role, RoleScope, WithId } from '../../lib/types';
 import { DEFAULT_ROLES } from '../../lib/setup';
+import { useAuth } from '../../auth/AuthContext';
+import { useCollection } from '../../lib/hooks';
+import { sameNamedRoles } from '../../lib/roleCatalog';
+import type { Assignment } from '../../lib/types';
 
 const EMPTY: Role = { name: '', scope: 'unit', description: '', permissions: [], active: true, order: 20 };
 
 export function RolesPage() {
-  const { roles } = useOrg();
+  const { roles, loading } = useOrg();
+  const { can } = useAuth();
+  const assignments = useCollection<Assignment>('assignments', [], 'role-catalog-assignments');
   const [editing, setEditing] = useState<{ id: string | null; data: Role } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [queryText, setQueryText] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const duplicates = roles.filter((role) => sameNamedRoles(role, roles).length > 1);
+  const filtered = roles.filter((role) => (showInactive || role.active)
+    && (!duplicatesOnly || duplicates.some((other) => other.id === role.id))
+    && `${role.name} ${role.id} ${role.description ?? ''}`.toLocaleLowerCase('tr-TR').includes(queryText.trim().toLocaleLowerCase('tr-TR')));
 
   const save = async () => {
     if (!editing || !editing.data.name.trim()) return;
@@ -45,6 +61,7 @@ export function RolesPage() {
     };
     setBusy(true);
     try {
+      if (!roles.some((role) => role.id === editing.id) && sameNamedRoles(d, roles).length) throw new Error('Bu kapsamda aynı adlı bir rol zaten var. Mevcut rolü düzenleyin veya farklı bir ad seçin.');
       if (!editing.id && (await getDoc(doc(db, 'roles', id))).exists()) throw new Error('Bu adla bir rol zaten var.');
       await setDoc(doc(db, 'roles', id), d);
       await logAudit(editing.id ? 'role.update' : 'role.create', `roles/${id}`, { name: d.name, permissions: d.permissions });
@@ -66,8 +83,14 @@ export function RolesPage() {
   const togglePerm = (p: string, on: boolean) =>
     set('permissions', on ? [...(editing?.data.permissions ?? []), p] : (editing?.data.permissions ?? []).filter((x) => x !== p));
 
-  const RoleCard = ({ r }: { r: WithId<Role> }) => (
-    <Card padding="md" style={{ opacity: r.active ? 1 : 0.55 }}>
+  const renderRoleCard = (r: WithId<Role>) => {
+    const holders = assignments.data.filter((assignment) => assignment.roleId === r.id && assignment.status === 'active'
+      && (!assignment.startsAt || assignment.startsAt.toMillis() <= Date.now())
+      && (!assignment.endsAt || assignment.endsAt.toMillis() > Date.now()));
+    const similar = sameNamedRoles(r, roles).filter((other) => other.id !== r.id);
+    const open = expanded.includes(r.id);
+    return (
+    <Card key={r.id} padding="md" style={{ opacity: r.active ? 1 : 0.55 }}>
       <Group justify="space-between" wrap="nowrap" align="flex-start">
         <div style={{ minWidth: 0 }}>
           <Text fw={600}>{r.name}</Text>
@@ -82,6 +105,15 @@ export function RolesPage() {
           <IconEdit size={16} />
         </ActionIcon>
       </Group>
+      <Group gap="xs" mt="sm">
+        <Badge variant="light" color={r.active ? 'teal' : 'gray'}>{r.active ? 'Aktif' : 'Pasif'}</Badge>
+        <Badge variant="light">{assignments.loading ? 'Atamalar yükleniyor' : `${holders.length} aktif atama`}</Badge>
+        {similar.length > 0 && <Badge color="orange">Aynı adlı {similar.length + 1} kayıt</Badge>}
+      </Group>
+      {similar.length > 0 && <Text size="sm" c="dimmed" mt="xs">Diğer kayıtlar: {similar.map((role) => role.id).join(', ')}. Yetkileri karşılaştırarak düzenleyin.</Text>}
+      {holders.length > 0 && <Text size="sm" mt="xs">{holders.map((holder) => `${holder.memberName} · ${holder.unitName}`).join(', ')}</Text>}
+      <Button variant="subtle" size="xs" mt="xs" onClick={() => setExpanded((current) => open ? current.filter((id) => id !== r.id) : [...current, r.id])}>{open ? 'Yetkileri gizle' : `${r.permissions.length} yetkiyi göster`}</Button>
+      <Collapse expanded={open}>
       <Group gap={4} mt="sm">
         {r.permissions.length === 0 ? (
           <Text size="xs" c="dimmed">
@@ -95,37 +127,45 @@ export function RolesPage() {
           ))
         )}
       </Group>
+      </Collapse>
     </Card>
   );
+  };
 
   return (
     <Stack>
       <PageHeader
         title="Roller ve yetkiler"
-        description="Unvanlar ve bu unvanların sistemde neler yapabileceği. Dilekçe onay zincirleri bu rollere göre kurulur."
+        description="Rol bir yetki tanımıdır; kişi ataması ayrı yapılır. Aynı komite rolünü her komitede yeniden oluşturmak gerekmez."
         actions={
           <Button leftSection={<IconPlus size={18} />} onClick={() => setEditing({ id: null, data: { ...EMPTY } })}>
             Yeni rol
           </Button>
         }
       />
-      <Text fw={600}>Kol geneli roller</Text>
-      {!roles.some(r => r.id === 'actor') && <Button variant="light" onClick={() => setEditing({ id: 'actor', data: DEFAULT_ROLES.actor })}>ACTOR rolünü ekle</Button>}
+      <Group wrap="wrap">
+        <TextInput aria-label="Rol ara" placeholder="Rol adı, kimliği veya açıklama ara…" value={queryText} onChange={(event) => setQueryText(event.currentTarget.value)} style={{ flex: '1 1 240px' }} />
+        <Switch label="Pasifleri göster" checked={showInactive} onChange={(event) => setShowInactive(event.currentTarget.checked)} />
+        <Switch label={`Aynı adlı kayıtlar (${duplicates.length})`} checked={duplicatesOnly} onChange={(event) => setDuplicatesOnly(event.currentTarget.checked)} />
+        {can('assignments.manage') && <Button component={Link} to="/yonetim/atamalar" variant="light">Kişilere rol ata</Button>}
+      </Group>
+      <ErrorAlert error={assignments.error} />
+      {duplicates.length > 0 && <Alert color="orange">Aynı kapsamda aynı adlı roller var. Kartlarda kimlik, görevli kişiler ve yetkilerle karşılaştırabilirsiniz. Kol geneli ile komite rolleri ayrı kapsamlardır.</Alert>}
+      {loading && <SectionLoader />}
+      {!loading && !filtered.length && <EmptyState title="Bu filtrelerde rol bulunamadı" />}
+      <Text fw={600}>Kol geneli roller ({filtered.filter((role) => role.scope === 'branch').length})</Text>
+      {!queryText.trim() && !duplicatesOnly && !loading && !roles.some(r => r.id === 'actor') && !sameNamedRoles(DEFAULT_ROLES.actor, roles).length && <Button variant="light" onClick={() => setEditing({ id: 'actor', data: DEFAULT_ROLES.actor })}>ACTOR rolünü ekle</Button>}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-        {roles.filter((r) => r.scope === 'branch').map((r) => (
-          <RoleCard key={r.id} r={r} />
-        ))}
+        {filtered.filter((r) => r.scope === 'branch').map(renderRoleCard)}
       </SimpleGrid>
       <Text fw={600} mt="md">
-        Komite / birim rolleri
+        Komite / birim rolleri ({filtered.filter((role) => role.scope === 'unit').length})
       </Text>
       <Text size="sm" c="dimmed" mt={-8}>
         Bu roller atanırken bir birim seçilir (örn. "Başkan · CS"). Aynı rol her komitede kullanılır.
       </Text>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-        {roles.filter((r) => r.scope === 'unit').map((r) => (
-          <RoleCard key={r.id} r={r} />
-        ))}
+        {filtered.filter((r) => r.scope === 'unit').map(renderRoleCard)}
       </SimpleGrid>
 
       <Modal opened={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Rolü düzenle' : 'Yeni rol'} size="lg">

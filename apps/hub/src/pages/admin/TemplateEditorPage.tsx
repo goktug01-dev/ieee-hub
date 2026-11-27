@@ -1,3 +1,4 @@
+import { roleChoiceLabel } from '../../lib/roleCatalog';
 import {
   ActionIcon,
   Alert,
@@ -163,7 +164,7 @@ export function TemplateEditorPage() {
       uid: 'x',
       name: 'Örnek Kişi',
       roleId: s.roleIds[0] ?? '',
-      roleName: s.roleIds[0] ? roleName(s.roleIds[0]) : '—',
+      roleName: s.recipientMode === 'person' ? 'Kişisel imza' : s.roleIds[0] ? roleName(s.roleIds[0]) : '—',
       unitId: s.unitMode === 'branch' ? BRANCH : 'ornek',
       unitName: s.unitMode === 'fixed' && s.unitId ? unitName(s.unitId) : 'Örnek Birim',
       decision: 'approve',
@@ -289,7 +290,7 @@ export function TemplateEditorPage() {
   };
 
   const rolesFor = (mode: ApprovalStep['unitMode']) =>
-    roles.filter((r) => r.active && (mode === 'branch' ? r.scope === 'branch' : r.scope === 'unit')).map((r) => ({ value: r.id, label: r.name }));
+    roles.filter((r) => r.active && (mode === 'branch' ? r.scope === 'branch' : r.scope === 'unit')).map((r) => ({ value: r.id, label: roleChoiceLabel(r, roles) }));
 
   const responseFieldOptions = (stepIndex: number) => {
     const usedElsewhere = new Set(steps.flatMap((step, index) => index === stepIndex ? [] : (step.responseFieldKeys ?? [])));
@@ -578,10 +579,17 @@ export function TemplateEditorPage() {
                     {i + 1}
                   </Badge>
                   <Stack gap="xs" style={{ flex: 1 }}>
+                    <Select
+                      label="İmza kime gönderilir?"
+                      data={[{ value: 'role', label: 'Bir makam / rolün görevlisine' }, { value: 'person', label: 'Dilekçe sahibinin seçeceği kişiye' }]}
+                      value={s.recipientMode ?? 'role'}
+                      onChange={(value) => setStep(i, { recipientMode: value === 'person' ? 'person' : 'role', roleIds: [], unitMode: 'branch', unitId: null, approvalMode: 'any', requiredApprovals: null })}
+                    />
                     <Group grow wrap="wrap" align="flex-start">
                       <TextInput label="Adım adı" placeholder="örn. Komite Başkanı onayı" value={s.name} onChange={(e) => setStep(i, { name: e.currentTarget.value })} />
                       <Select
                         label="Hangi birimdeki yetkili?"
+                        disabled={s.recipientMode === 'person'}
                         data={[
                           ...(t.scope === 'unit' ? [{ value: 'petition', label: 'Dilekçenin ait olduğu komite/birim' }] : []),
                           { value: 'branch', label: 'Kol geneli (YK, GS, Başkan…)' },
@@ -591,6 +599,7 @@ export function TemplateEditorPage() {
                         onChange={(v) => setStep(i, { unitMode: (v ?? 'branch') as ApprovalStep['unitMode'], roleIds: [], unitId: null })}
                       />
                     </Group>
+                    {s.recipientMode === 'person' ? <Alert color="blue">Dilekçe sahibi, gönderirken aktif bir üyeyi seçer. Seçilen kişi kendi adına imzalar; resmî bir makamı temsil etmez. Gönderimden sonra alıcı değiştirilemez.</Alert> : <>
                     <Group grow wrap="wrap" align="flex-start">
                       <MultiSelect
                         label="Onaylayabilecek roller"
@@ -629,6 +638,7 @@ export function TemplateEditorPage() {
                         />
                       )}
                     </Group>
+                    </>}
                     <MultiSelect
                       label="Bu makamın dolduracağı belge alanları"
                       description="Seçilen alanlar başvuru sahibine gösterilmez; yetkili karar verirken doldurur ve Word belgesine işlenir."

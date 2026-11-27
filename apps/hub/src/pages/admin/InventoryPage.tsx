@@ -82,7 +82,7 @@ export function InventoryPage() {
   return (
     <Stack>
       <PageHeader
-        title="Envanter"
+        title="Dijital sistem envanteri"
         description='"Hangi sistem var, kim yönetiyor, kaybedersek nasıl kurtarırız?" sorularının yazılı cevabı (WP-01). Şifre veya gizli anahtar bu kayıtlara yazılmaz.'
       />
       <Tabs value={tab} onChange={(v) => setTab((v ?? 'system') as InventoryKind)} keepMounted={false}>

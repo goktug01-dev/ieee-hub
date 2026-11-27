@@ -12,6 +12,15 @@ export function DocxPreview({ blob, printable = false }: { blob: Blob | null; pr
     const el = host.current;
     if (!el || !blob) return;
     let cancelled = false;
+    const fitPages = () => {
+      const available = el.clientWidth - 32;
+      if (available <= 0) return;
+      el.querySelectorAll<HTMLElement>('.docx-wrapper > section.docx').forEach((page) => {
+        if (page.offsetWidth > 0) page.style.zoom = String(Math.min(1, available / page.offsetWidth));
+      });
+    };
+    const observer = new ResizeObserver(fitPages);
+    observer.observe(el);
     setBusy(true);
     setError(null);
     renderAsync(blob, el, el, {
@@ -22,10 +31,12 @@ export function DocxPreview({ blob, printable = false }: { blob: Blob | null; pr
       renderFooters: true,
       useBase64URL: true,
     })
+      .then(() => { if (!cancelled) fitPages(); })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)))
       .finally(() => !cancelled && setBusy(false));
     return () => {
       cancelled = true;
+      observer.disconnect();
     };
   }, [blob]);
 

@@ -37,6 +37,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useAuth } from '../../auth/AuthContext';
 import { DocxPreview } from '../../components/DocxPreview';
+import { PetitionRecipients } from '../../components/PetitionRecipients';
+import { useActiveMembers } from '../../lib/members';
 import { PetitionForm, missingRequired, prefillValues } from '../../components/PetitionForm';
 import { EmptyState, ErrorAlert, SectionLoader, StatusBadge, notifyError, notifySuccess } from '../../components/ui';
 import { downloadBlob } from '../../lib/docx';
@@ -76,6 +78,7 @@ export function PetitionDetailPage() {
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
+  const [stepRecipients, setStepRecipients] = useState<Record<string, string>>({});
 
   const isOwner = p?.ownerUid === user?.uid;
   const canEdit = isOwner && (p?.status === 'draft' || p?.status === 'returned');
@@ -100,6 +103,7 @@ export function PetitionDetailPage() {
     if (!p) return;
     setValues(p.data);
     setTitle(p.title);
+    setStepRecipients(p.stepRecipients ?? {});
     setEditing(true);
   };
 
@@ -115,11 +119,11 @@ export function PetitionDetailPage() {
     setBusy(true);
     try {
       if (p.status === 'draft') {
+        await updateDraft(id, { data: values, title, stepRecipients });
         if (andSubmit) {
           const no = await submitPetition(id, values, title);
           notifySuccess(`Evrak sayısı: ${no}`, 'Dilekçe onaya gönderildi');
         } else {
-          await updateDraft(id, { data: values, title });
           notifySuccess('Taslak kaydedildi.');
         }
       } else if (p.status === 'returned') {
@@ -245,6 +249,7 @@ export function PetitionDetailPage() {
               <Stack>
                 <Textarea label="Başlık" autosize minRows={1} value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
                 <PetitionForm fields={fields} values={values} onChange={setValues} showErrors />
+                {p.status === 'draft' && <PetitionRecipients steps={version.data?.steps ?? []} ownerUid={p.ownerUid} value={stepRecipients} onChange={setStepRecipients} />}
                 <Group justify="flex-end">
                   <Button variant="default" onClick={() => setEditing(false)}>
                     Vazgeç
@@ -289,7 +294,7 @@ export function PetitionDetailPage() {
         <Grid.Col span={{ base: 12, lg: 5 }}>
           <Stack>
             {myRoles.length > 0 && !editing && (
-              <DecisionPanel petitionId={id!} p={p} roleIds={myRoles} roleName={roleName} unitName={unitName} fields={allFields} member={member} />
+              <DecisionPanel key={`${p.currentStep}-${p.revision}`} petitionId={id!} p={p} roleIds={myRoles} roleName={roleName} unitName={unitName} fields={allFields} member={member} />
             )}
             <ApprovalTimeline p={p} roleName={roleName} unitName={unitName} />
             {p.verificationCode && vUrl && (
@@ -334,6 +339,7 @@ function ApprovalTimeline({
   unitName: (id: string) => string;
 }) {
   const steps = p.steps ?? [];
+  const { nameOf } = useActiveMembers(steps.some((step) => step.recipientMode === 'person'));
   const rev = p.revision ?? 1;
   const current = (p.approvals ?? []).filter((a) => a.revision === rev);
   const older = (p.approvals ?? []).filter((a) => a.revision !== rev);
@@ -395,8 +401,8 @@ function ApprovalTimeline({
                   {isCurrent && !terminal && <Badge size="xs" variant="light">{approved.length}/{required} makam onayı</Badge>}
                 </Stack>
               ) : (
-                <Text size="xs" c="dimmed">
-                  {s.roleIds.map(roleName).join(' / ')} · {unitName(stepUnitId(s, p.unitId))}
+                <Text component="div" size="xs" c="dimmed">
+                  {s.recipientMode === 'person' ? `Kişisel imza · ${nameOf(p.stepRecipients?.[String(i)] ?? '')}` : `${s.roleIds.map(roleName).join(' / ')} · ${unitName(stepUnitId(s, p.unitId))}`}
                   {isCurrent && (
                     <Badge ml={6} size="xs">
                       Bekliyor
@@ -455,6 +461,8 @@ function DecisionPanel({
   const [pw, setPw] = useState('');
   const pwResolver = useRef<((v: string | null) => void) | null>(null);
   const step = p.steps![p.currentStep ?? 0];
+  const personal = step.recipientMode === 'person';
+  const signatureName = personal ? 'Kişisel imza' : roleName(roleId);
   const responseFields = responseFieldsForStep(fields, step);
   const stepUnit = stepUnitId(step, p.unitId);
   const required = stepRequiredApprovals(step);
@@ -487,7 +495,7 @@ function DecisionPanel({
         petitionId,
         decision,
         roleId,
-        roleName: roleName(roleId),
+        roleName: signatureName,
         unitName: unitName(stepUnit),
         comment,
         responseData,
@@ -510,7 +518,7 @@ function DecisionPanel({
         <div>
           <Text fw={700}>Kararınız bekleniyor</Text>
           <Text size="sm" c="dimmed">
-            Adım: {step.name} · {unitName(stepUnit)}
+            Adım: {step.name} · {personal ? 'Doğrudan size gönderilen imza isteği' : unitName(stepUnit)}
           </Text>
           {required > 1 && <Badge mt={6} variant="light">{approvedCount}/{required} farklı makam onayladı</Badge>}
         </div>
@@ -540,7 +548,7 @@ function DecisionPanel({
         <Checkbox
           checked={agree}
           onChange={(e) => setAgree(e.currentTarget.checked)}
-          label={`Belgenin içeriğini okudum; kararımı ${roleName(roleId)} sıfatıyla veriyorum.`}
+          label={personal ? 'Belgenin içeriğini okudum; kararımı kendi adıma veriyorum.' : `Belgenin içeriğini okudum; kararımı ${roleName(roleId)} sıfatıyla veriyorum.`}
         />
         <Group grow>
           <Button color="green" leftSection={<IconCheck size={16} />} disabled={!agree || !!busy} loading={busy === 'approve'} onClick={() => void decide('approve')}>

@@ -1,3 +1,4 @@
+import { roleChoiceLabel } from '../lib/roleCatalog';
 import { Alert, Button, Checkbox, Group, Modal, Select, Stack, Textarea } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { where } from 'firebase/firestore';
@@ -121,8 +122,8 @@ export function AssignmentModal({
         <Select
           label="Rol"
           data={[
-            { group: 'Kol geneli roller', items: roles.filter((r) => r.active && r.scope === 'branch').map((r) => ({ value: r.id, label: r.name })) },
-            { group: 'Komite / birim rolleri', items: roles.filter((r) => r.active && r.scope === 'unit').map((r) => ({ value: r.id, label: r.name })) },
+            { group: 'Kol geneli roller', items: roles.filter((r) => r.active && r.scope === 'branch').map((r) => ({ value: r.id, label: roleChoiceLabel(r, roles) })) },
+            { group: 'Komite / birim rolleri', items: roles.filter((r) => r.active && r.scope === 'unit').map((r) => ({ value: r.id, label: roleChoiceLabel(r, roles) })) },
           ]}
           value={roleId}
           onChange={setRoleId}

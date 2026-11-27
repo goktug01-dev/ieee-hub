@@ -710,7 +710,8 @@ service cloud.firestore {
       }
 
       function requiredApprovals(step) {
-        return step.get('approvalMode', 'any') == 'all' ? step.roleIds.size()
+        return step.get('recipientMode', 'role') == 'person' ? 1
+          : step.get('approvalMode', 'any') == 'all' ? step.roleIds.size()
           : (step.get('approvalMode', 'any') == 'quorum' ? step.get('requiredApprovals', 1) : 1);
       }
 
@@ -718,7 +719,7 @@ service cloud.firestore {
 
       function draftKeys() {
         return ['templateId', 'templateVersion', 'templateName', 'unitId', 'unitName', 'ownerUid',
-                'ownerName', 'title', 'data', 'status', 'visibleTo', 'createdAt', 'updatedAt'];
+                'ownerName', 'title', 'data', 'status', 'visibleTo', 'stepRecipients', 'createdAt', 'updatedAt'];
       }
 
       function validDraftCreate() {
@@ -734,7 +735,32 @@ service cloud.firestore {
         return p().status == 'draft' && p().ownerUid == me()
           && np().status == 'draft'
           && np().data is map
-          && onlyKeys(['title', 'data', 'unitId', 'unitName', 'templateVersion', 'templateName', 'updatedAt']);
+          && onlyKeys(['title', 'data', 'unitId', 'unitName', 'templateVersion', 'templateName', 'stepRecipients', 'updatedAt']);
+      }
+
+      // Şablonun kişiye imza olarak açtığı adımlara bir aktif üye seçilir.
+      // Makam adımı kişiye çevrilemez; seçilen kişi gönderimden sonra değişmez.
+      function validStepRecipient(i, steps, recipients, visibleTo) {
+        let key = string(i);
+        return i < steps.size() && steps[i].get('recipientMode', 'role') == 'person'
+          ? (key in recipients && recipients[key] is string && recipients[key] != me()
+              && get(docPath('members', recipients[key])).data.status == 'active'
+              && ('uid:' + recipients[key]) in visibleTo)
+          : !(key in recipients);
+      }
+
+      function validStepRecipients() {
+        let recipients = np().get('stepRecipients', {});
+        let steps = np().steps;
+        let visibleTo = np().visibleTo;
+        return recipients is map
+          && recipients.size() <= 3
+          && recipients.keys().hasOnly(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+          && validStepRecipient(0, steps, recipients, visibleTo) && validStepRecipient(1, steps, recipients, visibleTo)
+          && validStepRecipient(2, steps, recipients, visibleTo) && validStepRecipient(3, steps, recipients, visibleTo)
+          && validStepRecipient(4, steps, recipients, visibleTo) && validStepRecipient(5, steps, recipients, visibleTo)
+          && validStepRecipient(6, steps, recipients, visibleTo) && validStepRecipient(7, steps, recipients, visibleTo)
+          && validStepRecipient(8, steps, recipients, visibleTo) && validStepRecipient(9, steps, recipients, visibleTo);
       }
 
       // --- Gönderim (taslak → onayda) ---
@@ -749,6 +775,7 @@ service cloud.firestore {
           && np().data is map
           && np().steps == tmplVersion().steps
           && np().steps.size() > 0
+          && validStepRecipients()
           && unitAllowed()
           && ('uid:' + me()) in np().visibleTo
           && np().visibleTo.size() <= 40;
@@ -829,9 +856,11 @@ service cloud.firestore {
           && a.step == p().currentStep
           && a.revision == p().revision
           && a.unitId == unitKey
-          && a.roleId in step.roleIds
+          && (step.get('recipientMode', 'role') == 'person'
+              ? (p().get('stepRecipients', {}).get(string(p().currentStep), '') == me()
+                  && a.roleId == 'uid:' + me() && a.roleName == 'Kişisel imza')
+              : (a.roleId in step.roleIds && hasRoleKey(unitKey + '__' + a.roleId)))
           && !(a.roleId in oldRoles)
-          && hasRoleKey(unitKey + '__' + a.roleId)
           && validApprovalData(step)
           && np().updatedAt == request.time
           && (np().notes.size() == p().notes.size()
@@ -1231,7 +1260,7 @@ service cloud.firestore {
 
     function approvedPetitionFor(pid, unitId) {
       let p = get(docPath('petitions', pid)).data;
-      return p.status == 'approved' && p.unitId == unitId;
+      return p.status == 'approved' && p.unitId == unitId && p.get('stepRecipients', {}).size() == 0;
     }
 
     match /events/{id} {
