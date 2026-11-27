@@ -38,7 +38,7 @@
     "smoke:push": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-push.mjs\""
   },
   "dependencies": {
-    "nodemailer": "^10.5.0",
+    "nodemailer": "^10.6.1",
     "web-push": "^4.0.0"
   }
 }
