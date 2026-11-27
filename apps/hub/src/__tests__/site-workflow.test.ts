@@ -30,6 +30,11 @@ describe('Hub → site iş akışı',()=>{
     mock.sources.set('events/e',event);mock.sources.set('eventPointRequests/e',p);await publishSiteSource(config,'qr','e');expect(mock.writes).not.toHaveBeenCalled();
     mock.sources.set('eventPointRequests/e',{...p,status:'approved'});await publishSiteSource(config,'qr','e');const changes=mock.writes.mock.calls[0][1];expect(changes['committee_qrs/site-cs/hub-event-e'].puan).toBe(20);expect(changes['valid_qrs/hub-event-e']).toMatchObject({puan:20,active:true,committeeId:'site-cs'});
   });
+  it('komiteye geri gönderilen öneri için QR oluşturmaz; ACTOR’ün değiştirdiği puanı yazar',async()=>{
+    const p={points:20,status:'returned',actorNote:'Gerekçe eksik',expiresAt:Timestamp.fromMillis(Date.now()+86400000),createdAt:Timestamp.fromMillis(1),updatedAt:Timestamp.fromMillis(2)};
+    mock.sources.set('events/e',event);mock.sources.set('eventPointRequests/e',p);await publishSiteSource(config,'qr','e');expect(mock.writes).not.toHaveBeenCalled();
+    mock.sources.set('eventPointRequests/e',{...p,status:'approved',points:35,proposedPoints:20});await publishSiteSource(config,'qr','e');const changes=mock.writes.mock.calls[0][1];expect(changes['valid_qrs/hub-event-e'].puan).toBe(35);expect(changes['committee_qrs/site-cs/hub-event-e'].puan).toBe(35);
+  });
   it('başarısız aktarımı görünür kaydeder, sonraki denemede gönderir',async()=>{
     mock.sources.set('events/e',event);mock.writes.mockRejectedValueOnce(new Error('permission-denied'));await expect(publishSiteSource(config,'event','e')).rejects.toThrow('permission-denied');expect(mock.receipts.mock.calls[0][1].status).toBe('failed');await publishSiteSource(config,'event','e');expect(mock.receipts.mock.lastCall?.[1].status).toBe('synced');
   });

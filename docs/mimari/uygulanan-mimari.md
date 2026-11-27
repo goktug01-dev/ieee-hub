@@ -66,7 +66,7 @@ flowchart LR
 | `decisionCounters/{kurul_yıl}` | Kurul ve yıl bazlı boşluksuz karar sayacı | Aktif üye | Kararla aynı işlemde yalnız +1 |
 | `externalIntegrations/firebase` | Harici Firebase web yapılandırması, site yolları ve birim/komite eşlemesi; gizli anahtar içermez | Site işlem yetkilileri | `external.firebase.manage` |
 | `siteAnnouncements/{id}` | Hub kaynaklı site duyurusu, geri çekme ve değişmez ilk yazar | YK başkanı/yardımcısı veya duyuru yetkilisi | Aynı yetkili; silinmez |
-| `eventPointRequests/{eventId}` | Komitenin puan önerisi ve ACTOR doğrulaması | Aktif üye | Etkinlik sahibi/yöneticisi önerir; ACTOR doğrular/kapatır; puan değişmez |
+| `eventPointRequests/{eventId}` | Komitenin puan önerisi, ACTOR geri gönderme notu ve doğrulaması (`proposedPoints` komitenin ilk önerisi) | Aktif üye | Etkinlik sahibi/yöneticisi önerir, geri gönderileni düzeltip yeniden gönderir; ACTOR gerekçeyle puanı değiştirerek doğrular, geri gönderir veya kapatır; doğrulanan puan değişmez (ADR-0045) |
 | `siteSync/{kind__id}` | Kaynak sürümüne bağlı site aktarım makbuzu; onay yerine geçmez | Aktif üye | İlgili site işlem yetkilisi |
 | `statutes/current` | Herkese açık güncel tüzük üstverisi | Herkes | Organizasyon yöneticisi / Genel Sekreter |
 | `statuteVersions/{id}` + `chunks` | Değiştirilemez PDF/Word tüzük sürümü ve dosya parçaları | Herkes | Organizasyon yöneticisi / Genel Sekreter; yalnız oluşturma |

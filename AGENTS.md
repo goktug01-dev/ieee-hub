@@ -4,6 +4,7 @@ Bu dosya, bu depoda çalışacak **AI asistanları** (Claude Code, Codex, Cursor
 
 ## Güncel devam noktası (2026-11-11)
 
+- 2026-11-27: Arayüz yenilemesi `feat/arayuz-yenileme` dalında. ACTOR bekleyen puan önerisini gerekçeyle değiştirerek doğrulayabilir veya komiteye geri gönderebilir; komite geri geleni düzeltip yeniden gönderir, doğrulanan puan yine değişmez (ADR-0045). `npm run smoke:actor` bu akışı demo emülatöründe sınar. Kaydırılarak gizlenen üst çubuk/yan menü `inert` yapıldı; aksi halde masaüstünde iki "Kullanıcı menüsü" düğmesi erişilebilir kalıyordu.
 - 2026-11-12 mail incelemesi: bazı kişilere mail gitmediği bildirildi. Son çalışmalarda SMTP hatası yok; zamanlama arasında saatlik boşluklar var. Eksik alıcı/boş makam ilk 24 saat yeniden kontrol edilir; eski işlenmiş işler üyeler kaydolduktan sonra yönetici tarafından yeniden kuyruğa alınır. Atanmış iş örneği verildi fakat kişinin canlı alıcı kaydı görülmedi; bunun her eksik mailin kesin nedeni olduğu söylenmemeli.
 - Kullanıcı gecikmeli Web Push'u mevcut ücretsiz yapıyla ve girişte otomatik izin çağrısıyla onayladı (ADR-0044). VAPID anahtarı GitHub Secrets/variable içine kuruldu. Hub kurum ayarından servis açılmalı; gerçek cihaz izni ve teslimi ayrıca doğrulanmalı. Otomatik çağrı girişte görünür, sistem izni yalnız düğmeye dokununca istenir. `test:push`, `smoke:push`, kural ve e2e testleri vardır. Mail erişimi ve MAIL_ENABLED iki kanalın ortak ana durdurma denetimidir.
 

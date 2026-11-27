@@ -17,7 +17,7 @@ export function InboxPage() {
       ) : waiting.length === 0 ? (
         <EmptyState title="Her şey yolunda" description="Şu anda onayınızı bekleyen dilekçe yok." />
       ) : (
-        <Stack gap="xs">
+        <Stack gap={0} style={{ borderTop: '1px solid var(--hub-ink)' }}>
           {waiting.map((p) => (
             <PetitionRow key={p.id} p={p} />
           ))}
