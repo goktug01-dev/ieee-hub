@@ -331,7 +331,8 @@ export function AppLayout() {
     >
       <MailRegistration />
       <PushPermissionPrompt />
-      <AppShell.Header className="hub-header">
+      {/* Kaydırılarak gizlenen alan ekran okuyucu ve klavye odağından da çıkarılır. */}
+      <AppShell.Header className="hub-header" inert={isDesktop} aria-hidden={isDesktop || undefined}>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} size="sm" aria-label="Menüyü aç" />
@@ -353,7 +354,7 @@ export function AppLayout() {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar className="hub-side">
+      <AppShell.Navbar className="hub-side" inert={!isDesktop && !opened} aria-hidden={(!isDesktop && !opened) || undefined}>
         <AppShell.Section className="hub-side-top">
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Brand name={publicSettings.orgShortName} logo={publicSettings.logoDataUrl} onNavigate={close} />

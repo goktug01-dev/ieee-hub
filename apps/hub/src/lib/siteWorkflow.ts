@@ -13,9 +13,13 @@ export interface SiteAnnouncement {
 }
 export interface EventPoints {
   eventId: string; unitId: string; points: number; note: string;
-  status: 'requested' | 'approved' | 'closed'; expiresAt: Timestamp;
+  status: 'requested' | 'returned' | 'approved' | 'closed'; expiresAt: Timestamp;
   requestedBy: string; createdAt: Timestamp; updatedAt: Timestamp;
   approvedBy?: string; approvedAt?: Timestamp;
+  /** ACTOR puanı değiştirerek doğruladıysa komitenin ilk önerisi. */
+  proposedPoints?: number;
+  /** ACTOR'ün son gerekçesi: geri gönderme veya puan değişikliği. */
+  actorNote?: string; returnedBy?: string; returnedAt?: Timestamp;
 }
 export type SiteKind = 'event' | 'announcement' | 'qr';
 export interface SiteSyncStatus {
@@ -40,16 +44,39 @@ export async function saveSiteAnnouncement(id: string | null, data: Pick<SiteAnn
   const target = makeDoc(collection(db, 'siteAnnouncements'));
   await setDoc(target, { ...data, createdBy: auth.currentUser!.uid, createdAt: serverTimestamp(), updatedBy: auth.currentUser!.uid, updatedAt: serverTimestamp() });
 }
-export async function proposeEventPoints(id: string, e: HubEvent, points: number, note: string, expiresAt: Date) {
+function checkPoints(points: number) {
   if (!Number.isInteger(points) || points < 0 || points > 100000) throw new Error('Puan 0–100000 arasında tam sayı olmalı.');
+}
+/** Komite ilk öneriyi gönderir veya ACTOR'ün geri gönderdiği öneriyi düzelterek yeniden gönderir. */
+export async function proposeEventPoints(id: string, e: HubEvent, points: number, note: string, expiresAt: Date, resubmit = false) {
+  checkPoints(points);
   if (!note.trim()) throw new Error('Komitenin puan gerekçesini yazın.');
   if (!eventIsPublic(e) || ['held', 'closing', 'reported', 'archived'].includes(e.status) || expiresAt.getTime() <= Date.now()) throw new Error('QR önerisi onaylı ve henüz bitmemiş etkinlik için yapılabilir.');
   if (e.endsAt && (Date.parse(e.endsAt) <= Date.now() || expiresAt.getTime() > Date.parse(e.endsAt))) throw new Error('QR son kullanım zamanı etkinlik bitişini aşamaz.');
-  await setDoc(doc(db, 'eventPointRequests', id), { eventId: id, unitId: e.unitId, points, note: note.trim(), expiresAt: Timestamp.fromDate(expiresAt), status: 'requested', requestedBy: auth.currentUser!.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  const fields = { points, note: note.trim(), expiresAt: Timestamp.fromDate(expiresAt), status: 'requested', requestedBy: auth.currentUser!.uid, updatedAt: serverTimestamp() };
+  if (resubmit) {
+    const { updateDoc } = await import('firebase/firestore');
+    return updateDoc(doc(db, 'eventPointRequests', id), fields);
+  }
+  await setDoc(doc(db, 'eventPointRequests', id), { eventId: id, unitId: e.unitId, ...fields, createdAt: serverTimestamp() });
 }
-export async function decideEventPoints(id: string, close = false) {
+/** ACTOR doğrular; puanı değiştirirse gerekçe zorunludur ve komite önerisi saklanır. */
+export async function approveEventPoints(id: string, current: Pick<EventPoints, 'points'>, points: number, actorNote: string) {
+  checkPoints(points);
   const { updateDoc } = await import('firebase/firestore');
-  await updateDoc(doc(db, 'eventPointRequests', id), close ? { status: 'closed', updatedAt: serverTimestamp() } : { status: 'approved', approvedBy: auth.currentUser!.uid, approvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  const base = { status: 'approved', approvedBy: auth.currentUser!.uid, approvedAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  if (points === current.points) return updateDoc(doc(db, 'eventPointRequests', id), base);
+  if (!actorNote.trim()) throw new Error('Puanı değiştirdiyseniz gerekçesini yazın.');
+  await updateDoc(doc(db, 'eventPointRequests', id), { ...base, points, proposedPoints: current.points, actorNote: actorNote.trim() });
+}
+export async function returnEventPoints(id: string, actorNote: string) {
+  if (!actorNote.trim()) throw new Error('Komiteye geri gönderme gerekçesini yazın.');
+  const { updateDoc } = await import('firebase/firestore');
+  await updateDoc(doc(db, 'eventPointRequests', id), { status: 'returned', actorNote: actorNote.trim(), returnedBy: auth.currentUser!.uid, returnedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+export async function closeEventPoints(id: string) {
+  const { updateDoc } = await import('firebase/firestore');
+  await updateDoc(doc(db, 'eventPointRequests', id), { status: 'closed', updatedAt: serverTimestamp() });
 }
 
 /** Uzak kurallar Hub rollerini okuyamaz; her operatör site hesabıyla ayrıca yetkilidir. */
@@ -80,7 +107,7 @@ export async function publishSiteSource(config: ExternalFirebaseConfig, kind: Si
         if (Object.keys(payload).some(k => JSON.stringify(previous?.[k]) !== JSON.stringify(payload[k as keyof typeof payload])) || !!previous?.link && !d.link) writes[path] = payload;
       } else if (previous) writes[path] = null;
     } else {
-      if (d.status === 'requested') return;
+      if (d.status !== 'approved' && d.status !== 'closed') return;
       remoteId = `hub-event-${id}`;
       const event = await getDocFromServer(doc(db, 'events', id));
       if (!event.exists()) throw new Error('QR etkinliği bulunamadı.');

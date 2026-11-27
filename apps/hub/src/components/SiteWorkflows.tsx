@@ -6,7 +6,7 @@ import type { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../auth/AuthContext';
 import { useCollection, useDoc } from '../lib/hooks';
 import { SiteConnection, useSite } from '../lib/siteIntegration';
-import { decideEventPoints, eventIsPublic, proposeEventPoints, saveSiteAnnouncement, siteQrController, type EventPoints, type SiteAnnouncement, type SiteSyncStatus } from '../lib/siteWorkflow';
+import { approveEventPoints, closeEventPoints, eventIsPublic, proposeEventPoints, returnEventPoints, saveSiteAnnouncement, siteQrController, type EventPoints, type SiteAnnouncement, type SiteSyncStatus } from '../lib/siteWorkflow';
 import { readExternalPointUsers, writeExternalMembershipChanges, type ExternalPointUser } from '../lib/externalFirebase';
 import type { HubEvent } from '../lib/opsTypes';
 import { EmptyState, ErrorAlert, SectionLoader, notifyError, notifySuccess } from './ui';
@@ -34,6 +34,16 @@ export function SiteAnnouncementsPanel() {
   </Stack>;
 }
 
+export const eventPointsStatusLabel: Record<EventPoints['status'], string> = { requested: 'ACTOR onayı bekliyor', returned: 'Komiteye geri gönderildi', approved: 'ACTOR doğruladı', closed: 'QR kapatıldı' };
+export const eventPointsStatusColor: Record<EventPoints['status'], string> = { requested: 'yellow', returned: 'orange', approved: 'teal', closed: 'gray' };
+
+/** ACTOR notunun hangi işleme ait olduğunu belirtir; yeniden gönderilen öneride eski geri gönderme notu kalır. */
+export function actorNoteLabel(p: EventPoints) {
+  if (p.status === 'returned') return 'ACTOR’ün geri gönderme gerekçesi';
+  if (p.proposedPoints !== undefined) return 'ACTOR’ün puan değişikliği gerekçesi';
+  return 'Önceki geri gönderme gerekçesi';
+}
+
 export function EventPointsPanel({ id, event, canManage }: { id: string; event: HubEvent; canManage: boolean }) {
   const { access } = useAuth();
   const { config, user } = useSite();
@@ -42,17 +52,46 @@ export function EventPointsPanel({ id, event, canManage }: { id: string; event: 
   const isActor = siteQrController(access);
   const [points, setPoints] = useState<number | string>(0), [note, setNote] = useState('');
   const [expiresAt, setExpiresAt] = useState<string | null>(event.endsAt || (event.startsAt ? new Date(Date.parse(event.startsAt) + 86400000).toISOString() : null));
+  const [actorPoints, setActorPoints] = useState<number | string>(''), [actorNote, setActorNote] = useState('');
   const [busy, setBusy] = useState(false), [image, setImage] = useState('');
   const p = request.data;
+  // Geri gönderilen öneride komite formu mevcut değerlerle açılır; ACTOR formu önerilen puanla başlar.
+  const version = p?.updatedAt?.toMillis();
+  useEffect(() => {
+    if (!p) return;
+    setActorPoints(p.points); setActorNote('');
+    if (p.status === 'returned') { setPoints(p.points); setNote(p.note); setExpiresAt(p.expiresAt.toDate().toISOString()); }
+  }, [version]);
   const ended = ['held', 'closing', 'reported', 'archived', 'cancelled', 'rejected'].includes(event.status) || !!event.endsAt && Date.parse(event.endsAt) <= Date.now();
   const action = async (fn: () => Promise<unknown>, msg: string) => { setBusy(true); try { await fn(); notifySuccess(msg); } catch (e) { notifyError(e); } finally { setBusy(false); } };
-  return <Stack><Alert color="blue" title="Komite önerisi → ACTOR doğrulaması → Puan QR’ı">Etkinlik puanını komite önerir; ACTOR doğrular ve QR’ı oluşturur. Onaylanan puan değiştirilemez. Etkinlik bitince QR yeni puan işlemlerine kapanır.</Alert>
+  const changed = !!p && actorPoints !== '' && Number(actorPoints) !== p.points;
+  const proposalForm = (resubmit: boolean) => <Card withBorder><Stack>
+    <NumberInput label="Komitenin önerdiği aktiflik puanı" min={0} max={100000} allowDecimal={false} value={points} onChange={setPoints} />
+    <Textarea label="Puan gerekçesi" required value={note} onChange={e => setNote(e.currentTarget.value)} />
+    <DateTimePicker label="QR son kullanım zamanı" value={expiresAt} onChange={setExpiresAt} />
+    <Button loading={busy} disabled={!expiresAt || !note.trim()} onClick={() => void action(() => proposeEventPoints(id, event, Number(points), note, new Date(expiresAt!), resubmit), resubmit ? 'Düzeltilen öneri yeniden ACTOR doğrulamasına gönderildi.' : 'Puan önerisi ACTOR doğrulamasına gönderildi.')}>{resubmit ? 'Düzeltip yeniden gönder' : 'ACTOR doğrulamasına gönder'}</Button>
+  </Stack></Card>;
+  return <Stack><Alert color="blue" title="Komite önerisi → ACTOR doğrulaması → Puan QR’ı">Etkinlik puanını komite önerir. ACTOR öneriyi olduğu gibi doğrulayabilir, puanı gerekçesiyle değiştirerek doğrulayabilir ya da düzeltilmesi için komiteye geri gönderebilir. Doğrulanan puan değiştirilemez. Etkinlik bitince QR yeni puan işlemlerine kapanır.</Alert>
     {isActor && <SiteConnection />}<ErrorAlert error={request.error} />
-    {!eventIsPublic(event) ? <Text>Önce etkinliğin YK / izin dilekçesi onayı tamamlanmalı.</Text> : request.loading ? <SectionLoader /> : !p ? canManage && !ended ? <Card withBorder><Stack><NumberInput label="Komitenin önerdiği aktiflik puanı" min={0} max={100000} allowDecimal={false} value={points} onChange={setPoints} /><Textarea label="Puan gerekçesi" required value={note} onChange={e => setNote(e.currentTarget.value)} /><DateTimePicker label="QR son kullanım zamanı" value={expiresAt} onChange={setExpiresAt} /><Button loading={busy} disabled={!expiresAt || !note.trim()} onClick={() => void action(() => proposeEventPoints(id, event, Number(points), note, new Date(expiresAt!)), 'Puan önerisi ACTOR doğrulamasına gönderildi.')}>ACTOR doğrulamasına gönder</Button></Stack></Card> : <Text>Puan önerisi bulunmuyor.</Text> : <Card withBorder><Stack><Group><Text fw={700}>{p.points} puan</Text><Badge>{p.status === 'requested' ? 'ACTOR onayı bekliyor' : p.status === 'approved' ? 'ACTOR doğruladı' : 'QR kapatıldı'}</Badge>{p.status !== 'requested' && <SitePublicationStatus kind="qr" id={id} version={p.updatedAt} />}</Group><Text>{p.note}</Text><Text size="sm">QR son kullanım: {p.expiresAt.toDate().toLocaleString('tr-TR')}</Text>
-      {isActor && p.status === 'requested' && <Button loading={busy} disabled={ended || p.expiresAt.toMillis() <= Date.now()} onClick={() => void action(() => decideEventPoints(id), 'ACTOR doğrulaması kaydedildi; puan QR’ı siteye oluşturulacak.')}>Puanı doğrula ve QR oluştur</Button>}
-      {isActor && p.status === 'approved' && <Button color="orange" variant="light" loading={busy} onClick={() => void action(() => decideEventPoints(id, true), 'QR kapatıldı; siteye aktarılacak.')}>QR’ı kapat</Button>}
+    {!eventIsPublic(event) ? <Text>Önce etkinliğin YK / izin dilekçesi onayı tamamlanmalı.</Text> : request.loading ? <SectionLoader /> : !p ? canManage && !ended ? proposalForm(false) : <Text>Puan önerisi bulunmuyor.</Text> : <Stack><Card withBorder><Stack>
+      <Group><Text fw={700}>{p.points} puan</Text><Badge color={eventPointsStatusColor[p.status]}>{eventPointsStatusLabel[p.status]}</Badge>{(p.status === 'approved' || p.status === 'closed') && <SitePublicationStatus kind="qr" id={id} version={p.updatedAt} />}</Group>
+      {p.proposedPoints !== undefined && <Text size="sm" c="dimmed">Komite önerisi {p.proposedPoints} puandı; ACTOR {p.points} puan olarak doğruladı.</Text>}
+      <Text>{p.note}</Text>
+      {p.actorNote && <Alert color={p.status === 'returned' ? 'orange' : 'gray'} title={actorNoteLabel(p)}><Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{p.actorNote}</Text></Alert>}
+      <Text size="sm">QR son kullanım: {p.expiresAt.toDate().toLocaleString('tr-TR')}</Text>
+      {isActor && p.status === 'requested' && <Stack gap="xs">
+        <NumberInput label="ACTOR’ün belirlediği puan" description="Komite önerisiyle aynı bırakırsanız öneri olduğu gibi doğrulanır." min={0} max={100000} allowDecimal={false} value={actorPoints} onChange={setActorPoints} />
+        <Textarea label="ACTOR gerekçesi" description="Puanı değiştirirken veya komiteye geri gönderirken zorunludur." autosize minRows={2} maxLength={5000} value={actorNote} onChange={e => setActorNote(e.currentTarget.value)} />
+        <Group>
+          <Button loading={busy} disabled={ended || p.expiresAt.toMillis() <= Date.now() || actorPoints === '' || (changed && !actorNote.trim())} onClick={() => void action(() => approveEventPoints(id, p, Number(actorPoints), actorNote), 'ACTOR doğrulaması kaydedildi; puan QR’ı siteye oluşturulacak.')}>{changed ? `${actorPoints} puan olarak doğrula ve QR oluştur` : 'Puanı doğrula ve QR oluştur'}</Button>
+          <Button color="orange" variant="light" loading={busy} disabled={!actorNote.trim()} onClick={() => void action(() => returnEventPoints(id, actorNote), 'Öneri gerekçesiyle komiteye geri gönderildi.')}>Komiteye geri gönder</Button>
+        </Group>
+      </Stack>}
+      {isActor && p.status === 'approved' && <Button color="orange" variant="light" loading={busy} onClick={() => void action(() => closeEventPoints(id), 'QR kapatıldı; siteye aktarılacak.')}>QR’ı kapat</Button>}
       {isActor && p.status === 'approved' && !ended && p.expiresAt.toMillis() > Date.now() && <Button variant="light" disabled={!user || !config || sync.data?.status !== 'synced' || !sync.data.sourceUpdatedAt?.isEqual(p.updatedAt)} onClick={async () => { try { const template = config?.siteQrUrlTemplate || 'https://studentbranches.ieee.org/tr-ikcu/profile/?qr_id={qrId}'; const link = template.replaceAll('{qrId}', encodeURIComponent(`hub-event-${id}`)).replaceAll('{committeeId}', encodeURIComponent(config?.siteUnitMap?.[event.unitId] || '')); const url = new URL(link); if (!['https:', 'http:'].includes(url.protocol) || !template.includes('{qrId}')) throw new Error('TechOps geçerli bir QR bağlantı şablonu tanımlamalı.'); setImage(await QRCode.toDataURL(url.href)); } catch (e) { notifyError(e); } }}>Puan QR’ını görüntüle</Button>}
-    </Stack></Card>}
+    </Stack></Card>
+    {p.status === 'returned' && (canManage && !ended ? proposalForm(true) : <Text size="sm">Etkinlik sorumluları öneriyi düzeltip yeniden gönderebilir.</Text>)}
+    </Stack>}
     <Modal opened={!!image} onClose={() => setImage('')} title="Etkinlik puan QR’ı"><Stack><img src={image} alt="Puan QR’ı" /><Button component="a" href={image} download={`${event.code}-puan-qr.png`}>PNG indir</Button></Stack></Modal>
   </Stack>;
 }
