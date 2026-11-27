@@ -1,6 +1,7 @@
 import { deleteApp, getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
 import {
   GoogleAuthProvider,
+  connectAuthEmulator,
   browserSessionPersistence,
   getAuth,
   setPersistence,
@@ -11,6 +12,7 @@ import {
 } from 'firebase/auth';
 import {
   getDatabase,
+  connectDatabaseEmulator,
   get as getRealtime,
   push as pushRealtime,
   ref,
@@ -23,6 +25,7 @@ import {
 import {
   Timestamp,
   collection,
+  connectFirestoreEmulator,
   deleteDoc,
   doc,
   getDocs,
@@ -33,6 +36,8 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import type { ExternalFirebaseConfig, ExternalFirebaseResource } from './opsTypes';
+import { useEmulators } from '../firebase';
+import type { SiteAccessInfo } from './siteConnection';
 
 export interface ExternalRecord {
   id: string;
@@ -88,14 +93,23 @@ export function externalServices(config: ExternalFirebaseConfig): ExternalServic
     appId: config.appId,
     ...(config.databaseURL ? { databaseURL: config.databaseURL } : {}),
   };
-  const app = getApps().some((item) => item.name === name) ? getApp(name) : initializeApp(options, name);
-  return { app, auth: getAuth(app), firestore: getFirestore(app), realtime: config.databaseURL ? getDatabase(app) : null };
+  const existing = getApps().some((item) => item.name === name);
+  const app = existing ? getApp(name) : initializeApp(options, name);
+  const services = { app, auth: getAuth(app), firestore: getFirestore(app), realtime: config.databaseURL ? getDatabase(app) : null };
+  if (!existing && useEmulators && config.projectId.startsWith('demo-')) {
+    connectAuthEmulator(services.auth, `http://127.0.0.1:${import.meta.env.VITE_AUTH_EMULATOR_PORT || 9099}`, { disableWarnings: true });
+    connectFirestoreEmulator(services.firestore, '127.0.0.1', Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT || 8085));
+    if (services.realtime) connectDatabaseEmulator(services.realtime, '127.0.0.1', Number(import.meta.env.VITE_SITE_DATABASE_EMULATOR_PORT || 9006));
+  }
+  return services;
 }
 
 export async function connectExternalGoogle(config: ExternalFirebaseConfig) {
   const { auth } = externalServices(config);
   await setPersistence(auth, browserSessionPersistence);
-  return signInWithPopup(auth, new GoogleAuthProvider());
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return signInWithPopup(auth, provider);
 }
 
 export async function connectExternalEmail(config: ExternalFirebaseConfig, email: string, password: string) {
@@ -111,7 +125,24 @@ export async function disconnectExternal(config: ExternalFirebaseConfig) {
 export async function resetExternalConnection(projectId: string) {
   const name = appName(projectId);
   const app = getApps().find((item) => item.name === name);
-  if (app) await deleteApp(app);
+  if (app) { await signOut(getAuth(app)); await deleteApp(app); }
+}
+
+/** Yalnız oturum sahibinin site yetkileri ve yönetici kaydı okunur. Uzak kurallar nihai denetimdir. */
+export async function readSiteAccess(config: ExternalFirebaseConfig, uid: string): Promise<SiteAccessInfo> {
+  const { realtime } = externalServices(config);
+  if (!realtime) throw new Error('Site Realtime Database adresi yapılandırılmamış.');
+  const [grants, roles, ownRoles, key] = await Promise.allSettled([
+    getRealtime(ref(realtime, `site_access/${uid}`)), getRealtime(ref(realtime, `roles_by_uid/${uid}`)),
+    getRealtime(ref(realtime, `users/${uid}/roles`)), getRealtime(ref(realtime, `user_key_by_uid/${uid}`)),
+  ]);
+  if (grants.status === 'rejected') throw grants.reason;
+  let admin = roles.status === 'fulfilled' && roles.value.val()?.admin === true || ownRoles.status === 'fulfilled' && ownRoles.value.val()?.admin === true;
+  if (!admin && key.status === 'fulfilled' && typeof key.value.val() === 'string') {
+    const mapped = await getRealtime(ref(realtime, `users/${key.value.val()}/roles`)).catch(() => null);
+    admin = mapped?.val()?.admin === true;
+  }
+  return { grants: Object.fromEntries(Object.entries(grants.value.val() ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))), admin };
 }
 
 function plain(value: unknown): unknown {

@@ -122,6 +122,8 @@ Her geçişin kuralı `firebase/firestore.rules` içindeki `petitions` bloğunda
 
 Harici IEEE Puan görünümü `users/*/sadakat`, üyelik onayı, yaşam boyu toplamlar ve `leaderboard_public` önbelleğini uzak RTDB içinde yönetir. Toplu sıfırlama yalnız güncel puanı sıfırlar; puan veya üyelik değişikliği, sıralama ve `admin_point_audit` kaydı tek çok-yollu RTDB güncellemesidir. Bu kişisel veriler Hub Firestore'una kopyalanmaz (ADR-0035).
 
+Site bağlantısı ortak oturum kartında kullanıcının kendi `site_access/{uid}` ve yönetici kayıtlarını okur. Giriş, eksik/süresi dolmuş işlem yetkisi ve başarılı aktarım ayrı gösterilir. QR için yönetici olmak yeterli değildir; süreli QR izni gerekir. Sayfa geçişi site oturumunu kapatmaz; Hub çıkışı veya hesap değişimi kapatır. Kurulum komiteleri site adlarıyla eşler, ham veri bakımı ayrı sekmededir (ADR-0048). vTools hazırlığı mevcut etkinlik/kapanış verisini kullanır; resmî IEEE gönderimi kullanıcı tarafından vTools’ta tamamlanır ve Hub’da ayrıca takip edilir.
+
 Etkinlik takvimi ayrı bir koleksiyona kopya yazmaz. Tarihi bulunan onaylı/süreçteki `events` kayıtlarını canlı sorgudan gösterir; onaylanan etkinlik bu nedenle otomatik görünür. Aynı görünüm standart iCalendar (`.ics`) dışa aktarımı üretir (ADR-0036).
 
 ## 6. Seçim durum makinesi

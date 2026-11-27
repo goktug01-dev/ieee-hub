@@ -97,7 +97,7 @@ export function hubNavigation(access: Access | null, unitId: string | null, wait
         ] : []),
         ...(can('templates.manage') ? [{ to: '/yonetim/sablonlar', label: 'Dilekçe şablonları', description: 'Word şablonları, form alanları ve onay zincirleri.', icon: IconTemplate }] : []),
         ...(can('inventory.manage') ? [{ to: '/yonetim/envanter', label: 'Dijital sistem envanteri', description: 'Yazılımlar, hesap erişimleri, veri envanteri ve teknik riskler.', icon: IconServer, keywords: 'techops kurtarma' }] : []),
-        ...(can('external.firebase.manage') ? [{ to: '/yonetim/harici-firebase', label: 'Harici Firebase', description: 'Web sitesi bağlantıları ve uzak veri yönetimi.', icon: IconDatabaseCog, keywords: 'entegrasyon site' }] : []),
+        ...(can('external.firebase.manage') ? [{ to: '/yonetim/harici-firebase', label: 'Web sitesi bağlantısı', description: 'Studentbranches bağlantısı, komite eşlemesi ve site yetkileri.', icon: IconDatabaseCog, keywords: 'harici firebase entegrasyon site kurulum' }] : []),
         ...(can('audit.read') ? [{ to: '/yonetim/denetim', label: 'Denetim kaydı', description: 'Sistemde yapılan işlemlerin geçmişini inceleyin.', icon: IconHistory }] : []),
       ],
     },

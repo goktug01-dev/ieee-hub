@@ -1,18 +1,17 @@
-import { ActionIcon, Alert, Badge, Button, Card, Checkbox, Code, Group, Modal, NumberInput, PasswordInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput, Textarea, Title } from '@mantine/core';
+import { Accordion, Tabs, ActionIcon, Alert, Badge, Button, Card, Checkbox, Code, Group, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput, Textarea, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { IconDownload, IconEdit, IconPlus, IconRefresh, IconRestore, IconTrash, IconUserCheck, IconUserX } from '@tabler/icons-react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
+import { SiteConnection, useSite } from '../../lib/siteIntegration';
+import { externalConfigIssues, siteConnectionError } from '../../lib/siteConnection';
+import { siteQrController } from '../../lib/siteWorkflow';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, ErrorAlert, PageHeader, SectionLoader, notifyError, notifySuccess } from '../../components/ui';
 import { db } from '../../firebase';
 import {
-  connectExternalEmail,
-  connectExternalGoogle,
   deleteExternalRecord,
-  disconnectExternal,
-  externalServices,
   fieldValue,
   externalPointUserIssues,
   parseExternalData,
@@ -38,13 +37,14 @@ const emptyConfig = (): ConfigDraft => ({ apiKey: '', authDomain: '', projectId:
 const resourceId = () => crypto.randomUUID();
 
 export function ExternalFirebasePage() {
-  const { user } = useAuth();
+  const { user, access, can } = useAuth();
+  const { user: externalUser } = useSite();
+  const [params, setParams] = useSearchParams();
+  const tab = ['kurulum', 'veriler'].includes(params.get('sekme') ?? '') ? params.get('sekme')! : 'baglanti';
+  const setTab = (value: string | null) => setParams(value && value !== 'baglanti' ? { sekme: value } : {});
   const stored = useDoc<ExternalFirebaseConfig>('externalIntegrations/firebase');
   const [configDraft, setConfigDraft] = useState<ConfigDraft>(emptyConfig());
   const [configDirty, setConfigDirty] = useState(false);
-  const [externalUser, setExternalUser] = useState<User | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [records, setRecords] = useState<ExternalRecord[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
@@ -63,10 +63,6 @@ export function ExternalFirebasePage() {
   }, [stored.data, configDirty]);
 
   const configured = !!stored.data?.apiKey && !!stored.data?.projectId && !!stored.data?.appId;
-  useEffect(() => {
-    if (!configured || !stored.data) { setExternalUser(null); return; }
-    return onAuthStateChanged(externalServices(stored.data).auth, setExternalUser);
-  }, [configured, connectionKey]);
   const selected = stored.data?.resources?.find((item) => item.id === selectedId) ?? null;
   useEffect(() => { setEditor(null); setQrImage(null); }, [selectedId, externalUser?.uid, connectionKey]);
 
@@ -77,12 +73,13 @@ export function ExternalFirebasePage() {
     catch (error) { setRecords([]); setResourceError(error as Error); }
     finally { setLoadingRecords(false); }
   };
-  useEffect(() => { if (externalUser && selected && selected.preset !== 'points-users') void load(); else setRecords([]); }, [externalUser?.uid, selected?.id]);
+  useEffect(() => { if (tab === 'veriler' && externalUser && selected && selected.preset !== 'points-users') void load(); else setRecords([]); }, [tab, externalUser?.uid, selected?.id, connectionKey]);
 
   const updateConfig = <K extends keyof ConfigDraft>(key: K, value: ConfigDraft[K]) => { setConfigDraft((current) => ({ ...current, [key]: value })); setConfigDirty(true); };
   const updateResource = (index: number, patch: Partial<ExternalFirebaseResource>) => updateConfig('resources', configDraft.resources.map((item, i) => i === index ? { ...item, ...patch } : item));
   const saveConfig = async () => {
-    if (!configDraft.apiKey.trim() || !configDraft.authDomain.trim() || !configDraft.projectId.trim() || !configDraft.appId.trim()) return;
+    const issues = externalConfigIssues(configDraft);
+    if (issues.length) return notifyError(new Error(issues.join(' ')));
     if (configDraft.resources.some((item) => !item.label.trim() || !item.path.trim())) return notifyError(new Error('Her veri görünümünün adı ve yolu dolu olmalı.'));
     setBusy(true);
     try {
@@ -91,13 +88,10 @@ export function ExternalFirebasePage() {
       if (stored.data?.projectId && previousConnection !== nextConnection) await resetExternalConnection(stored.data.projectId);
       await setDoc(doc(db, 'externalIntegrations', 'firebase'), { ...configDraft, updatedBy: user!.uid, updatedAt: serverTimestamp() });
       setConfigDirty(false);
-      if (previousConnection !== nextConnection) setExternalUser(null);
-      notifySuccess('Harici Firebase bağlantı ayarı kaydedildi.');
+      notifySuccess('Web sitesi bağlantı ayarı kaydedildi.');
     } catch (error) { notifyError(error); } finally { setBusy(false); }
   };
 
-  const signInGoogle = async () => { if (stored.data) try { await connectExternalGoogle(stored.data); } catch (error) { notifyError(error); } };
-  const signInEmail = async () => { if (stored.data) try { await connectExternalEmail(stored.data, email, password); setPassword(''); } catch (error) { notifyError(error); } };
   const saveRecord = async () => {
     if (!stored.data || !selected || !editor) return;
     setBusy(true);
@@ -134,13 +128,28 @@ export function ExternalFirebasePage() {
   };
   if (stored.loading) return <SectionLoader />;
   return <Stack>
-    <PageHeader title="Harici Firebase sistemleri" description="IEEE Puan ve diğer ayrı Firebase içeriklerini, o projenin kendi kimlik ve güvenlik kurallarıyla yönetin." />
-    <Alert color="blue" title="Güvenlik sınırı">Firebase web yapılandırması gizli anahtar değildir. Servis hesabı JSON'u veya yönetici anahtarı buraya girilmez. Her TechOps sorumlusu uzak projede kendi hesabıyla ayrıca giriş yapar.</Alert>
-    <SiteSetupPanel config={configDraft} stored={stored.data} onChange={patch => { setConfigDraft(current => ({ ...current, ...patch })); setConfigDirty(true); }} />
-
-    <Card withBorder><Group justify="space-between"><div><Title order={3}>Bağlantı ve veri görünümleri</Title><Text size="sm" c="dimmed">Firebase Console → Proje ayarları → Web uygulaması değerlerini kullanın.</Text></div><Button onClick={saveConfig} loading={busy} disabled={!configDirty}>Ayarı kaydet</Button></Group>
+    <PageHeader title="Web sitesi ve entegrasyonlar" description="Bağlantı durumunu kontrol edin; kurulum ayarları ve gelişmiş veri işlemleri ayrı sekmelerdedir." />
+    <SiteConnection />
+    <Tabs value={tab} onChange={setTab} keepMounted={false}>
+      <Tabs.List mb="md"><Tabs.Tab value="baglanti">Bağlantı durumu</Tabs.Tab><Tabs.Tab value="kurulum">Kurulum</Tabs.Tab><Tabs.Tab value="veriler">Veri yönetimi</Tabs.Tab></Tabs.List>
+      <Tabs.Panel value="baglanti"><Stack>
+        <Card withBorder><Stack gap="sm"><Title order={3}>Hangi işi nereden yapacağım?</Title><Text size="sm">1. Kurulum: TechOps site projesini bir kez tanımlar, komiteleri eşleştirir ve site yöneticisi işlem yetkilerini verir.</Text><Text size="sm">2. Bağlanma: ACTOR veya ilgili görevli yukarıdan kendi studentbranches profil/puan hesabıyla giriş yapar. Bağlantı kartı o hesabın yetkilerini gösterir.</Text><Text size="sm">3. Günlük işler: puan önerisini etkinlikte değerlendirin; aktarım sonucunu aynı kayıtta kontrol edin. Ham veritabanı kaydı oluşturmanız gerekmez.</Text>
+        <Group><Button component={Link} to="/etkinlikler" variant="light">Etkinlik ve puan QR işlemleri</Button>{siteQrController(access) && <Button component={Link} to="/actor" variant="light">ACTOR önerilerini aç</Button>}{can('members.manage') && <Button component={Link} to="/yonetim/uyeler" variant="light">Üyeler ve site üyelikleri</Button>}</Group></Stack></Card>
+        <Alert color="blue">Web sitesinin puan QR’ı ile vTools’un etkinlik kaydı farklı işlerdir. vTools hazırlığı için ilgili etkinlikte vTools hazırlık sekmesini açın.</Alert>
+      </Stack></Tabs.Panel>
+      <Tabs.Panel value="kurulum"><Stack>
+        <Alert color="blue" title="TechOps için tek seferlik kurulum">Önce web uygulaması bilgilerini kaydedin, ardından site hesabıyla bağlanıp komiteleri eşleştirin. Son olarak site yöneticisi ACTOR hesabına süreli QR yetkisi verir. Hub yöneticiliği site yöneticiliği yerine geçmez.</Alert>
+            <Card withBorder><Group justify="space-between"><div><Title order={3}>Firebase web uygulaması</Title><Text size="sm" c="dimmed">Firebase Console → Proje ayarları → Web uygulaması değerlerini kullanın.</Text></div><Button onClick={saveConfig} loading={busy} disabled={!configDirty}>Bağlantı ayarını kaydet</Button></Group>
       <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md"><TextInput label="API key" value={configDraft.apiKey} onChange={(e) => updateConfig('apiKey', e.currentTarget.value)} /><TextInput label="Auth domain" placeholder="proje.firebaseapp.com" value={configDraft.authDomain} onChange={(e) => updateConfig('authDomain', e.currentTarget.value)} /><TextInput label="Project ID" value={configDraft.projectId} onChange={(e) => updateConfig('projectId', e.currentTarget.value)} /><TextInput label="App ID" value={configDraft.appId} onChange={(e) => updateConfig('appId', e.currentTarget.value)} /><TextInput label="Realtime Database URL" description="Yalnız RTDB kullanılıyorsa gerekir" value={configDraft.databaseURL} onChange={(e) => updateConfig('databaseURL', e.currentTarget.value)} /></SimpleGrid>
-      <Stack mt="lg">
+    </Card>
+        <Alert color="blue" title="Google ile giriş için Hub adresini yetkilendir">Site projesinde Firebase Authentication → Settings → Authorized domains listesine <Code>{window.location.hostname}</Code> eklenmeli. Google giriş yöntemi de site projesinde açık olmalı. Bu işlem Hub projesinde değil, yukarıdaki site projesinde yapılır.</Alert>
+        <SiteSetupPanel config={configDraft} stored={stored.data} onChange={patch => { setConfigDraft(current => ({ ...current, ...patch })); setConfigDirty(true); }} />
+        <Group justify="flex-end"><Button onClick={saveConfig} loading={busy} disabled={!configDirty}>Kurulumu kaydet</Button></Group>
+        <Text size="sm" c="dimmed">Firebase web yapılandırması gizli anahtar değildir. Servis hesabı JSON’u, özel anahtar veya ortak yönetici şifresi bu alana girilmez.</Text>
+      </Stack></Tabs.Panel>
+      <Tabs.Panel value="veriler"><Stack>
+        <Text size="sm" c="dimmed">Bu bölüm TechOps’un bakım ve veri yönetimi içindir. Normal etkinlik ve ACTOR işlemleri için Bağlantı durumu sekmesindeki bağlantıları kullanın.</Text>
+        <Accordion variant="contained"><Accordion.Item value="views"><Accordion.Control>Gelişmiş veri görünümü ayarları</Accordion.Control><Accordion.Panel>      <Stack mt="lg">
         <Group align="end"><TextInput label="Site komite kimliği" description="Mevcut committees kaydının kimliği; Hub birim kimliğinden farklı olabilir." value={committeeId} onChange={(e) => setCommitteeId(e.currentTarget.value)} /><Button variant="light" onClick={addSiteViews}>Site yönetim görünümlerini ekle</Button></Group>
         <Group justify="space-between" wrap="wrap">
           <Text fw={600}>İzin verilen veri yolları</Text>
@@ -164,14 +173,14 @@ export function ExternalFirebasePage() {
             </Group>
           </Card>
         ))}
-      </Stack>
-    </Card>
-
-    {!configured ? <EmptyState title="Bağlantı henüz yapılandırılmadı" description="Yukarıdaki web uygulaması değerlerini ve puan verisinin koleksiyon/yolunu girin." /> : !externalUser ? <Card withBorder><Title order={3}>Uzak projede oturum aç</Title><Text size="sm" c="dimmed" mt={4}>Bu oturum Hub girişinden ayrıdır ve yalnız bu tarayıcı sekmesi boyunca saklanır.</Text><Group mt="md" align="end" wrap="wrap"><Button onClick={signInGoogle}>Google ile bağlan</Button><TextInput label="E-posta" type="email" autoComplete="username" w={{ base: '100%', sm: 280 }} value={email} onChange={(e) => setEmail(e.currentTarget.value)} /><PasswordInput label="Şifre" autoComplete="current-password" w={{ base: '100%', sm: 220 }} value={password} onChange={(e) => setPassword(e.currentTarget.value)} /><Button variant="default" onClick={signInEmail} disabled={!email || !password}>E-posta ile bağlan</Button></Group></Card> : <>
-      <Card withBorder><Group justify="space-between" align="flex-end" wrap="wrap"><div><Text size="sm" c="dimmed">Uzak oturum</Text><Text fw={600}>{externalUser.email ?? externalUser.displayName ?? externalUser.uid}</Text></div><Group><Select label="Veri görünümü" data={(stored.data?.resources ?? []).map((item) => ({ value: item.id, label: `${item.label} · ${item.database}` }))} value={selectedId} onChange={setSelectedId} w={280} />{selected?.preset !== 'points-users' && <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load} disabled={!selected}>Yenile</Button>}{selected && !selected.readOnly && selected.preset !== 'points-users' && <Button leftSection={<IconPlus size={16} />} onClick={newRecord}>Kayıt ekle</Button>}<Button color="gray" variant="subtle" onClick={() => stored.data && disconnectExternal(stored.data)}>Bağlantıyı kes</Button></Group></Group></Card>
-      <ErrorAlert error={resourceError} />
-      {!selected ? <EmptyState title="Veri görünümü seçin" /> : selected.preset === 'points-users' ? <PointsPanel config={stored.data!} resource={selected} /> : loadingRecords ? <SectionLoader /> : records.length === 0 ? <EmptyState title="Kayıt bulunamadı" description="Yol boş olabilir veya uzak Firebase kuralları bu hesabın okumasına izin vermiyor olabilir." /> : <Table.ScrollContainer minWidth={700}><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Kimlik</Table.Th>{columns.map((column) => <Table.Th key={column}>{column}</Table.Th>)}<Table.Th w={90} /></Table.Tr></Table.Thead><Table.Tbody>{records.map((record) => <Table.Tr key={record.id}><Table.Td><Code>{record.id}</Code></Table.Td>{columns.map((column) => <Table.Td key={column}><Text size="sm" lineClamp={2}>{fieldValue(record.data, column) || '—'}</Text></Table.Td>)}<Table.Td><Group gap={2} wrap="nowrap"><ActionIcon variant="subtle" onClick={() => setEditor({ originalId: record.id, id: record.id, json: stringifyExternalData(record.data) })}><IconEdit size={16} /></ActionIcon>{!selected.readOnly && <ActionIcon color="red" variant="subtle" onClick={() => removeRecord(record)}><IconTrash size={16} /></ActionIcon>}</Group></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
+      </Stack><Button mt="md" onClick={saveConfig} loading={busy} disabled={!configDirty}>Görünüm ayarlarını kaydet</Button></Accordion.Panel></Accordion.Item></Accordion>
+        {!configured ? <EmptyState title="Önce Kurulum sekmesini tamamlayın" /> : !externalUser ? <Text size="sm">Verileri görmek için yukarıdaki bağlantı kartından site hesabınızla giriş yapın.</Text> : <>
+      <Card withBorder><Group justify="space-between" align="flex-end" wrap="wrap"><div><Text size="sm" c="dimmed">Uzak oturum</Text><Text fw={600}>{externalUser.email ?? externalUser.displayName ?? externalUser.uid}</Text></div><Group><Select label="Veri görünümü" data={(stored.data?.resources ?? []).map((item) => ({ value: item.id, label: `${item.label} · ${item.database}` }))} value={selectedId} onChange={setSelectedId} w={280} />{selected?.preset !== 'points-users' && <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={load} disabled={!selected}>Yenile</Button>}{selected && !selected.readOnly && selected.preset !== 'points-users' && <Button leftSection={<IconPlus size={16} />} onClick={newRecord}>Kayıt ekle</Button>}</Group></Group></Card>
+      <ErrorAlert error={resourceError ? siteConnectionError(resourceError) : null} />
+      {!selected ? <EmptyState title="Veri görünümü seçin" /> : selected.preset === 'points-users' ? <PointsPanel config={stored.data!} resource={selected} /> : resourceError ? null : loadingRecords ? <SectionLoader /> : records.length === 0 ? <EmptyState title="Kayıt bulunamadı" description="Yol boş olabilir veya uzak Firebase kuralları bu hesabın okumasına izin vermiyor olabilir." /> : <Table.ScrollContainer minWidth={700}><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Kimlik</Table.Th>{columns.map((column) => <Table.Th key={column}>{column}</Table.Th>)}<Table.Th w={90} /></Table.Tr></Table.Thead><Table.Tbody>{records.map((record) => <Table.Tr key={record.id}><Table.Td><Code>{record.id}</Code></Table.Td>{columns.map((column) => <Table.Td key={column}><Text size="sm" lineClamp={2}>{fieldValue(record.data, column) || '—'}</Text></Table.Td>)}<Table.Td><Group gap={2} wrap="nowrap"><ActionIcon variant="subtle" onClick={() => setEditor({ originalId: record.id, id: record.id, json: stringifyExternalData(record.data) })}><IconEdit size={16} /></ActionIcon>{!selected.readOnly && <ActionIcon color="red" variant="subtle" onClick={() => removeRecord(record)}><IconTrash size={16} /></ActionIcon>}</Group></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
     </>}
+      </Stack></Tabs.Panel>
+    </Tabs>
 
     <Modal opened={!!qrImage} onClose={() => setQrImage(null)} title="Puan QR bağlantısı"><Stack><Text size="sm">Bu QR sitenin profil sayfasını açar. Üyeler telefondan okutarak siteye gider.</Text>{qrImage && <><img src={qrImage} alt="Etkinlik puan QR’ı" /><Button component="a" href={qrImage} download="etkinlik-qr.png">PNG indir</Button></>}</Stack></Modal>
     <Modal opened={!!editor} onClose={() => setEditor(null)} title={editor?.originalId ? 'Harici kaydı görüntüle / düzenle' : 'Harici kayıt ekle'} size="xl">{editor && <Stack><TextInput label="Kayıt kimliği" value={editor.id} onChange={(e) => setEditor({ ...editor, id: e.currentTarget.value })} disabled={!!editor.originalId} required /><>{formKind ? <SiteRecordFields kind={formKind} data={parseExternalData(editor.json)} onChange={(data) => setEditor({ ...editor, json: stringifyExternalData(data) })} readOnly={!!selected?.readOnly} /> : <Textarea label="JSON veri" value={editor.json} onChange={(e) => setEditor({ ...editor, json: e.currentTarget.value })} autosize minRows={16} styles={{ input: { fontFamily: 'monospace' } }} readOnly={!!selected?.readOnly} />}</><Text size="xs" c="dimmed">Firestore zamanları <Code>{'{ "$timestamp": "2026-09-27T12:00:00.000Z" }'}</Code> biçimiyle korunur.</Text><Group justify="flex-end">{formKind === 'committee_qrs' && editor.originalId && <Button variant="light" onClick={async () => { try { const template = selected?.qrUrlTemplate ?? ''; if (!template.includes('{qrId}')) throw new Error('Önce bu görünümün puan QR bağlantı şablonunu ayarlayın.'); const url = new URL(template.replaceAll('{qrId}', encodeURIComponent(editor.id)).replaceAll('{committeeId}', encodeURIComponent(selected!.path.split('/')[1]))); if (!['https:', 'http:'].includes(url.protocol)) throw new Error('QR bağlantısı HTTP veya HTTPS olmalıdır.'); setQrImage(await QRCode.toDataURL(url.href)); } catch (error) { notifyError(error); } }}>Puan QR’ını görüntüle</Button>}<Button variant="default" onClick={() => setEditor(null)}>Kapat</Button>{!selected?.readOnly && <Button onClick={saveRecord} loading={busy}>Uzak projeye kaydet</Button>}</Group></Stack>}</Modal>

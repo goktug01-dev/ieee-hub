@@ -147,7 +147,7 @@ export function SettingsPage() {
               IEEE vTools Events
             </Title>
             <Text size="xs" c="dimmed">
-              Bu bilgiler vTools hazırlık paketindeki tüm etkinliklere uygulanır. SPOID, IEEE organizasyon biriminin resmî kimliğidir.
+              Bu bilgiler tüm etkinliklerin vTools hazırlığına eklenir. IEEE hesabıyla vTools’a girip Primary Host listesindeki birim adını buraya yazın. Listede biriminiz yoksa IEEE görev kaydınızı kontrol edin.
             </Text>
             <TextInput
               label="Organizasyon birimi"
@@ -156,7 +156,7 @@ export function SettingsPage() {
               onChange={(e) => setOrg({ ...org, vtoolsOrganizationName: e.currentTarget.value })}
             />
             <Group grow>
-              <TextInput label="SPOID" placeholder="STB..." value={org.vtoolsSpoid} onChange={(e) => setOrg({ ...org, vtoolsSpoid: e.currentTarget.value })} />
+              <TextInput label="SPOID (isteğe bağlı)" description="IEEE birim kimliği biliniyorsa girin; Hub veya site UID’sini yazmayın." value={org.vtoolsSpoid} onChange={(e) => setOrg({ ...org, vtoolsSpoid: e.currentTarget.value })} />
               <TextInput
                 label="vTools iletişim e-postası"
                 type="email"

@@ -83,7 +83,7 @@ try {
       errors.length = 0;
       await page.goto(BASE + r);
       await page.waitForTimeout(1500);
-      if (r === '/yonetim/harici-firebase') await page.getByText('Harici Firebase sistemleri').waitFor({ timeout: 15000 });
+      if (r === '/yonetim/harici-firebase') await page.getByRole('heading', { name: 'Web sitesi ve entegrasyonlar' }).waitFor({ timeout: 15000 });
       const crashed = await page.getByText(/Something went wrong|Unexpected Application Error/).count();
       const file = `${account}${r.replace(/[/?=]/g, '_') || '_'}.png`;
       await page.screenshot({ path: OUT + file, fullPage: false });
