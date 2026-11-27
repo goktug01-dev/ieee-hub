@@ -32,6 +32,7 @@
     "smoke:statutory": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-statutory-setup.mjs\"",
     "push:setup": "node scripts/push/setup.mjs",
     "test:push": "node --test scripts/push/core.test.mjs",
+    "smoke:actor": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-actor-points.mjs\"",
     "smoke:push": "firebase emulators:exec --only auth,firestore --project demo-ieee-hub --import=firebase/demo-data \"node apps/hub/scripts/smoke-push.mjs\""
   },
   "dependencies": {

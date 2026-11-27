@@ -39,6 +39,42 @@ test('Komite puan önerir; yalnız ACTOR doğrular, puan değiştirilemez', asyn
   await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{points:99,updatedAt:serverTimestamp()}));
   await assertSucceeds(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{status:'closed',updatedAt:serverTimestamp()}));
 });
+test('ACTOR puanı gerekçeyle değiştirerek doğrular; komite önerisi saklanır, doğrulanan puan değişmez', async () => {
+  const request = { eventId:'e',unitId:'cs',points:20,note:'Komite önerisi',status:'requested',expiresAt:far,requestedBy:'chair',createdAt:serverTimestamp(),updatedAt:serverTimestamp() };
+  await assertSucceeds(setDoc(doc(dbFor('chair'),'eventPointRequests','e'),request));
+  await assertFails(setDoc(doc(dbFor('chair'),'eventPointRequests','e'),{...request,points:30}));
+  const approve = (extra: object) => ({ status:'approved',approvedBy:'actor',approvedAt:serverTimestamp(),updatedAt:serverTimestamp(),...extra });
+  // Gerekçesiz, önerisi saklanmadan veya komite tarafından değiştirilemez.
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:35,proposedPoints:20})));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:35,actorNote:'Kapsam büyük'})));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:35,proposedPoints:99,actorNote:'Kapsam büyük'})));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:200000,proposedPoints:20,actorNote:'Aşırı'})));
+  await assertFails(updateDoc(doc(dbFor('chair'),'eventPointRequests','e'),{points:35,updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:35,proposedPoints:20,actorNote:'Kapsam büyük',expiresAt:Timestamp.fromDate(new Date('2099-01-01'))})));
+  await assertSucceeds(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),approve({points:35,proposedPoints:20,actorNote:'Kapsam büyük'})));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{points:40,proposedPoints:35,actorNote:'Yeniden',updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{status:'returned',actorNote:'Geç',returnedBy:'actor',returnedAt:serverTimestamp(),updatedAt:serverTimestamp()}));
+});
+test('ACTOR öneriyi gerekçeyle geri gönderir; komite düzeltip yeniden gönderir', async () => {
+  const request = { eventId:'e',unitId:'cs',points:20,note:'Komite önerisi',status:'requested',expiresAt:far,requestedBy:'chair',createdAt:serverTimestamp(),updatedAt:serverTimestamp() };
+  await assertSucceeds(setDoc(doc(dbFor('chair'),'eventPointRequests','e'),request));
+  const ret = (uid: string, extra: object = {}) => ({ status:'returned',actorNote:'Gerekçe yetersiz',returnedBy:uid,returnedAt:serverTimestamp(),updatedAt:serverTimestamp(),...extra });
+  await assertFails(updateDoc(doc(dbFor('president'),'eventPointRequests','e'),ret('president')));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),ret('actor',{actorNote:''})));
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),ret('actor',{points:5})));
+  await assertSucceeds(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),ret('actor')));
+  // Geri gönderilen öneri doğrulanamaz; komite dışındaki kişi yeniden gönderemez.
+  await assertFails(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{status:'approved',approvedBy:'actor',approvedAt:serverTimestamp(),updatedAt:serverTimestamp()}));
+  const resubmit = (uid: string, extra: object = {}) => ({ status:'requested',points:25,note:'Ayrıntılı gerekçe',expiresAt:far,requestedBy:uid,updatedAt:serverTimestamp(),...extra });
+  await assertFails(updateDoc(doc(dbFor('member'),'eventPointRequests','e'),resubmit('member')));
+  await assertFails(updateDoc(doc(dbFor('chair'),'eventPointRequests','e'),resubmit('chair',{actorNote:'Sildim'})));
+  await assertFails(updateDoc(doc(dbFor('chair'),'eventPointRequests','e'),resubmit('chair',{createdAt:serverTimestamp()})));
+  await assertSucceeds(updateDoc(doc(dbFor('chair'),'eventPointRequests','e'),resubmit('chair')));
+  await assertFails(updateDoc(doc(dbFor('chair'),'eventPointRequests','e'),resubmit('chair',{points:30})));
+  await assertSucceeds(updateDoc(doc(dbFor('actor'),'eventPointRequests','e'),{status:'approved',approvedBy:'actor',approvedAt:serverTimestamp(),updatedAt:serverTimestamp()}));
+  const saved = await getDoc(doc(dbFor('member'),'eventPointRequests','e'));
+  if (saved.data()?.points !== 25 || saved.data()?.actorNote !== 'Gerekçe yetersiz') throw new Error('Yeniden gönderilen puan veya geri gönderme notu korunmadı.');
+});
 test('Site operatörü bağlantıyı okur ama ayarı değiştiremez', async () => {
   await assertSucceeds(getDoc(doc(dbFor('vice'),'externalIntegrations','firebase')));
   await assertSucceeds(getDoc(doc(dbFor('actor'),'externalIntegrations','firebase')));

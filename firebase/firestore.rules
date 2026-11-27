@@ -1663,24 +1663,40 @@ service cloud.firestore {
       function event() { return get(docPath('events', id)).data; }
       function upcoming() { return event().status in ['approved','planning','registration_open']; }
       function validRequest(d) {
-        return d.keys().hasOnly(['eventId','unitId','points','note','status','expiresAt','requestedBy','createdAt','updatedAt','approvedBy','approvedAt'])
-          && d.eventId == id && d.unitId == event().unitId && d.points is int && d.points >= 0 && d.points <= 100000
+        return d.keys().hasOnly(['eventId','unitId','points','note','status','expiresAt','requestedBy','createdAt','updatedAt','approvedBy','approvedAt','proposedPoints','actorNote','returnedBy','returnedAt'])
+          && d.eventId == id && d.unitId == event().unitId && validPoints(d.points)
           && d.note is string && d.note.size() > 0 && d.note.size() <= 5000 && d.expiresAt is timestamp
           && d.updatedAt == request.time;
       }
+      function validPoints(v) { return v is int && v >= 0 && v <= 100000; }
+      function validActorNote(d) { return d.actorNote is string && d.actorNote.size() > 0 && d.actorNote.size() <= 5000; }
+      function committee() { return isActive() && (isEventOwner(event()) || eventManager(event().unitId)) && upcoming(); }
       allow read: if isActive();
-      allow create: if isActive() && (isEventOwner(event()) || eventManager(event().unitId)) && upcoming()
+      allow create: if committee()
         && validRequest(request.resource.data) && request.resource.data.status == 'requested'
         && request.resource.data.requestedBy == me() && request.resource.data.createdAt == request.time
-        && request.resource.data.expiresAt > request.time && !request.resource.data.keys().hasAny(['approvedBy','approvedAt']);
-      allow update: if siteQrController() && (
+        && request.resource.data.expiresAt > request.time
+        && !request.resource.data.keys().hasAny(['approvedBy','approvedAt','proposedPoints','actorNote','returnedBy','returnedAt']);
+      // ACTOR puanı doğrulamadan önce değiştirebilir (komite önerisi proposedPoints'te kalır) veya gerekçeyle geri gönderir.
+      // Doğrulanan puan, oluşturma ve son kullanım zamanı değişmez.
+      allow update: if (siteQrController() && (
         (resource.data.status == 'requested' && request.resource.data.status == 'approved' && upcoming()
           && resource.data.expiresAt > request.time && request.resource.data.approvedBy == me()
           && request.resource.data.approvedAt == request.time && request.resource.data.updatedAt == request.time
-          && onlyKeys(['status','approvedBy','approvedAt','updatedAt']))
+          && (onlyKeys(['status','approvedBy','approvedAt','updatedAt'])
+            || (onlyKeys(['status','approvedBy','approvedAt','updatedAt','points','proposedPoints','actorNote'])
+              && validPoints(request.resource.data.points) && request.resource.data.points != resource.data.points
+              && request.resource.data.proposedPoints == resource.data.points && validActorNote(request.resource.data))))
+        || (resource.data.status == 'requested' && request.resource.data.status == 'returned'
+          && request.resource.data.returnedBy == me() && request.resource.data.returnedAt == request.time
+          && request.resource.data.updatedAt == request.time && validActorNote(request.resource.data)
+          && onlyKeys(['status','returnedBy','returnedAt','actorNote','updatedAt']))
         || (resource.data.status == 'approved' && request.resource.data.status == 'closed'
           && request.resource.data.updatedAt == request.time && onlyKeys(['status','updatedAt']))
-      );
+      )) || (resource.data.status == 'returned' && request.resource.data.status == 'requested' && committee()
+        && validRequest(request.resource.data) && request.resource.data.requestedBy == me()
+        && request.resource.data.expiresAt > request.time
+        && onlyKeys(['status','points','note','expiresAt','requestedBy','updatedAt']));
       allow delete: if false;
     }
     // Aktarım makbuzu yalnız görünür durumdur; Hub onayı veya QR doğrulaması yerine geçmez.

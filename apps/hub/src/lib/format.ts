@@ -43,9 +43,9 @@ export function dateStringToTs(s: string | null | undefined, endOfDay = false): 
 
 export const STATUS_META: Record<PetitionStatus, { label: string; color: string }> = {
   draft: { label: 'Taslak', color: 'gray' },
-  pending: { label: 'Onay sürecinde', color: 'blue' },
+  pending: { label: 'Onay sürecinde', color: 'yellow' },
   returned: { label: 'Düzeltme için iade edildi', color: 'orange' },
-  approved: { label: 'Onaylandı', color: 'green' },
+  approved: { label: 'Onaylandı', color: 'signal' },
   rejected: { label: 'Reddedildi', color: 'red' },
   withdrawn: { label: 'Geri çekildi', color: 'dark' },
 };
